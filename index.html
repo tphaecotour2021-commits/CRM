@@ -39,8 +39,7 @@ import { getAnalytics } from "firebase/analytics";
 import { 
   getAuth, 
   signInAnonymously, 
-  onAuthStateChanged,
-  signInWithCustomToken
+  onAuthStateChanged
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -90,13 +89,25 @@ const DEFAULT_EVENT_TEMPLATES = [
   { id: 'default_3', name: '課程模板', eventName: '攝影教學', instructor: '陳教練', isSystem: true },
 ];
 
-// --- Firebase 初始化 ---
-// 使用環境變數以避免權限錯誤，若您要部署到自己的環境，請確保 Firestore 規則開放
-const firebaseConfig = JSON.parse(__firebase_config);
+// --- Firebase 初始化 (使用您的自訂設定) ---
+const firebaseConfig = {
+  apiKey: "AIzaSyBtfR8N9Dw9kG3jQSfJSs0p0MLvlQaOR74",
+  authDomain: "crm-sys-4184a.firebaseapp.com",
+  projectId: "crm-sys-4184a",
+  storageBucket: "crm-sys-4184a.firebasestorage.app",
+  messagingSenderId: "943273685158",
+  appId: "1:943273685158:web:8ca441dd78dcb5b956c467",
+  measurementId: "G-2M2W340ZKB"
+};
+
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+// 使用固定的 App ID 以避免在您的資料庫中產生亂數路徑
+const appId = 'crm-system-v1';
 
 // --- Helper Functions ---
 const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
@@ -618,12 +629,7 @@ export default function OperationSystem() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // 優先使用 Custom Token (如果有的話)，否則使用匿名登入
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
+        await signInAnonymously(auth);
       } catch (error) {
         console.error("Auth Error:", error);
       }
