@@ -1,0 +1,1156 @@
+{\rtf1\ansi\ansicpg950\cocoartf2818
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fnil\fcharset0 Menlo-Regular;}
+{\colortbl;\red255\green255\blue255;\red111\green14\blue195;\red236\green241\blue247;\red0\green0\blue0;
+\red14\green110\blue109;\red24\green112\blue43;\red77\green80\blue85;\red164\green69\blue11;\red107\green0\blue1;
+\red191\green28\blue37;}
+{\*\expandedcolortbl;;\cssrgb\c51765\c18824\c80784;\cssrgb\c94118\c95686\c97647;\cssrgb\c0\c0\c0;
+\cssrgb\c0\c50196\c50196;\cssrgb\c9412\c50196\c21961;\cssrgb\c37255\c38824\c40784;\cssrgb\c70980\c34902\c3137;\cssrgb\c50196\c0\c0;
+\cssrgb\c80392\c19216\c19216;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\deftab720
+\pard\pardeftab720\partightenfactor0
+
+\f0\fs28 \cf2 \cb3 \expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 import\cf0 \strokec4  \cf5 \strokec5 React\cf0 \strokec4 , \{ useState, useMemo, useEffect \} \cf2 \strokec2 from\cf0 \strokec4  \cf6 \strokec6 'react'\cf0 \strokec4 ;\cb1 \
+\cf2 \cb3 \strokec2 import\cf0 \strokec4  \{ \cb1 \
+\pard\pardeftab720\partightenfactor0
+\cf0 \cb3   \cf5 \strokec5 Calendar\cf0 \strokec4  \cf2 \strokec2 as\cf0 \strokec4  \cf5 \strokec5 CalendarIcon\cf0 \strokec4 , \cb1 \
+\cb3   \cf5 \strokec5 Users\cf0 \strokec4 , \cb1 \
+\cb3   \cf5 \strokec5 TrendingUp\cf0 \strokec4 , \cb1 \
+\cb3   \cf5 \strokec5 Briefcase\cf0 \strokec4 , \cb1 \
+\cb3   \cf5 \strokec5 Settings\cf0 \strokec4 , \cb1 \
+\cb3   \cf5 \strokec5 Search\cf0 \strokec4 , \cb1 \
+\cb3   \cf5 \strokec5 PlusCircle\cf0 \strokec4 ,\cb1 \
+\cb3   \cf5 \strokec5 BarChart3\cf0 \strokec4 ,\cb1 \
+\cb3   \cf5 \strokec5 CheckCircle2\cf0 \strokec4 ,\cb1 \
+\cb3   \cf5 \strokec5 Clock\cf0 \strokec4 ,\cb1 \
+\cb3   \cf5 \strokec5 AlertCircle\cf0 \strokec4 ,\cb1 \
+\cb3   \cf5 \strokec5 FileText\cf0 \strokec4 ,\cb1 \
+\cb3   \cf5 \strokec5 Save\cf0 \strokec4 ,\cb1 \
+\cb3   \cf5 \strokec5 Loader2\cf0 \strokec4 ,\cb1 \
+\cb3   \cf5 \strokec5 Trash2\cf0 \strokec4 ,\cb1 \
+\cb3   \cf5 \strokec5 Edit\cf0 \strokec4 ,\cb1 \
+\cb3   \cf5 \strokec5 X\cf0 \strokec4 ,\cb1 \
+\cb3   \cf5 \strokec5 CheckSquare\cf0 \strokec4 ,\cb1 \
+\cb3   \cf5 \strokec5 ChevronRight\cf0 \strokec4 ,\cb1 \
+\cb3   \cf5 \strokec5 ChevronLeft\cf0 \strokec4 ,\cb1 \
+\cb3   \cf5 \strokec5 ChevronDown\cf0 \strokec4 ,\cb1 \
+\cb3   \cf5 \strokec5 LayoutList\cf0 \strokec4 ,\cb1 \
+\cb3   \cf5 \strokec5 PartyPopper\cf0 \strokec4 ,\cb1 \
+\cb3   \cf5 \strokec5 List\cf0 \strokec4 ,\cb1 \
+\cb3   \cf5 \strokec5 Filter\cf0 \strokec4 ,\cb1 \
+\cb3   \cf5 \strokec5 Copy\cf0 \strokec4 ,\cb1 \
+\cb3   \cf5 \strokec5 Mail\cf0 \strokec4 ,\cb1 \
+\cb3   \cf5 \strokec5 ShieldCheck\cf0 \strokec4 ,\cb1 \
+\cb3   \cf5 \strokec5 Zap\cf0 \strokec4 ,\cb1 \
+\cb3   \cf5 \strokec5 Plus\cf0 \strokec4 ,\cb1 \
+\cb3   \cf5 \strokec5 UserPlus\cf0 \cb1 \strokec4 \
+\cb3 \} \cf2 \strokec2 from\cf0 \strokec4  \cf6 \strokec6 'lucide-react'\cf0 \strokec4 ;\cb1 \
+\
+\pard\pardeftab720\partightenfactor0
+\cf7 \cb3 \strokec7 // Firebase Imports\cf0 \cb1 \strokec4 \
+\pard\pardeftab720\partightenfactor0
+\cf2 \cb3 \strokec2 import\cf0 \strokec4  \{ initializeApp \} \cf2 \strokec2 from\cf0 \strokec4  \cf6 \strokec6 'firebase/app'\cf0 \strokec4 ;\cb1 \
+\cf2 \cb3 \strokec2 import\cf0 \strokec4  \{ getAnalytics \} \cf2 \strokec2 from\cf0 \strokec4  \cf6 \strokec6 "firebase/analytics"\cf0 \strokec4 ; \cb1 \
+\cf2 \cb3 \strokec2 import\cf0 \strokec4  \{ \cb1 \
+\pard\pardeftab720\partightenfactor0
+\cf0 \cb3   getAuth, \cb1 \
+\cb3   signInAnonymously, \cb1 \
+\cb3   onAuthStateChanged,\cb1 \
+\cb3   signInWithCustomToken\cb1 \
+\cb3 \} \cf2 \strokec2 from\cf0 \strokec4  \cf6 \strokec6 'firebase/auth'\cf0 \strokec4 ;\cb1 \
+\pard\pardeftab720\partightenfactor0
+\cf2 \cb3 \strokec2 import\cf0 \strokec4  \{ \cb1 \
+\pard\pardeftab720\partightenfactor0
+\cf0 \cb3   getFirestore, \cb1 \
+\cb3   doc, \cb1 \
+\cb3   setDoc, \cb1 \
+\cb3   getDoc, \cb1 \
+\cb3   onSnapshot, \cb1 \
+\cb3   collection, \cb1 \
+\cb3   addDoc, \cb1 \
+\cb3   updateDoc,\cb1 \
+\cb3   deleteDoc,\cb1 \
+\cb3   query,\cb1 \
+\cb3   orderBy\cb1 \
+\cb3 \} \cf2 \strokec2 from\cf0 \strokec4  \cf6 \strokec6 'firebase/firestore'\cf0 \strokec4 ;\cb1 \
+\
+\pard\pardeftab720\partightenfactor0
+\cf7 \cb3 \strokec7 // --- \uc0\u25844 \u20805 \u24460 \u30340 \u31684 \u20363 \u36039 \u26009  (\u21253 \u21547 \u36523 \u20998 \u35657 \u12289 \u29983 \u26085 \u12289 \u20132 \u36890 ) ---\cf0 \cb1 \strokec4 \
+\pard\pardeftab720\partightenfactor0
+\cf2 \cb3 \strokec2 const\cf0 \strokec4  \cf5 \strokec5 INITIAL_CSV_DATA\cf0 \strokec4  = \cf6 \strokec6 `\uc0\u26085 \u26399 ,\u27963 \u21205 \u21517 \u31281 ,\u35611 \u24107 ,\u23458 \u25142 \u22995 \u21517 ,\u37329 \u38989 ,\u20132 \u36890 \u26041 \u24335 ,\u36523 \u20998 \u35657 \u23383 \u34399 ,\u29983 \u26085 \cf0 \cb1 \strokec4 \
+\pard\pardeftab720\partightenfactor0
+\cf6 \cb3 \strokec6 2023-11-05,\uc0\u39640 \u23665 \u25885 \u24433 \u22296 ,\u24373 \u22823 \u24107 ,\u29579 \u23567 \u26126 ,5000,\u20849 \u20056 ,A123456789,1990-05-20\cf0 \cb1 \strokec4 \
+\cf6 \cb3 \strokec6 2023-11-05,\uc0\u39640 \u23665 \u25885 \u24433 \u22296 ,\u24373 \u22823 \u24107 ,\u26446 \u23567 \u32654 ,5000,\u33258 \u34892 \u21069 \u24448 ,B223456789,1992-08-15\cf0 \cb1 \strokec4 \
+\cf6 \cb3 \strokec6 2023-11-05,\uc0\u39640 \u23665 \u25885 \u24433 \u22296 ,\u24373 \u22823 \u24107 ,\u38515 \u22823 \u25991 ,4500,\u20849 \u20056 ,C123456789,1988-12-01\cf0 \cb1 \strokec4 \
+\cf6 \cb3 \strokec6 2023-11-12,\uc0\u37326 \u22806 \u27714 \u29983 \u29151 ,\u38515 \u25945 \u32244 ,\u29579 \u23567 \u26126 ,3000,\u20849 \u20056 ,A123456789,1990-05-20\cf0 \cb1 \strokec4 \
+\cf6 \cb3 \strokec6 2023-11-12,\uc0\u37326 \u22806 \u27714 \u29983 \u29151 ,\u38515 \u25945 \u32244 ,\u36249 \u38463 \u24375 ,3000,\u33258 \u34892 \u21069 \u24448 ,D123456789,1995-03-10\cf0 \cb1 \strokec4 \
+\cf6 \cb3 \strokec6 2023-11-12,\uc0\u37326 \u22806 \u27714 \u29983 \u29151 ,\u38515 \u25945 \u32244 ,\u23403 \u23567 \u27611 ,2800,\u20849 \u20056 ,E123456789,1998-11-11\cf0 \cb1 \strokec4 \
+\cf6 \cb3 \strokec6 2023-11-20,\uc0\u35264 \u26143 \u38706 \u29151 ,\u26519 \u21338 \u22763  & \u38515 \u25945 \u32244 ,\u26446 \u23567 \u32654 ,4500,\u33258 \u34892 \u21069 \u24448 ,B223456789,1992-08-15\cf0 \cb1 \strokec4 \
+\cf6 \cb3 \strokec6 2023-11-20,\uc0\u35264 \u26143 \u38706 \u29151 ,\u26519 \u21338 \u22763  & \u38515 \u25945 \u32244 ,\u37666 \u32769 \u38342 ,4500,\u33258 \u34892 \u21069 \u24448 ,F123456789,1980-01-01\cf0 \cb1 \strokec4 \
+\cf6 \cb3 \strokec6 2023-11-20,\uc0\u35264 \u26143 \u38706 \u29151 ,\u26519 \u21338 \u22763  & \u38515 \u25945 \u32244 ,\u29579 \u23567 \u26126 ,4000,\u20849 \u20056 ,A123456789,1990-05-20\cf0 \cb1 \strokec4 \
+\cf6 \cb3 \strokec6 2023-12-01,\uc0\u20908 \u23395 \u36062 \u38634 \u22296 ,\u24373 \u22823 \u24107 ,\u29579 \u23567 \u26126 ,6000,\u20849 \u20056 ,A123456789,1990-05-20\cf0 \cb1 \strokec4 \
+\cf6 \cb3 \strokec6 2023-12-01,\uc0\u20908 \u23395 \u36062 \u38634 \u22296 ,\u24373 \u22823 \u24107 ,\u37666 \u32769 \u38342 ,6000,\u33258 \u34892 \u21069 \u24448 ,F123456789,1980-01-01`\cf0 \strokec4 ;\cb1 \
+\
+\pard\pardeftab720\partightenfactor0
+\cf2 \cb3 \strokec2 const\cf0 \strokec4  \cf5 \strokec5 INITIAL_PROJECTS\cf0 \strokec4  = [\cb1 \
+\pard\pardeftab720\partightenfactor0
+\cf0 \cb3   \{ name: \cf6 \strokec6 '12\uc0\u26376 \u36328 \u24180 \u27963 \u21205 \u31820 \u20633 '\cf0 \strokec4 , owner: \cf6 \strokec6 'Alex'\cf0 \strokec4 , status: \cf6 \strokec6 'In Progress'\cf0 \strokec4 , deadline: \cf6 \strokec6 '2023-12-15'\cf0 \strokec4  \},\cb1 \
+\cb3   \{ name: \cf6 \strokec6 '\uc0\u23448 \u32178 \u35222 \u35258 \u22823 \u25913 \u29256 '\cf0 \strokec4 , owner: \cf6 \strokec6 'Sarah'\cf0 \strokec4 , status: \cf6 \strokec6 'Stuck'\cf0 \strokec4 , deadline: \cf6 \strokec6 '2024-01-10'\cf0 \strokec4  \},\cb1 \
+\cb3   \{ name: \cf6 \strokec6 '2024 \uc0\u24180 \u24230 \u35611 \u24107 \u25307 \u21215 '\cf0 \strokec4 , owner: \cf6 \strokec6 'Ken'\cf0 \strokec4 , status: \cf6 \strokec6 'Done'\cf0 \strokec4 , deadline: \cf6 \strokec6 '2023-11-30'\cf0 \strokec4  \},\cb1 \
+\cb3 ];\cb1 \
+\
+\pard\pardeftab720\partightenfactor0
+\cf7 \cb3 \strokec7 // --- \uc0\u20219 \u21209 \u27169 \u26495  ---\cf0 \cb1 \strokec4 \
+\pard\pardeftab720\partightenfactor0
+\cf2 \cb3 \strokec2 const\cf0 \strokec4  \cf5 \strokec5 DEFAULT_TASKS_TEMPLATE\cf0 \strokec4  = [\cb1 \
+\pard\pardeftab720\partightenfactor0
+\cf0 \cb3   \{ id: \cf6 \strokec6 'insurance'\cf0 \strokec4 , \cf2 \strokec2 type\cf0 \strokec4 : \cf6 \strokec6 'insurance'\cf0 \strokec4 , name: \cf6 \strokec6 '\uc0\u36774 \u29702 \u20445 \u38570 '\cf0 \strokec4 , fields: [\{ label: \cf6 \strokec6 '\uc0\u20445 \u21934 \u34399 \u30908 '\cf0 \strokec4 , value: \cf6 \strokec6 ''\cf0 \strokec4  \}], completed: \cf2 \strokec2 false\cf0 \strokec4  \},\cb1 \
+\cb3   \{ id: \cf6 \strokec6 'pre_letter'\cf0 \strokec4 , \cf2 \strokec2 type\cf0 \strokec4 : \cf6 \strokec6 'pre_letter'\cf0 \strokec4 , name: \cf6 \strokec6 '\uc0\u23492 \u36865 \u34892 \u21069 \u20449 '\cf0 \strokec4 , fields: [\{ label: \cf6 \strokec6 '\uc0\u23492 \u36865 \u26085 \u26399 '\cf0 \strokec4 , value: \cf6 \strokec6 ''\cf0 \strokec4  \}], completed: \cf2 \strokec2 false\cf0 \strokec4  \},\cb1 \
+\cb3   \{ id: \cf6 \strokec6 'post_letter'\cf0 \strokec4 , \cf2 \strokec2 type\cf0 \strokec4 : \cf6 \strokec6 'post_letter'\cf0 \strokec4 , name: \cf6 \strokec6 '\uc0\u23492 \u36865 \u33457 \u32110 \u20449 '\cf0 \strokec4 , fields: [\{ label: \cf6 \strokec6 '\uc0\u29031 \u29255 \u36899 \u32080 '\cf0 \strokec4 , value: \cf6 \strokec6 ''\cf0 \strokec4  \}], completed: \cf2 \strokec2 false\cf0 \strokec4  \},\cb1 \
+\cb3 ];\cb1 \
+\
+\pard\pardeftab720\partightenfactor0
+\cf7 \cb3 \strokec7 // \uc0\u31995 \u32113 \u38928 \u35373 \u27169 \u26495  (\u31227 \u38500 \u20729 \u26684 )\cf0 \cb1 \strokec4 \
+\pard\pardeftab720\partightenfactor0
+\cf2 \cb3 \strokec2 const\cf0 \strokec4  \cf5 \strokec5 DEFAULT_EVENT_TEMPLATES\cf0 \strokec4  = [\cb1 \
+\pard\pardeftab720\partightenfactor0
+\cf0 \cb3   \{ id: \cf6 \strokec6 'default_1'\cf0 \strokec4 , name: \cf6 \strokec6 '\uc0\u30331 \u23665 \u22296 \u27169 \u26495 '\cf0 \strokec4 , eventName: \cf6 \strokec6 '\uc0\u36913 \u26411 \u30331 \u23665 \u22296 '\cf0 \strokec4 , instructor: \cf6 \strokec6 '\uc0\u24373 \u22823 \u24107 '\cf0 \strokec4 , isSystem: \cf2 \strokec2 true\cf0 \strokec4  \},\cb1 \
+\cb3   \{ id: \cf6 \strokec6 'default_2'\cf0 \strokec4 , name: \cf6 \strokec6 '\uc0\u38706 \u29151 \u22296 \u27169 \u26495 '\cf0 \strokec4 , eventName: \cf6 \strokec6 '\uc0\u26143 \u31354 \u38706 \u29151 '\cf0 \strokec4 , instructor: \cf6 \strokec6 '\uc0\u26519 \u21338 \u22763 '\cf0 \strokec4 , isSystem: \cf2 \strokec2 true\cf0 \strokec4  \},\cb1 \
+\cb3   \{ id: \cf6 \strokec6 'default_3'\cf0 \strokec4 , name: \cf6 \strokec6 '\uc0\u35506 \u31243 \u27169 \u26495 '\cf0 \strokec4 , eventName: \cf6 \strokec6 '\uc0\u25885 \u24433 \u25945 \u23416 '\cf0 \strokec4 , instructor: \cf6 \strokec6 '\uc0\u38515 \u25945 \u32244 '\cf0 \strokec4 , isSystem: \cf2 \strokec2 true\cf0 \strokec4  \},\cb1 \
+\cb3 ];\cb1 \
+\
+\pard\pardeftab720\partightenfactor0
+\cf7 \cb3 \strokec7 // --- Firebase \uc0\u21021 \u22987 \u21270  (\u20351 \u29992 \u29872 \u22659 \u35722 \u25976 \u20197 \u35299 \u27770 \u27402 \u38480 \u37679 \u35492 ) ---\cf0 \cb1 \strokec4 \
+\cf7 \cb3 \strokec7 // \uc0\u27880 \u24847 \u65306 \u22914 \u26524 \u24744 \u35201 \u37096 \u32626 \u21040 \u33258 \u24049 \u30340  Firebase\u65292 \u35531 \u23559 \u19979 \u34892 \u25913 \u22238 \u24744 \u30340  config\u65292 \u20006 \u30906 \u20445  Firestore Rules \u35373 \u23450 \u28858 \u20844 \u38283  (allow read, write: if true;)\cf0 \cb1 \strokec4 \
+\pard\pardeftab720\partightenfactor0
+\cf2 \cb3 \strokec2 const\cf0 \strokec4  firebaseConfig = \cf5 \strokec5 JSON\cf0 \strokec4 .parse(__firebase_config);\cb1 \
+\cf2 \cb3 \strokec2 const\cf0 \strokec4  app = initializeApp(firebaseConfig);\cb1 \
+\cf2 \cb3 \strokec2 const\cf0 \strokec4  auth = getAuth(app);\cb1 \
+\cf2 \cb3 \strokec2 const\cf0 \strokec4  db = getFirestore(app);\cb1 \
+\pard\pardeftab720\partightenfactor0
+\cf7 \cb3 \strokec7 // \uc0\u20351 \u29992 \u29872 \u22659 \u25552 \u20379 \u30340  appId \u20197 \u30906 \u20445 \u36335 \u24465 \u27402 \u38480 \u27491 \u30906 \cf0 \cb1 \strokec4 \
+\pard\pardeftab720\partightenfactor0
+\cf2 \cb3 \strokec2 const\cf0 \strokec4  appId = \cf2 \strokec2 typeof\cf0 \strokec4  __app_id !== \cf6 \strokec6 'undefined'\cf0 \strokec4  ? __app_id : \cf6 \strokec6 'default-app-id'\cf0 \strokec4 ;\cb1 \
+\
+\pard\pardeftab720\partightenfactor0
+\cf7 \cb3 \strokec7 // --- Helper Functions ---\cf0 \cb1 \strokec4 \
+\pard\pardeftab720\partightenfactor0
+\cf2 \cb3 \strokec2 const\cf0 \strokec4  getDaysInMonth = (year, month) => \cf2 \strokec2 new\cf0 \strokec4  \cf5 \strokec5 Date\cf0 \strokec4 (year, month + \cf8 \strokec8 1\cf0 \strokec4 , \cf8 \strokec8 0\cf0 \strokec4 ).getDate();\cb1 \
+\cf2 \cb3 \strokec2 const\cf0 \strokec4  getFirstDayOfMonth = (year, month) => \cf2 \strokec2 new\cf0 \strokec4  \cf5 \strokec5 Date\cf0 \strokec4 (year, month, \cf8 \strokec8 1\cf0 \strokec4 ).getDay();\cb1 \
+\
+\pard\pardeftab720\partightenfactor0
+\cf7 \cb3 \strokec7 // \uc0\u35336 \u31639 \u22825 \u25976 \u24046 \u30064  (\u29992 \u26044 \u38991 \u33394 \u37007 \u36655 )\cf0 \cb1 \strokec4 \
+\pard\pardeftab720\partightenfactor0
+\cf2 \cb3 \strokec2 const\cf0 \strokec4  getDaysDiff = (targetDateStr) => \{\cb1 \
+\pard\pardeftab720\partightenfactor0
+\cf0 \cb3   \cf2 \strokec2 const\cf0 \strokec4  today = \cf2 \strokec2 new\cf0 \strokec4  \cf5 \strokec5 Date\cf0 \strokec4 ();\cb1 \
+\cb3   today.setHours(\cf8 \strokec8 0\cf0 \strokec4 , \cf8 \strokec8 0\cf0 \strokec4 , \cf8 \strokec8 0\cf0 \strokec4 , \cf8 \strokec8 0\cf0 \strokec4 );\cb1 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  target = \cf2 \strokec2 new\cf0 \strokec4  \cf5 \strokec5 Date\cf0 \strokec4 (targetDateStr);\cb1 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  diffTime = target.getTime() - today.getTime();\cb1 \
+\cb3   \cf2 \strokec2 return\cf0 \strokec4  \cf5 \strokec5 Math\cf0 \strokec4 .ceil(diffTime / (\cf8 \strokec8 1000\cf0 \strokec4  * \cf8 \strokec8 60\cf0 \strokec4  * \cf8 \strokec8 60\cf0 \strokec4  * \cf8 \strokec8 24\cf0 \strokec4 ));\cb1 \
+\cb3 \};\cb1 \
+\
+\pard\pardeftab720\partightenfactor0
+\cf7 \cb3 \strokec7 // \uc0\u20219 \u21209 \u38991 \u33394 \u37007 \u36655 \u26680 \u24515 \cf0 \cb1 \strokec4 \
+\pard\pardeftab720\partightenfactor0
+\cf2 \cb3 \strokec2 const\cf0 \strokec4  getTaskStatusStyle = (taskType, eventDateStr) => \{\cb1 \
+\pard\pardeftab720\partightenfactor0
+\cf0 \cb3   \cf2 \strokec2 const\cf0 \strokec4  daysDiff = getDaysDiff(eventDateStr); \cf7 \strokec7 // \uc0\u27491 \u25976 =\u26410 \u20358 , \u36000 \u25976 =\u36942 \u21435 \cf0 \cb1 \strokec4 \
+\cb3   \cb1 \
+\cb3   \cf2 \strokec2 if\cf0 \strokec4  (taskType === \cf6 \strokec6 'insurance'\cf0 \strokec4 ) \{\cb1 \
+\cb3     \cf7 \strokec7 // \uc0\u27963 \u21205 \u21069 3\u22825 \u35201 \u35299 \u27770 \cf0 \cb1 \strokec4 \
+\cb3     \cf2 \strokec2 if\cf0 \strokec4  (daysDiff <= \cf8 \strokec8 3\cf0 \strokec4  && daysDiff >= \cf8 \strokec8 0\cf0 \strokec4 ) \cf2 \strokec2 return\cf0 \strokec4  \{ color: \cf6 \strokec6 'text-red-600'\cf0 \strokec4 , bg: \cf6 \strokec6 'bg-red-50'\cf0 \strokec4 , border: \cf6 \strokec6 'border-red-200'\cf0 \strokec4 , label: \cf6 \strokec6 '\uc0\u24613 \u36843  (\u21097 3\u22825 )'\cf0 \strokec4  \};\cb1 \
+\cb3     \cf2 \strokec2 if\cf0 \strokec4  (daysDiff < \cf8 \strokec8 0\cf0 \strokec4 ) \cf2 \strokec2 return\cf0 \strokec4  \{ color: \cf6 \strokec6 'text-slate-400'\cf0 \strokec4 , bg: \cf6 \strokec6 'bg-slate-100'\cf0 \strokec4 , border: \cf6 \strokec6 'border-slate-200'\cf0 \strokec4 , label: \cf6 \strokec6 '\uc0\u27963 \u21205 \u24050 \u36942 '\cf0 \strokec4  \};\cb1 \
+\cb3     \cf2 \strokec2 return\cf0 \strokec4  \{ color: \cf6 \strokec6 'text-slate-600'\cf0 \strokec4 , bg: \cf6 \strokec6 'bg-white'\cf0 \strokec4 , border: \cf6 \strokec6 'border-slate-200'\cf0 \strokec4 , label: \cf6 \strokec6 '\uc0\u24453 \u36774 '\cf0 \strokec4  \};\cb1 \
+\cb3   \}\cb1 \
+\cb3   \cb1 \
+\cb3   \cf2 \strokec2 if\cf0 \strokec4  (taskType === \cf6 \strokec6 'post_letter'\cf0 \strokec4 ) \{\cb1 \
+\cb3     \cf7 \strokec7 // \uc0\u27963 \u21205 \u24460 \u23492 \u36865 : \u38548 \u22825 (\u32160 ), \u31532 2\u22825 (\u27224 ), \u31532 3\u22825 (\u32005 )\cf0 \cb1 \strokec4 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  daysSinceEvent = -daysDiff; \cb1 \
+\cb3     \cf2 \strokec2 if\cf0 \strokec4  (daysSinceEvent < \cf8 \strokec8 1\cf0 \strokec4 ) \cf2 \strokec2 return\cf0 \strokec4  \{ color: \cf6 \strokec6 'text-slate-400'\cf0 \strokec4 , bg: \cf6 \strokec6 'bg-slate-50'\cf0 \strokec4 , border: \cf6 \strokec6 'border-slate-200'\cf0 \strokec4 , label: \cf6 \strokec6 '\uc0\u27963 \u21205 \u26410 \u32080 \u26463 '\cf0 \strokec4  \}; \cf7 \strokec7 // \uc0\u27963 \u21205 \u36996 \u27794 \u30332 \u29983 \cf0 \cb1 \strokec4 \
+\cb3     \cf2 \strokec2 if\cf0 \strokec4  (daysSinceEvent === \cf8 \strokec8 1\cf0 \strokec4 ) \cf2 \strokec2 return\cf0 \strokec4  \{ color: \cf6 \strokec6 'text-green-600'\cf0 \strokec4 , bg: \cf6 \strokec6 'bg-green-50'\cf0 \strokec4 , border: \cf6 \strokec6 'border-green-200'\cf0 \strokec4 , label: \cf6 \strokec6 '\uc0\u24314 \u35696 \u23492 \u36865  (Day 1)'\cf0 \strokec4  \};\cb1 \
+\cb3     \cf2 \strokec2 if\cf0 \strokec4  (daysSinceEvent === \cf8 \strokec8 2\cf0 \strokec4 ) \cf2 \strokec2 return\cf0 \strokec4  \{ color: \cf6 \strokec6 'text-orange-600'\cf0 \strokec4 , bg: \cf6 \strokec6 'bg-orange-50'\cf0 \strokec4 , border: \cf6 \strokec6 'border-orange-200'\cf0 \strokec4 , label: \cf6 \strokec6 '\uc0\u24555 \u23492 \u20986  (Day 2)'\cf0 \strokec4  \};\cb1 \
+\cb3     \cf2 \strokec2 if\cf0 \strokec4  (daysSinceEvent >= \cf8 \strokec8 3\cf0 \strokec4 ) \cf2 \strokec2 return\cf0 \strokec4  \{ color: \cf6 \strokec6 'text-red-600'\cf0 \strokec4 , bg: \cf6 \strokec6 'bg-red-50'\cf0 \strokec4 , border: \cf6 \strokec6 'border-red-200'\cf0 \strokec4 , label: \cf6 \strokec6 '\uc0\u24310 \u36978  (Day 3+)'\cf0 \strokec4  \};\cb1 \
+\cb3   \}\cb1 \
+\
+\cb3   \cf7 \strokec7 // \uc0\u38928 \u35373 \cf0 \cb1 \strokec4 \
+\cb3   \cf2 \strokec2 return\cf0 \strokec4  \{ color: \cf6 \strokec6 'text-slate-600'\cf0 \strokec4 , bg: \cf6 \strokec6 'bg-white'\cf0 \strokec4 , border: \cf6 \strokec6 'border-slate-200'\cf0 \strokec4 , label: \cf6 \strokec6 ''\cf0 \strokec4  \};\cb1 \
+\cb3 \};\cb1 \
+\
+\pard\pardeftab720\partightenfactor0
+\cf7 \cb3 \strokec7 // --- \uc0\u23376 \u20803 \u20214 \u23450 \u32681  ---\cf0 \cb1 \strokec4 \
+\pard\pardeftab720\partightenfactor0
+\cf2 \cb3 \strokec2 const\cf0 \strokec4  \cf5 \strokec5 NavItem\cf0 \strokec4  = (\{ id, icon: \cf5 \strokec5 Icon\cf0 \strokec4 , label, activeTab, setActiveTab \}) => (\cb1 \
+\pard\pardeftab720\partightenfactor0
+\cf0 \cb3   <button\cb1 \
+\cb3     onClick=\{() => setActiveTab(id)\}\cb1 \
+\cb3     className=\{\cf6 \strokec6 `flex items-center space-x-2 px-4 py-3 rounded-lg transition-colors w-full \cf0 \strokec4 $\{\cb1 \
+\cb3       activeTab === id \cb1 \
+\cb3         ? \cf6 \strokec6 'bg-blue-600 text-white shadow-md'\cf0 \strokec4  \cb1 \
+\cb3         : \cf6 \strokec6 'text-slate-600 hover:bg-slate-100'\cf0 \cb1 \strokec4 \
+\cb3     \}\cf6 \strokec6 `\cf0 \strokec4 \}\cb1 \
+\cb3   >\cb1 \
+\cb3     <\cf5 \strokec5 Icon\cf0 \strokec4  size=\{\cf8 \strokec8 20\cf0 \strokec4 \} />\cb1 \
+\cb3     <span className=\cf6 \strokec6 "font-medium"\cf0 \strokec4 >\{label\}</span>\cb1 \
+\cb3   </button>\cb1 \
+\cb3 );\cb1 \
+\
+\pard\pardeftab720\partightenfactor0
+\cf7 \cb3 \strokec7 // --- \uc0\u24555 \u36895 \u26032 \u22686 \u27963 \u21205  Modal (\u21253 \u21547 \u25209 \u37327 \u26085 \u26399 \u36984 \u25799 \u33287 \u22810 \u35611 \u24107 ) ---\cf0 \cb1 \strokec4 \
+\pard\pardeftab720\partightenfactor0
+\cf2 \cb3 \strokec2 const\cf0 \strokec4  \cf5 \strokec5 CreateEventModal\cf0 \strokec4  = (\{ onClose, onSave, customTemplates, onAddTemplate, onDeleteTemplate, availableInstructors \}) => \{\cb1 \
+\pard\pardeftab720\partightenfactor0
+\cf0 \cb3   \cf2 \strokec2 const\cf0 \strokec4  [mode, setMode] = useState(\cf6 \strokec6 'template'\cf0 \strokec4 ); \cf7 \strokec7 // 'template' or 'custom'\cf0 \cb1 \strokec4 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  [isCreatingTemplate, setIsCreatingTemplate] = useState(\cf2 \strokec2 false\cf0 \strokec4 ); \cf7 \strokec7 // \uc0\u26159 \u21542 \u27491 \u22312 \u24314 \u31435 \u26032 \u27169 \u26495 \cf0 \cb1 \strokec4 \
+\cb3   \cb1 \
+\cb3   \cf7 \strokec7 // \uc0\u26085 \u26310 \u36984 \u25799 \u29376 \u24907 \cf0 \cb1 \strokec4 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  [calendarMonth, setCalendarMonth] = useState(\cf2 \strokec2 new\cf0 \strokec4  \cf5 \strokec5 Date\cf0 \strokec4 ());\cb1 \
+\
+\cb3   \cf7 \strokec7 // \uc0\u27963 \u21205 \u34920 \u21934 \u36039 \u26009  (\u25903 \u25588 \u22810 \u26085 \u26399 , \u22810 \u35611 \u24107 )\cf0 \cb1 \strokec4 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  [formData, setFormData] = useState(\{\cb1 \
+\cb3     dates: [], \cf7 \strokec7 // \uc0\u36984 \u21462 \u30340 \u26085 \u26399 \u38499 \u21015 \cf0 \cb1 \strokec4 \
+\cb3     eventName: \cf6 \strokec6 ''\cf0 \strokec4 ,\cb1 \
+\cb3     instructors: [] \cf7 \strokec7 // \uc0\u35611 \u24107 \u38499 \u21015 \cf0 \cb1 \strokec4 \
+\cb3   \});\cb1 \
+\cb3   \cb1 \
+\cb3   \cf7 \strokec7 // \uc0\u33256 \u26178 \u35611 \u24107 \u36664 \u20837 \cf0 \cb1 \strokec4 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  [tempInstructor, setTempInstructor] = useState(\cf6 \strokec6 ''\cf0 \strokec4 );\cb1 \
+\
+\cb3   \cf7 \strokec7 // \uc0\u26032 \u27169 \u26495 \u34920 \u21934 \u36039 \u26009 \cf0 \cb1 \strokec4 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  [newTemplateData, setNewTemplateData] = useState(\{\cb1 \
+\cb3     name: \cf6 \strokec6 ''\cf0 \strokec4 ,\cb1 \
+\cb3     eventName: \cf6 \strokec6 ''\cf0 \strokec4 ,\cb1 \
+\cb3     instructor: \cf6 \strokec6 ''\cf0 \strokec4  \cf7 \strokec7 // \uc0\u27169 \u26495 \u26283 \u26178 \u32173 \u25345 \u21934 \u19968 \u35611 \u24107 \u27396 \u20301 \u65292 \u23526 \u38555 \u24314 \u31435 \u26178 \u21487 \u36681 \u28858 \u38499 \u21015 \cf0 \cb1 \strokec4 \
+\cb3   \});\cb1 \
+\
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  handleTemplateSelect = (tpl) => \{\cb1 \
+\cb3     \cf7 \strokec7 // \uc0\u27169 \u26495 \u30340 \u35611 \u24107 \u22914 \u26524 \u26159 \u23383 \u20018 \u65292 \u22039 \u35430 \u36681 \u28858 \u38499 \u21015 \u65288 \u30456 \u23481 \u33290 \u36039 \u26009 \u65289 \cf0 \cb1 \strokec4 \
+\cb3     \cf2 \strokec2 let\cf0 \strokec4  tplInstructors = [];\cb1 \
+\cb3     \cf2 \strokec2 if\cf0 \strokec4  (tpl.instructor) \{\cb1 \
+\cb3       tplInstructors = tpl.instructor.split(\cf9 \strokec9 /[&,]/\cf0 \strokec4 ).map(s => s.trim());\cb1 \
+\cb3     \}\cb1 \
+\
+\cb3     setFormData(\{\cb1 \
+\cb3       ...formData,\cb1 \
+\cb3       eventName: tpl.eventName,\cb1 \
+\cb3       instructors: tplInstructors\cb1 \
+\cb3     \});\cb1 \
+\cb3   \};\cb1 \
+\
+\cb3   \cf7 \strokec7 // \uc0\u26085 \u26399 \u36984 \u25799 \u37007 \u36655 \cf0 \cb1 \strokec4 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  toggleDate = (year, month, day) => \{\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  dateStr = \cf6 \strokec6 `\cf0 \strokec4 $\{year\}\cf6 \strokec6 -\cf0 \strokec4 $\{\cf5 \strokec5 String\cf0 \strokec4 (month + \cf8 \strokec8 1\cf0 \strokec4 ).padStart(\cf8 \strokec8 2\cf0 \strokec4 , \cf6 \strokec6 '0'\cf0 \strokec4 )\}\cf6 \strokec6 -\cf0 \strokec4 $\{\cf5 \strokec5 String\cf0 \strokec4 (day).padStart(\cf8 \strokec8 2\cf0 \strokec4 , \cf6 \strokec6 '0'\cf0 \strokec4 )\}\cf6 \strokec6 `\cf0 \strokec4 ;\cb1 \
+\cb3     \cf2 \strokec2 let\cf0 \strokec4  newDates;\cb1 \
+\cb3     \cf2 \strokec2 if\cf0 \strokec4  (formData.dates.includes(dateStr)) \{\cb1 \
+\cb3       newDates = formData.dates.filter(d => d !== dateStr);\cb1 \
+\cb3     \} \cf2 \strokec2 else\cf0 \strokec4  \{\cb1 \
+\cb3       newDates = [...formData.dates, dateStr].sort();\cb1 \
+\cb3     \}\cb1 \
+\cb3     setFormData(\{ ...formData, dates: newDates \});\cb1 \
+\cb3   \};\cb1 \
+\
+\cb3   \cf7 \strokec7 // \uc0\u35611 \u24107 \u31649 \u29702 \u37007 \u36655 \cf0 \cb1 \strokec4 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  addInstructor = (name) => \{\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  cleanName = name.trim();\cb1 \
+\cb3     \cf2 \strokec2 if\cf0 \strokec4  (cleanName && !formData.instructors.includes(cleanName)) \{\cb1 \
+\cb3       setFormData(\{ ...formData, instructors: [...formData.instructors, cleanName] \});\cb1 \
+\cb3     \}\cb1 \
+\cb3     setTempInstructor(\cf6 \strokec6 ''\cf0 \strokec4 );\cb1 \
+\cb3   \};\cb1 \
+\
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  removeInstructor = (name) => \{\cb1 \
+\cb3     setFormData(\{ ...formData, instructors: formData.instructors.filter(i => i !== name) \});\cb1 \
+\cb3   \};\cb1 \
+\
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  handleSubmitEvent = () => \{\cb1 \
+\cb3     \cf2 \strokec2 if\cf0 \strokec4  (formData.dates.length === \cf8 \strokec8 0\cf0 \strokec4 ) \{\cb1 \
+\cb3       alert(\cf6 \strokec6 "\uc0\u35531 \u33267 \u23569 \u22312 \u26085 \u26310 \u19978 \u36984 \u25799 \u19968 \u20491 \u26085 \u26399 "\cf0 \strokec4 );\cb1 \
+\cb3       \cf2 \strokec2 return\cf0 \strokec4 ;\cb1 \
+\cb3     \}\cb1 \
+\cb3     onSave(formData);\cb1 \
+\cb3   \};\cb1 \
+\
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  handleSaveNewTemplate = () => \{\cb1 \
+\cb3     \cf2 \strokec2 if\cf0 \strokec4  (!newTemplateData.name) \{\cb1 \
+\cb3       alert(\cf6 \strokec6 "\uc0\u35531 \u36664 \u20837 \u27169 \u26495 \u21517 \u31281 "\cf0 \strokec4 );\cb1 \
+\cb3       \cf2 \strokec2 return\cf0 \strokec4 ;\cb1 \
+\cb3     \}\cb1 \
+\cb3     onAddTemplate(newTemplateData);\cb1 \
+\cb3     setIsCreatingTemplate(\cf2 \strokec2 false\cf0 \strokec4 );\cb1 \
+\cb3     setNewTemplateData(\{ name: \cf6 \strokec6 ''\cf0 \strokec4 , eventName: \cf6 \strokec6 ''\cf0 \strokec4 , instructor: \cf6 \strokec6 ''\cf0 \strokec4  \});\cb1 \
+\cb3   \};\cb1 \
+\
+\cb3   \cf7 \strokec7 // \uc0\u28210 \u26579 \u36855 \u20320 \u26085 \u26310 \cf0 \cb1 \strokec4 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  renderCalendar = () => \{\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  year = calendarMonth.getFullYear();\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  month = calendarMonth.getMonth();\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  daysInMonth = getDaysInMonth(year, month);\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  firstDay = getFirstDayOfMonth(year, month);\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  days = [];\cb1 \
+\cb3     \cb1 \
+\cb3     \cf2 \strokec2 for\cf0 \strokec4  (\cf2 \strokec2 let\cf0 \strokec4  i = \cf8 \strokec8 0\cf0 \strokec4 ; i < firstDay; i++) days.push(\cf2 \strokec2 null\cf0 \strokec4 );\cb1 \
+\cb3     \cf2 \strokec2 for\cf0 \strokec4  (\cf2 \strokec2 let\cf0 \strokec4  i = \cf8 \strokec8 1\cf0 \strokec4 ; i <= daysInMonth; i++) days.push(i);\cb1 \
+\
+\cb3     \cf2 \strokec2 return\cf0 \strokec4  (\cb1 \
+\cb3       <div className=\cf6 \strokec6 "bg-slate-50 p-4 rounded-xl border border-slate-200"\cf0 \strokec4 >\cb1 \
+\cb3         <div className=\cf6 \strokec6 "flex justify-between items-center mb-4"\cf0 \strokec4 >\cb1 \
+\cb3           <button onClick=\{() => setCalendarMonth(\cf2 \strokec2 new\cf0 \strokec4  \cf5 \strokec5 Date\cf0 \strokec4 (year, month - \cf8 \strokec8 1\cf0 \strokec4 ))\} className=\cf6 \strokec6 "p-1 hover:bg-slate-200 rounded"\cf0 \strokec4 ><\cf5 \strokec5 ChevronLeft\cf0 \strokec4  size=\{\cf8 \strokec8 20\cf0 \strokec4 \}/></button>\cb1 \
+\cb3           <span className=\cf6 \strokec6 "font-bold text-slate-700"\cf0 \strokec4 >\{year\}\cf10 \strokec10 \uc0\u24180 \cf0 \strokec4  \{month + \cf8 \strokec8 1\cf0 \strokec4 \}\cf10 \strokec10 \uc0\u26376 \cf0 \strokec4 </span>\cb1 \
+\cb3           <button onClick=\{() => setCalendarMonth(\cf2 \strokec2 new\cf0 \strokec4  \cf5 \strokec5 Date\cf0 \strokec4 (year, month + \cf8 \strokec8 1\cf0 \strokec4 ))\} className=\cf6 \strokec6 "p-1 hover:bg-slate-200 rounded"\cf0 \strokec4 ><\cf5 \strokec5 ChevronRight\cf0 \strokec4  size=\{\cf8 \strokec8 20\cf0 \strokec4 \}/></button>\cb1 \
+\cb3         </div>\cb1 \
+\cb3         <div className=\cf6 \strokec6 "grid grid-cols-7 text-center mb-2"\cf0 \strokec4 >\cb1 \
+\cb3            \{[\cf6 \strokec6 '\uc0\u26085 '\cf0 \strokec4 , \cf6 \strokec6 '\uc0\u19968 '\cf0 \strokec4 , \cf6 \strokec6 '\uc0\u20108 '\cf0 \strokec4 , \cf6 \strokec6 '\uc0\u19977 '\cf0 \strokec4 , \cf6 \strokec6 '\uc0\u22235 '\cf0 \strokec4 , \cf6 \strokec6 '\uc0\u20116 '\cf0 \strokec4 , \cf6 \strokec6 '\uc0\u20845 '\cf0 \strokec4 ].map(d => <div key=\{d\} className=\cf6 \strokec6 "text-xs text-slate-500 font-bold"\cf0 \strokec4 >\{d\}</div>)\}\cb1 \
+\cb3         </div>\cb1 \
+\cb3         <div className=\cf6 \strokec6 "grid grid-cols-7 gap-1"\cf0 \strokec4 >\cb1 \
+\cb3           \{days.map((day, idx) => \{\cb1 \
+\cb3              \cf2 \strokec2 if\cf0 \strokec4  (!day) \cf2 \strokec2 return\cf0 \strokec4  <div key=\{idx\} />;\cb1 \
+\cb3              \cf2 \strokec2 const\cf0 \strokec4  dateStr = \cf6 \strokec6 `\cf0 \strokec4 $\{year\}\cf6 \strokec6 -\cf0 \strokec4 $\{\cf5 \strokec5 String\cf0 \strokec4 (month + \cf8 \strokec8 1\cf0 \strokec4 ).padStart(\cf8 \strokec8 2\cf0 \strokec4 , \cf6 \strokec6 '0'\cf0 \strokec4 )\}\cf6 \strokec6 -\cf0 \strokec4 $\{\cf5 \strokec5 String\cf0 \strokec4 (day).padStart(\cf8 \strokec8 2\cf0 \strokec4 , \cf6 \strokec6 '0'\cf0 \strokec4 )\}\cf6 \strokec6 `\cf0 \strokec4 ;\cb1 \
+\cb3              \cf2 \strokec2 const\cf0 \strokec4  isSelected = formData.dates.includes(dateStr);\cb1 \
+\cb3              \cf2 \strokec2 return\cf0 \strokec4  (\cb1 \
+\cb3                <button \cb1 \
+\cb3                  key=\{idx\}\cb1 \
+\cb3                  onClick=\{() => toggleDate(year, month, day)\}\cb1 \
+\cb3                  className=\{\cf6 \strokec6 `w-8 h-8 rounded-full text-sm flex items-center justify-center transition-all \cf0 \strokec4 $\{\cb1 \
+\cb3                    isSelected ? \cf6 \strokec6 'bg-blue-600 text-white shadow-md scale-110'\cf0 \strokec4  : \cf6 \strokec6 'hover:bg-blue-100 text-slate-700'\cf0 \cb1 \strokec4 \
+\cb3                  \}\cf6 \strokec6 `\cf0 \strokec4 \}\cb1 \
+\cb3                >\cb1 \
+\cb3                  \{day\}\cb1 \
+\cb3                </button>\cb1 \
+\cb3              );\cb1 \
+\cb3           \})\}\cb1 \
+\cb3         </div>\cb1 \
+\cb3         <div className=\cf6 \strokec6 "mt-3 text-xs text-slate-500 text-center"\cf0 \strokec4 >\cb1 \
+\cb3           \cf10 \strokec10 \uc0\u24050 \u36984 \u25799 \cf0 \strokec4  <span className=\cf6 \strokec6 "font-bold text-blue-600"\cf0 \strokec4 >\{formData.dates.length\}</span> \cf10 \strokec10 \uc0\u20491 \u26085 \u26399 \cf0 \cb1 \strokec4 \
+\cb3         </div>\cb1 \
+\cb3       </div>\cb1 \
+\cb3     );\cb1 \
+\cb3   \};\cb1 \
+\
+\cb3   \cf2 \strokec2 return\cf0 \strokec4  (\cb1 \
+\cb3     <div className=\cf6 \strokec6 "fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"\cf0 \strokec4 >\cb1 \
+\cb3       <div className=\cf6 \strokec6 "bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]"\cf0 \strokec4 >\cb1 \
+\cb3         \{\cf7 \strokec7 /* Header */\cf0 \strokec4 \}\cb1 \
+\cb3         <div className=\cf6 \strokec6 "p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50"\cf0 \strokec4 >\cb1 \
+\cb3           <h3 className=\cf6 \strokec6 "text-xl font-bold text-slate-800 flex items-center"\cf0 \strokec4 >\cb1 \
+\cb3             <\cf5 \strokec5 Zap\cf0 \strokec4  size=\{\cf8 \strokec8 20\cf0 \strokec4 \} className=\cf6 \strokec6 "mr-2 text-yellow-500"\cf0 \strokec4  />\cb1 \
+\cb3             \cf10 \strokec10 \uc0\u24555 \u36895 \u38283 \u22296 \cf0 \cb1 \strokec4 \
+\cb3           </h3>\cb1 \
+\cb3           <button onClick=\{onClose\}><\cf5 \strokec5 X\cf0 \strokec4  size=\{\cf8 \strokec8 24\cf0 \strokec4 \} className=\cf6 \strokec6 "text-slate-400 hover:text-slate-600"\cf0 \strokec4 /></button>\cb1 \
+\cb3         </div>\cb1 \
+\cb3         \cb1 \
+\cb3         <div className=\cf6 \strokec6 "p-6 space-y-6 overflow-y-auto"\cf0 \strokec4 >\cb1 \
+\cb3           \{\cf7 \strokec7 /* 1. \uc0\u36984 \u25799 \u27169 \u24335  */\cf0 \strokec4 \}\cb1 \
+\cb3           \{!isCreatingTemplate && (\cb1 \
+\cb3             <div className=\cf6 \strokec6 "flex space-x-2 p-1 bg-slate-100 rounded-lg"\cf0 \strokec4 >\cb1 \
+\cb3               <button \cb1 \
+\cb3                 onClick=\{() => setMode(\cf6 \strokec6 'template'\cf0 \strokec4 )\}\cb1 \
+\cb3                 className=\{\cf6 \strokec6 `flex-1 py-2 text-sm font-medium rounded-md transition-all \cf0 \strokec4 $\{mode === \cf6 \strokec6 'template'\cf0 \strokec4  ? \cf6 \strokec6 'bg-white shadow text-blue-600'\cf0 \strokec4  : \cf6 \strokec6 'text-slate-500'\cf0 \strokec4 \}\cf6 \strokec6 `\cf0 \strokec4 \}\cb1 \
+\cb3               >\cb1 \
+\cb3                 \cf10 \strokec10 \uc0\u20351 \u29992 \u27169 \u26495 \cf0 \cb1 \strokec4 \
+\cb3               </button>\cb1 \
+\cb3               <button \cb1 \
+\cb3                 onClick=\{() => setMode(\cf6 \strokec6 'custom'\cf0 \strokec4 )\}\cb1 \
+\cb3                 className=\{\cf6 \strokec6 `flex-1 py-2 text-sm font-medium rounded-md transition-all \cf0 \strokec4 $\{mode === \cf6 \strokec6 'custom'\cf0 \strokec4  ? \cf6 \strokec6 'bg-white shadow text-blue-600'\cf0 \strokec4  : \cf6 \strokec6 'text-slate-500'\cf0 \strokec4 \}\cf6 \strokec6 `\cf0 \strokec4 \}\cb1 \
+\cb3               >\cb1 \
+\cb3                 \cf10 \strokec10 \uc0\u23436 \u20840 \u33258 \u35330 \cf0 \cb1 \strokec4 \
+\cb3               </button>\cb1 \
+\cb3             </div>\cb1 \
+\cb3           )\}\cb1 \
+\
+\cb3           \{\cf7 \strokec7 /* 2. \uc0\u27169 \u26495 \u36984 \u25799 \u21312 \u22495  */\cf0 \strokec4 \}\cb1 \
+\cb3           \{!isCreatingTemplate && mode === \cf6 \strokec6 'template'\cf0 \strokec4  && (\cb1 \
+\cb3             <div className=\cf6 \strokec6 "grid grid-cols-3 gap-3"\cf0 \strokec4 >\cb1 \
+\cb3               \{\cf5 \strokec5 DEFAULT_EVENT_TEMPLATES\cf0 \strokec4 .map((tpl) => (\cb1 \
+\cb3                 <div \cb1 \
+\cb3                   key=\{tpl.id\} \cb1 \
+\cb3                   onClick=\{() => handleTemplateSelect(tpl)\}\cb1 \
+\cb3                   className=\{\cf6 \strokec6 `border rounded-lg p-3 cursor-pointer transition-all text-center hover:bg-blue-50 relative group \cf0 \strokec4 $\{formData.eventName === tpl.eventName ? \cf6 \strokec6 'border-blue-500 ring-1 ring-blue-500 bg-blue-50'\cf0 \strokec4  : \cf6 \strokec6 'border-slate-200'\cf0 \strokec4 \}\cf6 \strokec6 `\cf0 \strokec4 \}\cb1 \
+\cb3                 >\cb1 \
+\cb3                   <div className=\cf6 \strokec6 "font-bold text-slate-700 text-sm mb-1"\cf0 \strokec4 >\{tpl.name\}</div>\cb1 \
+\cb3                   <div className=\cf6 \strokec6 "text-xs text-slate-500"\cf0 \strokec4 >\{tpl.instructor\}</div>\cb1 \
+\cb3                 </div>\cb1 \
+\cb3               ))\}\cb1 \
+\cb3               \cb1 \
+\cb3               \{customTemplates.map((tpl) => (\cb1 \
+\cb3                 <div \cb1 \
+\cb3                   key=\{tpl.id\} \cb1 \
+\cb3                   onClick=\{() => handleTemplateSelect(tpl)\}\cb1 \
+\cb3                   className=\{\cf6 \strokec6 `border rounded-lg p-3 cursor-pointer transition-all text-center hover:bg-blue-50 relative group \cf0 \strokec4 $\{formData.eventName === tpl.eventName ? \cf6 \strokec6 'border-blue-500 ring-1 ring-blue-500 bg-blue-50'\cf0 \strokec4  : \cf6 \strokec6 'border-slate-200'\cf0 \strokec4 \}\cf6 \strokec6 `\cf0 \strokec4 \}\cb1 \
+\cb3                 >\cb1 \
+\cb3                   <button \cb1 \
+\cb3                     onClick=\{(e) => \{ e.stopPropagation(); onDeleteTemplate(tpl.id); \}\}\cb1 \
+\cb3                     className=\cf6 \strokec6 "absolute top-1 right-1 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"\cf0 \cb1 \strokec4 \
+\cb3                   >\cb1 \
+\cb3                     <\cf5 \strokec5 X\cf0 \strokec4  size=\{\cf8 \strokec8 12\cf0 \strokec4 \} />\cb1 \
+\cb3                   </button>\cb1 \
+\cb3                   <div className=\cf6 \strokec6 "font-bold text-blue-700 text-sm mb-1"\cf0 \strokec4 >\{tpl.name\}</div>\cb1 \
+\cb3                   <div className=\cf6 \strokec6 "text-xs text-slate-500"\cf0 \strokec4 >\{tpl.instructor\}</div>\cb1 \
+\cb3                 </div>\cb1 \
+\cb3               ))\}\cb1 \
+\
+\cb3               <button \cb1 \
+\cb3                 onClick=\{() => setIsCreatingTemplate(\cf2 \strokec2 true\cf0 \strokec4 )\}\cb1 \
+\cb3                 className=\cf6 \strokec6 "border border-dashed border-slate-300 rounded-lg p-3 flex flex-col items-center justify-center text-slate-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-all"\cf0 \cb1 \strokec4 \
+\cb3               >\cb1 \
+\cb3                 <\cf5 \strokec5 PlusCircle\cf0 \strokec4  size=\{\cf8 \strokec8 24\cf0 \strokec4 \} className=\cf6 \strokec6 "mb-1"\cf0 \strokec4  />\cb1 \
+\cb3                 <span className=\cf6 \strokec6 "text-xs font-medium"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u26032 \u22686 \u27169 \u26495 \cf0 \strokec4 </span>\cb1 \
+\cb3               </button>\cb1 \
+\cb3             </div>\cb1 \
+\cb3           )\}\cb1 \
+\
+\cb3           \{\cf7 \strokec7 /* 3. \uc0\u24314 \u31435 \u26032 \u27169 \u26495 \u20171 \u38754  */\cf0 \strokec4 \}\cb1 \
+\cb3           \{isCreatingTemplate && (\cb1 \
+\cb3             <div className=\cf6 \strokec6 "bg-slate-50 p-4 rounded-lg border border-slate-200 animate-in fade-in zoom-in-95"\cf0 \strokec4 >\cb1 \
+\cb3               <div className=\cf6 \strokec6 "flex justify-between items-center mb-4"\cf0 \strokec4 >\cb1 \
+\cb3                 <h4 className=\cf6 \strokec6 "font-bold text-slate-700"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u24314 \u31435 \u26032 \u27169 \u26495 \cf0 \strokec4 </h4>\cb1 \
+\cb3                 <button onClick=\{() => setIsCreatingTemplate(\cf2 \strokec2 false\cf0 \strokec4 )\} className=\cf6 \strokec6 "text-slate-400 hover:text-slate-600 text-sm"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u21462 \u28040 \cf0 \strokec4 </button>\cb1 \
+\cb3               </div>\cb1 \
+\cb3               <div className=\cf6 \strokec6 "space-y-3"\cf0 \strokec4 >\cb1 \
+\cb3                 <div>\cb1 \
+\cb3                   <label className=\cf6 \strokec6 "block text-xs font-medium text-slate-500 mb-1"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u27169 \u26495 \u21517 \u31281 \cf0 \strokec4 </label>\cb1 \
+\cb3                   <input \cf2 \strokec2 type\cf0 \strokec4 =\cf6 \strokec6 "text"\cf0 \strokec4  className=\cf6 \strokec6 "w-full px-3 py-2 text-sm border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 outline-none"\cf0 \strokec4  \cb1 \
+\cb3                     value=\{newTemplateData.name\} onChange=\{e => setNewTemplateData(\{...newTemplateData, name: e.target.value\})\} />\cb1 \
+\cb3                 </div>\cb1 \
+\cb3                 <div className=\cf6 \strokec6 "grid grid-cols-2 gap-3"\cf0 \strokec4 >\cb1 \
+\cb3                    <div>\cb1 \
+\cb3                      <label className=\cf6 \strokec6 "block text-xs font-medium text-slate-500 mb-1"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u38928 \u35373 \u27963 \u21205 \u21517 \u31281 \cf0 \strokec4 </label>\cb1 \
+\cb3                      <input \cf2 \strokec2 type\cf0 \strokec4 =\cf6 \strokec6 "text"\cf0 \strokec4  className=\cf6 \strokec6 "w-full px-3 py-2 text-sm border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 outline-none"\cf0 \strokec4  \cb1 \
+\cb3                        value=\{newTemplateData.eventName\} onChange=\{e => setNewTemplateData(\{...newTemplateData, eventName: e.target.value\})\} />\cb1 \
+\cb3                    </div>\cb1 \
+\cb3                    <div>\cb1 \
+\cb3                      <label className=\cf6 \strokec6 "block text-xs font-medium text-slate-500 mb-1"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u38928 \u35373 \u35611 \u24107 \cf0 \strokec4 </label>\cb1 \
+\cb3                      <input \cf2 \strokec2 type\cf0 \strokec4 =\cf6 \strokec6 "text"\cf0 \strokec4  className=\cf6 \strokec6 "w-full px-3 py-2 text-sm border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 outline-none"\cf0 \strokec4  \cb1 \
+\cb3                        value=\{newTemplateData.instructor\} onChange=\{e => setNewTemplateData(\{...newTemplateData, instructor: e.target.value\})\} />\cb1 \
+\cb3                    </div>\cb1 \
+\cb3                 </div>\cb1 \
+\cb3                 <button \cb1 \
+\cb3                   onClick=\{handleSaveNewTemplate\}\cb1 \
+\cb3                   className=\cf6 \strokec6 "w-full py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 mt-2"\cf0 \cb1 \strokec4 \
+\cb3                 >\cb1 \
+\cb3                   \cf10 \strokec10 \uc0\u20786 \u23384 \u27169 \u26495 \cf0 \cb1 \strokec4 \
+\cb3                 </button>\cb1 \
+\cb3               </div>\cb1 \
+\cb3             </div>\cb1 \
+\cb3           )\}\cb1 \
+\
+\cb3           \{\cf7 \strokec7 /* 4. \uc0\u27963 \u21205 \u35373 \u23450 \u21312  (\u26085 \u26399 \u26085 \u26310  + \u22810 \u20154 \u35611 \u24107 ) */\cf0 \strokec4 \}\cb1 \
+\cb3           \{!isCreatingTemplate && (\cb1 \
+\cb3             <div className=\cf6 \strokec6 "grid grid-cols-1 md:grid-cols-2 gap-6 border-t border-slate-100 pt-6"\cf0 \strokec4 >\cb1 \
+\cb3                \{\cf7 \strokec7 /* \uc0\u24038 \u20596 \u65306 \u26085 \u26310 \u36984 \u25799 \u22120  */\cf0 \strokec4 \}\cb1 \
+\cb3                <div>\cb1 \
+\cb3                  <label className=\cf6 \strokec6 "block text-sm font-medium text-slate-700 mb-2"\cf0 \strokec4 >\cf8 \strokec8 1\cf0 \strokec4 . \cf10 \strokec10 \uc0\u40670 \u36984 \u26085 \u26399 \cf0 \strokec4  (\cf10 \strokec10 \uc0\u21487 \u22810 \u36984 \cf0 \strokec4 )</label>\cb1 \
+\cb3                  \{renderCalendar()\}\cb1 \
+\cb3                </div>\cb1 \
+\
+\cb3                \{\cf7 \strokec7 /* \uc0\u21491 \u20596 \u65306 \u27963 \u21205 \u36039 \u35338 \u33287 \u35611 \u24107  */\cf0 \strokec4 \}\cb1 \
+\cb3                <div className=\cf6 \strokec6 "space-y-4"\cf0 \strokec4 >\cb1 \
+\cb3                  <div>\cb1 \
+\cb3                    <label className=\cf6 \strokec6 "block text-sm font-medium text-slate-700 mb-1"\cf0 \strokec4 >\cf8 \strokec8 2\cf0 \strokec4 . \cf10 \strokec10 \uc0\u27963 \u21205 \u21517 \u31281 \cf0 \strokec4 </label>\cb1 \
+\cb3                    <input \cf2 \strokec2 type\cf0 \strokec4 =\cf6 \strokec6 "text"\cf0 \strokec4  className=\cf6 \strokec6 "w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"\cf0 \strokec4  \cb1 \
+\cb3                      value=\{formData.eventName\} onChange=\{e => setFormData(\{...formData, eventName: e.target.value\})\} placeholder=\cf6 \strokec6 "\uc0\u36664 \u20837 \u21517 \u31281 ..."\cf0 \strokec4  />\cb1 \
+\cb3                  </div>\cb1 \
+\cb3                  \cb1 \
+\cb3                  <div>\cb1 \
+\cb3                    <label className=\cf6 \strokec6 "block text-sm font-medium text-slate-700 mb-1"\cf0 \strokec4 >\cf8 \strokec8 3\cf0 \strokec4 . \cf10 \strokec10 \uc0\u24118 \u22296 \u35611 \u24107 \cf0 \strokec4  (\cf10 \strokec10 \uc0\u21487 \u22810 \u20154 \cf0 \strokec4 )</label>\cb1 \
+\cb3                    \cb1 \
+\cb3                    \{\cf7 \strokec7 /* \uc0\u24050 \u36984 \u35611 \u24107 \u27161 \u31844  */\cf0 \strokec4 \}\cb1 \
+\cb3                    <div className=\cf6 \strokec6 "flex flex-wrap gap-2 mb-2 min-h-[38px] p-2 bg-white border border-slate-200 rounded-lg"\cf0 \strokec4 >\cb1 \
+\cb3                       \{formData.instructors.length === \cf8 \strokec8 0\cf0 \strokec4  && <span className=\cf6 \strokec6 "text-xs text-slate-400 self-center"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u35531 \u36664 \u20837 \u25110 \u40670 \u36984 \u19979 \u26041 \u35611 \u24107 \cf0 \strokec4 </span>\}\cb1 \
+\cb3                       \{formData.instructors.map((ins, idx) => (\cb1 \
+\cb3                         <div key=\{idx\} className=\cf6 \strokec6 "flex items-center bg-blue-50 text-blue-700 px-2 py-1 rounded-md text-sm border border-blue-100"\cf0 \strokec4 >\cb1 \
+\cb3                           <span className=\cf6 \strokec6 "mr-1"\cf0 \strokec4 >\{ins\}</span>\cb1 \
+\cb3                           <button onClick=\{() => removeInstructor(ins)\} className=\cf6 \strokec6 "text-blue-400 hover:text-red-500"\cf0 \strokec4 ><\cf5 \strokec5 X\cf0 \strokec4  size=\{\cf8 \strokec8 14\cf0 \strokec4 \}/></button>\cb1 \
+\cb3                         </div>\cb1 \
+\cb3                       ))\}\cb1 \
+\cb3                    </div>\cb1 \
+\
+\cb3                    \{\cf7 \strokec7 /* \uc0\u36664 \u20837 \u26694  */\cf0 \strokec4 \}\cb1 \
+\cb3                    <div className=\cf6 \strokec6 "flex gap-2 mb-3"\cf0 \strokec4 >\cb1 \
+\cb3                      <input \cb1 \
+\cb3                        \cf2 \strokec2 type\cf0 \strokec4 =\cf6 \strokec6 "text"\cf0 \strokec4  \cb1 \
+\cb3                        className=\cf6 \strokec6 "flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"\cf0 \cb1 \strokec4 \
+\cb3                        value=\{tempInstructor\}\cb1 \
+\cb3                        onChange=\{(e) => setTempInstructor(e.target.value)\}\cb1 \
+\cb3                        onKeyDown=\{(e) => e.key === \cf6 \strokec6 'Enter'\cf0 \strokec4  && addInstructor(tempInstructor)\}\cb1 \
+\cb3                        placeholder=\cf6 \strokec6 "\uc0\u36664 \u20837 \u21517 \u23383 \u25353  Enter..."\cf0 \cb1 \strokec4 \
+\cb3                      />\cb1 \
+\cb3                      <button onClick=\{() => addInstructor(tempInstructor)\} className=\cf6 \strokec6 "px-3 py-2 bg-slate-100 rounded-lg hover:bg-slate-200 text-slate-600"\cf0 \strokec4 ><\cf5 \strokec5 Plus\cf0 \strokec4  size=\{\cf8 \strokec8 18\cf0 \strokec4 \}/></button>\cb1 \
+\cb3                    </div>\cb1 \
+\
+\cb3                    \{\cf7 \strokec7 /* \uc0\u24120 \u29992 \u35611 \u24107 \u24314 \u35696  */\cf0 \strokec4 \}\cb1 \
+\cb3                    <div className=\cf6 \strokec6 "space-y-2"\cf0 \strokec4 >\cb1 \
+\cb3                      <div className=\cf6 \strokec6 "text-xs text-slate-400"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u24120 \u29992 \u35611 \u24107 \u21517 \u21934 \cf0 \strokec4 :</div>\cb1 \
+\cb3                      <div className=\cf6 \strokec6 "flex flex-wrap gap-2"\cf0 \strokec4 >\cb1 \
+\cb3                        \{availableInstructors.filter(i => !formData.instructors.includes(i)).slice(\cf8 \strokec8 0\cf0 \strokec4 , \cf8 \strokec8 8\cf0 \strokec4 ).map(ins => (\cb1 \
+\cb3                          <button \cb1 \
+\cb3                            key=\{ins\} \cb1 \
+\cb3                            onClick=\{() => addInstructor(ins)\}\cb1 \
+\cb3                            className=\cf6 \strokec6 "text-xs px-2 py-1 bg-slate-50 border border-slate-200 rounded-full text-slate-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition"\cf0 \cb1 \strokec4 \
+\cb3                          >\cb1 \
+\cb3                            + \{ins\}\cb1 \
+\cb3                          </button>\cb1 \
+\cb3                        ))\}\cb1 \
+\cb3                      </div>\cb1 \
+\cb3                    </div>\cb1 \
+\cb3                  </div>\cb1 \
+\cb3                </div>\cb1 \
+\cb3             </div>\cb1 \
+\cb3           )\}\cb1 \
+\cb3         </div>\cb1 \
+\
+\cb3         \{\cf7 \strokec7 /* Footer */\cf0 \strokec4 \}\cb1 \
+\cb3         \{!isCreatingTemplate && (\cb1 \
+\cb3           <div className=\cf6 \strokec6 "p-4 bg-slate-50 border-t border-slate-200 flex justify-end items-center"\cf0 \strokec4 >\cb1 \
+\cb3              <div className=\cf6 \strokec6 "mr-auto text-xs text-slate-500"\cf0 \strokec4 >\cb1 \
+\cb3                 \cf10 \strokec10 \uc0\u23559 \u24314 \u31435 \cf0 \strokec4  <span className=\cf6 \strokec6 "font-bold text-blue-600"\cf0 \strokec4 >\{formData.dates.length\}</span> \cf10 \strokec10 \uc0\u22580 \u27963 \u21205 \cf0 \cb1 \strokec4 \
+\cb3              </div>\cb1 \
+\cb3              <button onClick=\{handleSubmitEvent\} className=\cf6 \strokec6 "px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"\cf0 \strokec4 >\cb1 \
+\cb3                \cf10 \strokec10 \uc0\u25209 \u37327 \u24314 \u31435 \cf0 \cb1 \strokec4 \
+\cb3              </button>\cb1 \
+\cb3           </div>\cb1 \
+\cb3         )\}\cb1 \
+\cb3       </div>\cb1 \
+\cb3     </div>\cb1 \
+\cb3   );\cb1 \
+\cb3 \};\cb1 \
+\
+\pard\pardeftab720\partightenfactor0
+\cf7 \cb3 \strokec7 // --- \uc0\u20219 \u21209 \u35443 \u24773  Modal (\u25552 \u20379  Actionable Data) ---\cf0 \cb1 \strokec4 \
+\pard\pardeftab720\partightenfactor0
+\cf2 \cb3 \strokec2 const\cf0 \strokec4  \cf5 \strokec5 TaskDetailModal\cf0 \strokec4  = (\{ task, eventData, onClose \}) => \{\cb1 \
+\pard\pardeftab720\partightenfactor0
+\cf0 \cb3   \cf2 \strokec2 const\cf0 \strokec4  [copied, setCopied] = useState(\cf2 \strokec2 false\cf0 \strokec4 );\cb1 \
+\
+\cb3   \cf7 \strokec7 // \uc0\u26681 \u25818 \u20219 \u21209 \u39006 \u22411 \u27770 \u23450 \u39023 \u31034 \u20839 \u23481 \cf0 \cb1 \strokec4 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  renderContent = () => \{\cb1 \
+\cb3     \cf2 \strokec2 if\cf0 \strokec4  (task.\cf2 \strokec2 type\cf0 \strokec4  === \cf6 \strokec6 'insurance'\cf0 \strokec4 ) \{\cb1 \
+\cb3       \cf2 \strokec2 const\cf0 \strokec4  copyText = eventData.customers.map(c => \cb1 \
+\cb3         \cf6 \strokec6 `\cf0 \strokec4 $\{c.name\}\cf6 \strokec6 \\t\cf0 \strokec4 $\{c.id\}\cf6 \strokec6 \\t\cf0 \strokec4 $\{c.birthday\}\cf6 \strokec6 `\cf0 \cb1 \strokec4 \
+\cb3       ).join(\cf6 \strokec6 '\\n'\cf0 \strokec4 );\cb1 \
+\
+\cb3       \cf2 \strokec2 const\cf0 \strokec4  handleCopy = () => \{\cb1 \
+\cb3         navigator.clipboard.writeText(copyText);\cb1 \
+\cb3         setCopied(\cf2 \strokec2 true\cf0 \strokec4 );\cb1 \
+\cb3         setTimeout(() => setCopied(\cf2 \strokec2 false\cf0 \strokec4 ), \cf8 \strokec8 2000\cf0 \strokec4 );\cb1 \
+\cb3       \};\cb1 \
+\
+\cb3       \cf2 \strokec2 return\cf0 \strokec4  (\cb1 \
+\cb3         <div className=\cf6 \strokec6 "space-y-4"\cf0 \strokec4 >\cb1 \
+\cb3           <div className=\cf6 \strokec6 "bg-amber-50 border border-amber-200 p-3 rounded-lg flex items-start"\cf0 \strokec4 >\cb1 \
+\cb3              <\cf5 \strokec5 ShieldCheck\cf0 \strokec4  className=\cf6 \strokec6 "text-amber-600 mt-0.5 mr-2"\cf0 \strokec4  size=\{\cf8 \strokec8 18\cf0 \strokec4 \}/>\cb1 \
+\cb3              <div className=\cf6 \strokec6 "text-sm text-amber-800"\cf0 \strokec4 >\cb1 \
+\cb3                 <p className=\cf6 \strokec6 "font-bold"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u20445 \u38570 \u36774 \u29702 \u36039 \u35338 \cf0 \strokec4 </p>\cb1 \
+\cb3                 <p>\cf10 \strokec10 \uc0\u35531 \u23559 \u19979 \u21015 \u21517 \u21934 \u35079 \u35069 \u20006 \u25552 \u20379 \u32102 \u20445 \u38570 \u26989 \u21209 \u12290 \u21253 \u21547 \u22995 \u21517 \u12289 \u36523 \u20998 \u35657 \u23383 \u34399 \u33287 \u29983 \u26085 \u12290 \cf0 \strokec4 </p>\cb1 \
+\cb3              </div>\cb1 \
+\cb3           </div>\cb1 \
+\cb3           \cb1 \
+\cb3           <div className=\cf6 \strokec6 "relative"\cf0 \strokec4 >\cb1 \
+\cb3             <div className=\cf6 \strokec6 "absolute top-2 right-2"\cf0 \strokec4 >\cb1 \
+\cb3               <button \cb1 \
+\cb3                 onClick=\{handleCopy\}\cb1 \
+\cb3                 className=\cf6 \strokec6 "flex items-center px-3 py-1 bg-white border border-slate-300 rounded text-xs font-medium hover:bg-slate-50 text-slate-700 shadow-sm"\cf0 \cb1 \strokec4 \
+\cb3               >\cb1 \
+\cb3                 \{copied ? <\cf5 \strokec5 CheckCircle2\cf0 \strokec4  size=\{\cf8 \strokec8 14\cf0 \strokec4 \} className=\cf6 \strokec6 "mr-1 text-green-600"\cf0 \strokec4 /> : <\cf5 \strokec5 Copy\cf0 \strokec4  size=\{\cf8 \strokec8 14\cf0 \strokec4 \} className=\cf6 \strokec6 "mr-1"\cf0 \strokec4 />\}\cb1 \
+\cb3                 \{copied ? \cf6 \strokec6 '\uc0\u24050 \u35079 \u35069 '\cf0 \strokec4  : \cf6 \strokec6 '\uc0\u35079 \u35069 \u20840 \u37096 '\cf0 \strokec4 \}\cb1 \
+\cb3               </button>\cb1 \
+\cb3             </div>\cb1 \
+\cb3             <div className=\cf6 \strokec6 "bg-slate-100 p-4 rounded-lg font-mono text-sm max-h-60 overflow-y-auto whitespace-pre"\cf0 \strokec4 >\cb1 \
+\cb3               <div className=\cf6 \strokec6 "flex border-b border-slate-300 pb-2 mb-2 font-bold text-slate-500"\cf0 \strokec4 >\cb1 \
+\cb3                 <span className=\cf6 \strokec6 "w-24"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u22995 \u21517 \cf0 \strokec4 </span>\cb1 \
+\cb3                 <span className=\cf6 \strokec6 "w-32"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u36523 \u20998 \u35657 \cf0 \strokec4 </span>\cb1 \
+\cb3                 <span>\cf10 \strokec10 \uc0\u29983 \u26085 \cf0 \strokec4 </span>\cb1 \
+\cb3               </div>\cb1 \
+\cb3               \{eventData.customers.map((c, idx) => (\cb1 \
+\cb3                 <div key=\{idx\} className=\cf6 \strokec6 "flex py-1 text-slate-800"\cf0 \strokec4 >\cb1 \
+\cb3                   <span className=\cf6 \strokec6 "w-24 truncate"\cf0 \strokec4 >\{c.name\}</span>\cb1 \
+\cb3                   <span className=\cf6 \strokec6 "w-32"\cf0 \strokec4 >\{c.id\}</span>\cb1 \
+\cb3                   <span>\{c.birthday\}</span>\cb1 \
+\cb3                 </div>\cb1 \
+\cb3               ))\}\cb1 \
+\cb3             </div>\cb1 \
+\cb3           </div>\cb1 \
+\cb3         </div>\cb1 \
+\cb3       );\cb1 \
+\cb3     \}\cb1 \
+\
+\cb3     \cf2 \strokec2 if\cf0 \strokec4  (task.\cf2 \strokec2 type\cf0 \strokec4  === \cf6 \strokec6 'pre_letter'\cf0 \strokec4 ) \{\cb1 \
+\cb3       \cf2 \strokec2 const\cf0 \strokec4  carpoolUsers = eventData.customers.filter(c => c.transport === \cf6 \strokec6 '\uc0\u20849 \u20056 '\cf0 \strokec4 );\cb1 \
+\cb3       \cf2 \strokec2 const\cf0 \strokec4  selfUsers = eventData.customers.filter(c => c.transport !== \cf6 \strokec6 '\uc0\u20849 \u20056 '\cf0 \strokec4 );\cb1 \
+\cb3       \cb1 \
+\cb3       \cf2 \strokec2 const\cf0 \strokec4  getFakeEmail = (name) => \cf6 \strokec6 `user_\cf0 \strokec4 $\{name\}\cf6 \strokec6 @example.com`\cf0 \strokec4 ;\cb1 \
+\
+\cb3       \cf2 \strokec2 return\cf0 \strokec4  (\cb1 \
+\cb3         <div className=\cf6 \strokec6 "space-y-6"\cf0 \strokec4 >\cb1 \
+\cb3            <div className=\cf6 \strokec6 "bg-blue-50 border border-blue-200 p-3 rounded-lg flex items-start"\cf0 \strokec4 >\cb1 \
+\cb3              <\cf5 \strokec5 Mail\cf0 \strokec4  className=\cf6 \strokec6 "text-blue-600 mt-0.5 mr-2"\cf0 \strokec4  size=\{\cf8 \strokec8 18\cf0 \strokec4 \}/>\cb1 \
+\cb3              <div className=\cf6 \strokec6 "text-sm text-blue-800"\cf0 \strokec4 >\cb1 \
+\cb3                 <p className=\cf6 \strokec6 "font-bold"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u34892 \u21069 \u20449 \u23492 \u36865 \cf0 \strokec4 </p>\cb1 \
+\cb3                 <p>\cf10 \strokec10 \uc0\u31995 \u32113 \u24050 \u33258 \u21205 \u23559 \u23458 \u25142 \u20381 \u25818 \u20132 \u36890 \u26041 \u24335 \u20998 \u32068 \u65292 \u35531 \u20998 \u21029 \u23492 \u36865 \u19981 \u21516 \u29256 \u26412 \u30340 \u34892 \u21069 \u36890 \u30693 \u12290 \cf0 \strokec4 </p>\cb1 \
+\cb3              </div>\cb1 \
+\cb3           </div>\cb1 \
+\
+\cb3           <div className=\cf6 \strokec6 "grid grid-cols-2 gap-4"\cf0 \strokec4 >\cb1 \
+\cb3              <div className=\cf6 \strokec6 "border border-slate-200 rounded-lg p-3"\cf0 \strokec4 >\cb1 \
+\cb3                 <h4 className=\cf6 \strokec6 "font-bold text-slate-700 mb-2 flex items-center"\cf0 \strokec4 >\cb1 \
+\cb3                    \cf10 \strokec10 \uc0\u55357 \u56983 \cf0 \strokec4  \cf10 \strokec10 \uc0\u20849 \u20056 \u32068 \cf0 \strokec4  (\{carpoolUsers.length\})\cb1 \
+\cb3                 </h4>\cb1 \
+\cb3                 <div className=\cf6 \strokec6 "bg-slate-50 p-2 rounded text-xs text-slate-500 h-32 overflow-y-auto"\cf0 \strokec4 >\cb1 \
+\cb3                    \{carpoolUsers.map(c => getFakeEmail(c.name)).join(\cf6 \strokec6 '; '\cf0 \strokec4 )\}\cb1 \
+\cb3                 </div>\cb1 \
+\cb3                 <button className=\cf6 \strokec6 "mt-2 text-xs text-blue-600 hover:underline"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u35079 \u35069 \u25152 \u26377 \cf0 \strokec4  \cf5 \strokec5 Email\cf0 \strokec4 </button>\cb1 \
+\cb3              </div>\cb1 \
+\cb3              <div className=\cf6 \strokec6 "border border-slate-200 rounded-lg p-3"\cf0 \strokec4 >\cb1 \
+\cb3                 <h4 className=\cf6 \strokec6 "font-bold text-slate-700 mb-2 flex items-center"\cf0 \strokec4 >\cb1 \
+\cb3                    \cf10 \strokec10 \uc0\u55357 \u57014 \cf0 \strokec4  \cf10 \strokec10 \uc0\u33258 \u34892 \u21069 \u24448 \u32068 \cf0 \strokec4  (\{selfUsers.length\})\cb1 \
+\cb3                 </h4>\cb1 \
+\cb3                 <div className=\cf6 \strokec6 "bg-slate-50 p-2 rounded text-xs text-slate-500 h-32 overflow-y-auto"\cf0 \strokec4 >\cb1 \
+\cb3                    \{selfUsers.map(c => getFakeEmail(c.name)).join(\cf6 \strokec6 '; '\cf0 \strokec4 )\}\cb1 \
+\cb3                 </div>\cb1 \
+\cb3                 <button className=\cf6 \strokec6 "mt-2 text-xs text-blue-600 hover:underline"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u35079 \u35069 \u25152 \u26377 \cf0 \strokec4  \cf5 \strokec5 Email\cf0 \strokec4 </button>\cb1 \
+\cb3              </div>\cb1 \
+\cb3           </div>\cb1 \
+\cb3         </div>\cb1 \
+\cb3       );\cb1 \
+\cb3     \}\cb1 \
+\
+\cb3     \cf2 \strokec2 return\cf0 \strokec4  (\cb1 \
+\cb3       <div className=\cf6 \strokec6 "text-slate-500 text-center py-8"\cf0 \strokec4 >\cb1 \
+\cb3         \cf10 \strokec10 \uc0\u27492 \u20219 \u21209 \u26283 \u28961 \u29305 \u27530 \u22519 \u34892 \u24037 \u20855 \u65292 \u35531 \u20381 \u29031 \u19968 \u33324 \u27969 \u31243 \u34389 \u29702 \u12290 \cf0 \cb1 \strokec4 \
+\cb3       </div>\cb1 \
+\cb3     );\cb1 \
+\cb3   \};\cb1 \
+\
+\cb3   \cf2 \strokec2 return\cf0 \strokec4  (\cb1 \
+\cb3     <div className=\cf6 \strokec6 "fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 animate-in zoom-in-95 duration-200"\cf0 \strokec4 >\cb1 \
+\cb3       <div className=\cf6 \strokec6 "bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]"\cf0 \strokec4 >\cb1 \
+\cb3         <div className=\cf6 \strokec6 "p-6 border-b border-slate-100 flex justify-between items-center"\cf0 \strokec4 >\cb1 \
+\cb3           <div>\cb1 \
+\cb3             <div className=\cf6 \strokec6 "text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded inline-block mb-1"\cf0 \strokec4 >\cb1 \
+\cb3               \{eventData.date\} \cf10 \strokec10 \'95\cf0 \strokec4  \{eventData.eventName\}\cb1 \
+\cb3             </div>\cb1 \
+\cb3             <h3 className=\cf6 \strokec6 "text-xl font-bold text-slate-800"\cf0 \strokec4 >\{task.name\}</h3>\cb1 \
+\cb3           </div>\cb1 \
+\cb3           <button onClick=\{onClose\}><\cf5 \strokec5 X\cf0 \strokec4  size=\{\cf8 \strokec8 24\cf0 \strokec4 \} className=\cf6 \strokec6 "text-slate-400 hover:text-slate-600"\cf0 \strokec4 /></button>\cb1 \
+\cb3         </div>\cb1 \
+\cb3         <div className=\cf6 \strokec6 "p-6 overflow-y-auto"\cf0 \strokec4 >\cb1 \
+\cb3           \{renderContent()\}\cb1 \
+\cb3         </div>\cb1 \
+\cb3       </div>\cb1 \
+\cb3     </div>\cb1 \
+\cb3   );\cb1 \
+\cb3 \};\cb1 \
+\
+\
+\pard\pardeftab720\partightenfactor0
+\cf7 \cb3 \strokec7 // --- \uc0\u20027 \u31243 \u24335  ---\cf0 \cb1 \strokec4 \
+\pard\pardeftab720\partightenfactor0
+\cf2 \cb3 \strokec2 export\cf0 \strokec4  \cf2 \strokec2 default\cf0 \strokec4  \cf2 \strokec2 function\cf0 \strokec4  \cf5 \strokec5 OperationSystem\cf0 \strokec4 () \{\cb1 \
+\pard\pardeftab720\partightenfactor0
+\cf0 \cb3   \cf2 \strokec2 const\cf0 \strokec4  [user, setUser] = useState(\cf2 \strokec2 null\cf0 \strokec4 );\cb1 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  [activeTab, setActiveTab] = useState(\cf6 \strokec6 'tasks'\cf0 \strokec4 ); \cf7 \strokec7 // Default to tasks to show new features\cf0 \cb1 \strokec4 \
+\cb3   \cb1 \
+\cb3   \cf7 \strokec7 // Data States\cf0 \cb1 \strokec4 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  [csvInput, setCsvInput] = useState(\cf6 \strokec6 ''\cf0 \strokec4 ); \cb1 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  [remoteCsvData, setRemoteCsvData] = useState(\cf6 \strokec6 ''\cf0 \strokec4 ); \cb1 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  [projects, setProjects] = useState([]);\cb1 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  [eventConfigs, setEventConfigs] = useState(\{\});\cb1 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  [customTemplates, setCustomTemplates] = useState([]); \cf7 \strokec7 // \uc0\u33258 \u35330 \u27169 \u26495 \cf0 \cb1 \strokec4 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  [loading, setLoading] = useState(\cf2 \strokec2 true\cf0 \strokec4 );\cb1 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  [isSaving, setIsSaving] = useState(\cf2 \strokec2 false\cf0 \strokec4 );\cb1 \
+\cb3   \cb1 \
+\cb3   \cf7 \strokec7 // UI States\cf0 \cb1 \strokec4 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  [editingEvent, setEditingEvent] = useState(\cf2 \strokec2 null\cf0 \strokec4 );\cb1 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  [activeTaskDetail, setActiveTaskDetail] = useState(\cf2 \strokec2 null\cf0 \strokec4 ); \cb1 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  [showCreateEvent, setShowCreateEvent] = useState(\cf2 \strokec2 false\cf0 \strokec4 );\cb1 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  [eventsViewMode, setEventsViewMode] = useState(\cf6 \strokec6 'list'\cf0 \strokec4 ); \cb1 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  [currentDate, setCurrentDate] = useState(\cf2 \strokec2 new\cf0 \strokec4  \cf5 \strokec5 Date\cf0 \strokec4 ()); \cb1 \
+\
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  [parsedData, setParsedData] = useState([]);\cb1 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  [selectedCustomer, setSelectedCustomer] = useState(\cf6 \strokec6 ''\cf0 \strokec4 );\cb1 \
+\
+\cb3   \cf7 \strokec7 // 1. Auth \uc0\u21021 \u22987 \u21270 \cf0 \cb1 \strokec4 \
+\cb3   useEffect(() => \{\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  initAuth = \cf2 \strokec2 async\cf0 \strokec4  () => \{\cb1 \
+\cb3       \cf2 \strokec2 try\cf0 \strokec4  \{\cb1 \
+\cb3         \cf7 \strokec7 // \uc0\u20778 \u20808 \u20351 \u29992  Custom Token (\u22914 \u26524 \u26377 \u30340 \u35441 )\u65292 \u21542 \u21063 \u20351 \u29992 \u21311 \u21517 \u30331 \u20837 \cf0 \cb1 \strokec4 \
+\cb3         \cf2 \strokec2 if\cf0 \strokec4  (\cf2 \strokec2 typeof\cf0 \strokec4  __initial_auth_token !== \cf6 \strokec6 'undefined'\cf0 \strokec4  && __initial_auth_token) \{\cb1 \
+\cb3           \cf2 \strokec2 await\cf0 \strokec4  signInWithCustomToken(auth, __initial_auth_token);\cb1 \
+\cb3         \} \cf2 \strokec2 else\cf0 \strokec4  \{\cb1 \
+\cb3           \cf2 \strokec2 await\cf0 \strokec4  signInAnonymously(auth);\cb1 \
+\cb3         \}\cb1 \
+\cb3       \} \cf2 \strokec2 catch\cf0 \strokec4  (error) \{\cb1 \
+\cb3         console.error(\cf6 \strokec6 "Auth Error:"\cf0 \strokec4 , error);\cb1 \
+\cb3       \}\cb1 \
+\cb3     \};\cb1 \
+\cb3     initAuth();\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  unsubscribe = onAuthStateChanged(auth, (u) => setUser(u));\cb1 \
+\cb3     \cf2 \strokec2 return\cf0 \strokec4  () => unsubscribe();\cb1 \
+\cb3   \}, []);\cb1 \
+\
+\cb3   \cf7 \strokec7 // 2. \uc0\u36039 \u26009 \u30435 \u32893 \cf0 \cb1 \strokec4 \
+\cb3   useEffect(() => \{\cb1 \
+\cb3     \cf2 \strokec2 if\cf0 \strokec4  (!user) \cf2 \strokec2 return\cf0 \strokec4 ;\cb1 \
+\cb3     setLoading(\cf2 \strokec2 true\cf0 \strokec4 );\cb1 \
+\
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  settingsDocRef = doc(db, \cf6 \strokec6 'artifacts'\cf0 \strokec4 , appId, \cf6 \strokec6 'public'\cf0 \strokec4 , \cf6 \strokec6 'data'\cf0 \strokec4 , \cf6 \strokec6 'settings'\cf0 \strokec4 , \cf6 \strokec6 'main'\cf0 \strokec4 );\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  templatesDocRef = doc(db, \cf6 \strokec6 'artifacts'\cf0 \strokec4 , appId, \cf6 \strokec6 'public'\cf0 \strokec4 , \cf6 \strokec6 'data'\cf0 \strokec4 , \cf6 \strokec6 'settings'\cf0 \strokec4 , \cf6 \strokec6 'templates'\cf0 \strokec4 ); \cf7 \strokec7 // \uc0\u27169 \u26495 \u35373 \u23450 \cf0 \cb1 \strokec4 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  projectsColRef = collection(db, \cf6 \strokec6 'artifacts'\cf0 \strokec4 , appId, \cf6 \strokec6 'public'\cf0 \strokec4 , \cf6 \strokec6 'data'\cf0 \strokec4 , \cf6 \strokec6 'projects'\cf0 \strokec4 );\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  eventConfigsColRef = collection(db, \cf6 \strokec6 'artifacts'\cf0 \strokec4 , appId, \cf6 \strokec6 'public'\cf0 \strokec4 , \cf6 \strokec6 'data'\cf0 \strokec4 , \cf6 \strokec6 'event_configs'\cf0 \strokec4 );\cb1 \
+\
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  unsubSettings = onSnapshot(settingsDocRef, (docSnap) => \{\cb1 \
+\cb3       \cf2 \strokec2 if\cf0 \strokec4  (docSnap.exists()) \{\cb1 \
+\cb3         \cf2 \strokec2 const\cf0 \strokec4  data = docSnap.data();\cb1 \
+\cb3         \cf2 \strokec2 const\cf0 \strokec4  loadedData = data.csvData || \cf6 \strokec6 ''\cf0 \strokec4 ;\cb1 \
+\cb3         setRemoteCsvData(loadedData);\cb1 \
+\cb3         \cf2 \strokec2 if\cf0 \strokec4  (!csvInput) setCsvInput(loadedData);\cb1 \
+\cb3       \} \cf2 \strokec2 else\cf0 \strokec4  \{\cb1 \
+\cb3         setDoc(settingsDocRef, \{ csvData: \cf5 \strokec5 INITIAL_CSV_DATA\cf0 \strokec4  \});\cb1 \
+\cb3       \}\cb1 \
+\cb3     \}, (error) => console.error(\cf6 \strokec6 "Firestore Error (Settings):"\cf0 \strokec4 , error));\cb1 \
+\
+\cb3     \cf7 \strokec7 // \uc0\u30435 \u32893 \u27169 \u26495 \cf0 \cb1 \strokec4 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  unsubTemplates = onSnapshot(templatesDocRef, (docSnap) => \{\cb1 \
+\cb3       \cf2 \strokec2 if\cf0 \strokec4  (docSnap.exists()) \{\cb1 \
+\cb3         \cf2 \strokec2 const\cf0 \strokec4  data = docSnap.data();\cb1 \
+\cb3         setCustomTemplates(data.list || []);\cb1 \
+\cb3       \} \cf2 \strokec2 else\cf0 \strokec4  \{\cb1 \
+\cb3         setDoc(templatesDocRef, \{ list: [] \});\cb1 \
+\cb3       \}\cb1 \
+\cb3     \}, (error) => console.error(\cf6 \strokec6 "Firestore Error (Templates):"\cf0 \strokec4 , error));\cb1 \
+\
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  unsubProjects = onSnapshot(projectsColRef, (snapshot) => \{\cb1 \
+\cb3       \cf2 \strokec2 const\cf0 \strokec4  projList = snapshot.docs.map(d => (\{ id: d.id, ...d.data() \}));\cb1 \
+\cb3       \cf2 \strokec2 if\cf0 \strokec4  (projList.length === \cf8 \strokec8 0\cf0 \strokec4  && !snapshot.metadata.fromCache) \{\cb1 \
+\cb3         \cf5 \strokec5 INITIAL_PROJECTS\cf0 \strokec4 .forEach(p => addDoc(projectsColRef, p));\cb1 \
+\cb3       \} \cf2 \strokec2 else\cf0 \strokec4  \{\cb1 \
+\cb3         setProjects(projList);\cb1 \
+\cb3       \}\cb1 \
+\cb3     \}, (error) => console.error(\cf6 \strokec6 "Firestore Error (Projects):"\cf0 \strokec4 , error));\cb1 \
+\
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  unsubEventConfigs = onSnapshot(eventConfigsColRef, (snapshot) => \{\cb1 \
+\cb3       \cf2 \strokec2 const\cf0 \strokec4  configs = \{\};\cb1 \
+\cb3       snapshot.docs.forEach(doc => \{\cb1 \
+\cb3         configs[doc.id] = doc.data();\cb1 \
+\cb3       \});\cb1 \
+\cb3       setEventConfigs(configs);\cb1 \
+\cb3       setLoading(\cf2 \strokec2 false\cf0 \strokec4 );\cb1 \
+\cb3     \}, (error) => console.error(\cf6 \strokec6 "Firestore Error (EventConfigs):"\cf0 \strokec4 , error));\cb1 \
+\
+\cb3     \cf2 \strokec2 return\cf0 \strokec4  () => \{\cb1 \
+\cb3       unsubSettings();\cb1 \
+\cb3       unsubTemplates();\cb1 \
+\cb3       unsubProjects();\cb1 \
+\cb3       unsubEventConfigs();\cb1 \
+\cb3     \};\cb1 \
+\cb3   \}, [user]);\cb1 \
+\
+\cb3   useEffect(() => \{\cb1 \
+\cb3     \cf2 \strokec2 if\cf0 \strokec4  (remoteCsvData) \{\cb1 \
+\cb3       \cf2 \strokec2 try\cf0 \strokec4  \{\cb1 \
+\cb3         \cf2 \strokec2 const\cf0 \strokec4  lines = remoteCsvData.trim().split(\cf6 \strokec6 '\\n'\cf0 \strokec4 );\cb1 \
+\cb3         \cf2 \strokec2 const\cf0 \strokec4  data = lines.slice(\cf8 \strokec8 1\cf0 \strokec4 ).map((line, index) => \{\cb1 \
+\cb3           \cf2 \strokec2 const\cf0 \strokec4  values = line.split(\cf6 \strokec6 ','\cf0 \strokec4 );\cb1 \
+\cb3           \cf2 \strokec2 if\cf0 \strokec4  (values.length < \cf8 \strokec8 5\cf0 \strokec4 ) \cf2 \strokec2 return\cf0 \strokec4  \cf2 \strokec2 null\cf0 \strokec4 ;\cb1 \
+\cb3           \cf2 \strokec2 return\cf0 \strokec4  \{\cb1 \
+\cb3             id: index,\cb1 \
+\cb3             date: values[\cf8 \strokec8 0\cf0 \strokec4 ]?.trim() || \cf6 \strokec6 ''\cf0 \strokec4 ,\cb1 \
+\cb3             eventName: values[\cf8 \strokec8 1\cf0 \strokec4 ]?.trim() || \cf6 \strokec6 '\uc0\u26410 \u21629 \u21517 \u27963 \u21205 '\cf0 \strokec4 ,\cb1 \
+\cb3             instructor: values[\cf8 \strokec8 2\cf0 \strokec4 ]?.trim() || \cf6 \strokec6 '\uc0\u26410 \u23450 '\cf0 \strokec4 ,\cb1 \
+\cb3             customerName: values[\cf8 \strokec8 3\cf0 \strokec4 ]?.trim() || \cf6 \strokec6 '\uc0\u38283 \u25918 \u22577 \u21517 \u20013 '\cf0 \strokec4 ,\cb1 \
+\cb3             price: parseInt(values[\cf8 \strokec8 4\cf0 \strokec4 ]?.trim()) || \cf8 \strokec8 0\cf0 \strokec4 ,\cb1 \
+\cb3             transport: values[\cf8 \strokec8 5\cf0 \strokec4 ]?.trim() || \cf6 \strokec6 '\uc0\u26410 \u23450 '\cf0 \strokec4 ,\cb1 \
+\cb3             idNo: values[\cf8 \strokec8 6\cf0 \strokec4 ]?.trim() || \cf6 \strokec6 ''\cf0 \strokec4 ,\cb1 \
+\cb3             birthday: values[\cf8 \strokec8 7\cf0 \strokec4 ]?.trim() || \cf6 \strokec6 ''\cf0 \cb1 \strokec4 \
+\cb3           \};\cb1 \
+\cb3         \}).filter(item => item !== \cf2 \strokec2 null\cf0 \strokec4 );\cb1 \
+\cb3         setParsedData(data);\cb1 \
+\cb3       \} \cf2 \strokec2 catch\cf0 \strokec4  (e) \{\cb1 \
+\cb3         console.error(\cf6 \strokec6 "\uc0\u35299 \u26512 \u37679 \u35492 "\cf0 \strokec4 , e);\cb1 \
+\cb3       \}\cb1 \
+\cb3     \}\cb1 \
+\cb3   \}, [remoteCsvData]);\cb1 \
+\
+\cb3   \cf7 \strokec7 // --- Actions ---\cf0 \cb1 \strokec4 \
+\
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  handleSaveCSV = \cf2 \strokec2 async\cf0 \strokec4  (newData) => \{\cb1 \
+\cb3     \cf2 \strokec2 if\cf0 \strokec4  (!user) \cf2 \strokec2 return\cf0 \strokec4 ;\cb1 \
+\cb3     setIsSaving(\cf2 \strokec2 true\cf0 \strokec4 );\cb1 \
+\cb3     \cf2 \strokec2 try\cf0 \strokec4  \{\cb1 \
+\cb3       \cf2 \strokec2 const\cf0 \strokec4  settingsDocRef = doc(db, \cf6 \strokec6 'artifacts'\cf0 \strokec4 , appId, \cf6 \strokec6 'public'\cf0 \strokec4 , \cf6 \strokec6 'data'\cf0 \strokec4 , \cf6 \strokec6 'settings'\cf0 \strokec4 , \cf6 \strokec6 'main'\cf0 \strokec4 );\cb1 \
+\cb3       \cf2 \strokec2 await\cf0 \strokec4  setDoc(settingsDocRef, \{ csvData: newData \}, \{ merge: \cf2 \strokec2 true\cf0 \strokec4  \});\cb1 \
+\cb3     \} \cf2 \strokec2 catch\cf0 \strokec4  (e) \{\cb1 \
+\cb3       console.error(\cf6 \strokec6 "\uc0\u20786 \u23384 \u22833 \u25943 "\cf0 \strokec4 , e);\cb1 \
+\cb3     \} \cf2 \strokec2 finally\cf0 \strokec4  \{\cb1 \
+\cb3       setIsSaving(\cf2 \strokec2 false\cf0 \strokec4 );\cb1 \
+\cb3     \}\cb1 \
+\cb3   \};\cb1 \
+\
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  handleCreateEvent = \cf2 \strokec2 async\cf0 \strokec4  (eventData) => \{\cb1 \
+\cb3     \cf7 \strokec7 // \uc0\u25209 \u37327 \u38283 \u22296 \u65306 \u36852 \u22280 \u34389 \u29702 \u27599 \u20491 \u26085 \u26399 \cf0 \cb1 \strokec4 \
+\cb3     \cf2 \strokec2 let\cf0 \strokec4  newRows = \cf6 \strokec6 ''\cf0 \strokec4 ;\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  instructorStr = eventData.instructors.join(\cf6 \strokec6 ' & '\cf0 \strokec4 ); \cf7 \strokec7 // \uc0\u23559 \u35611 \u24107 \u38499 \u21015 \u21512 \u20341 \u28858 \u23383 \u20018 \cf0 \cb1 \strokec4 \
+\cb3     eventData.dates.forEach(date => \{\cb1 \
+\cb3        \cf7 \strokec7 // \uc0\u38283 \u22296 \u26178 \u65292 \u37329 \u38989 \u35373 \u28858  0\cf0 \cb1 \strokec4 \
+\cb3        newRows += \cf6 \strokec6 `\\n\cf0 \strokec4 $\{date\}\cf6 \strokec6 ,\cf0 \strokec4 $\{eventData.eventName\}\cf6 \strokec6 ,\cf0 \strokec4 $\{instructorStr\}\cf6 \strokec6 ,\uc0\u38283 \u25918 \u22577 \u21517 \u20013 ,0,,,`\cf0 \strokec4 ;\cb1 \
+\cb3     \});\cb1 \
+\cb3     \cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  updatedCSV = csvInput + newRows;\cb1 \
+\cb3     setCsvInput(updatedCSV); \cf7 \strokec7 // Update Local\cf0 \cb1 \strokec4 \
+\cb3     \cf2 \strokec2 await\cf0 \strokec4  handleSaveCSV(updatedCSV); \cf7 \strokec7 // Sync Cloud\cf0 \cb1 \strokec4 \
+\cb3     setShowCreateEvent(\cf2 \strokec2 false\cf0 \strokec4 );\cb1 \
+\cb3   \};\cb1 \
+\
+\cb3   \cf7 \strokec7 // \uc0\u26032 \u22686 \u33258 \u35330 \u27169 \u26495 \cf0 \cb1 \strokec4 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  handleAddTemplate = \cf2 \strokec2 async\cf0 \strokec4  (newTemplate) => \{\cb1 \
+\cb3     \cf2 \strokec2 if\cf0 \strokec4  (!user) \cf2 \strokec2 return\cf0 \strokec4 ;\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  templateWithId = \{ ...newTemplate, id: \cf6 \strokec6 `custom_\cf0 \strokec4 $\{\cf5 \strokec5 Date\cf0 \strokec4 .now()\}\cf6 \strokec6 `\cf0 \strokec4  \};\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  newList = [...customTemplates, templateWithId];\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  templatesDocRef = doc(db, \cf6 \strokec6 'artifacts'\cf0 \strokec4 , appId, \cf6 \strokec6 'public'\cf0 \strokec4 , \cf6 \strokec6 'data'\cf0 \strokec4 , \cf6 \strokec6 'settings'\cf0 \strokec4 , \cf6 \strokec6 'templates'\cf0 \strokec4 );\cb1 \
+\cb3     \cf2 \strokec2 await\cf0 \strokec4  setDoc(templatesDocRef, \{ list: newList \}, \{ merge: \cf2 \strokec2 true\cf0 \strokec4  \});\cb1 \
+\cb3   \};\cb1 \
+\
+\cb3   \cf7 \strokec7 // \uc0\u21034 \u38500 \u33258 \u35330 \u27169 \u26495 \cf0 \cb1 \strokec4 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  handleDeleteTemplate = \cf2 \strokec2 async\cf0 \strokec4  (templateId) => \{\cb1 \
+\cb3     \cf2 \strokec2 if\cf0 \strokec4  (!user) \cf2 \strokec2 return\cf0 \strokec4 ;\cb1 \
+\cb3     \cf2 \strokec2 if\cf0 \strokec4  (!confirm(\cf6 \strokec6 "\uc0\u30906 \u23450 \u35201 \u21034 \u38500 \u36889 \u20491 \u27169 \u26495 \u21966 \u65311 "\cf0 \strokec4 )) \cf2 \strokec2 return\cf0 \strokec4 ;\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  newList = customTemplates.filter(t => t.id !== templateId);\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  templatesDocRef = doc(db, \cf6 \strokec6 'artifacts'\cf0 \strokec4 , appId, \cf6 \strokec6 'public'\cf0 \strokec4 , \cf6 \strokec6 'data'\cf0 \strokec4 , \cf6 \strokec6 'settings'\cf0 \strokec4 , \cf6 \strokec6 'templates'\cf0 \strokec4 );\cb1 \
+\cb3     \cf2 \strokec2 await\cf0 \strokec4  setDoc(templatesDocRef, \{ list: newList \}, \{ merge: \cf2 \strokec2 true\cf0 \strokec4  \});\cb1 \
+\cb3   \};\cb1 \
+\
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  handleToggleTaskInCenter = \cf2 \strokec2 async\cf0 \strokec4  (configKey, taskIndex) => \{\cb1 \
+\cb3     \cf2 \strokec2 if\cf0 \strokec4  (!user) \cf2 \strokec2 return\cf0 \strokec4 ;\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  currentConfig = eventConfigs[configKey] || \{\};\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  tasks = currentConfig.tasks || \cf5 \strokec5 JSON\cf0 \strokec4 .parse(\cf5 \strokec5 JSON\cf0 \strokec4 .stringify(\cf5 \strokec5 DEFAULT_TASKS_TEMPLATE\cf0 \strokec4 ));\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  newTasks = [...tasks];\cb1 \
+\cb3     newTasks[taskIndex].completed = !newTasks[taskIndex].completed;\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  configDocRef = doc(db, \cf6 \strokec6 'artifacts'\cf0 \strokec4 , appId, \cf6 \strokec6 'public'\cf0 \strokec4 , \cf6 \strokec6 'data'\cf0 \strokec4 , \cf6 \strokec6 'event_configs'\cf0 \strokec4 , configKey);\cb1 \
+\cb3     \cf2 \strokec2 await\cf0 \strokec4  setDoc(configDocRef, \{ ...currentConfig, tasks: newTasks \}, \{ merge: \cf2 \strokec2 true\cf0 \strokec4  \});\cb1 \
+\cb3   \};\cb1 \
+\
+\cb3   \cf7 \strokec7 // --- \uc0\u25976 \u25818 \u32858 \u21512  ---\cf0 \cb1 \strokec4 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  stats = useMemo(() => \{\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  totalRevenue = parsedData.reduce((acc, curr) => acc + curr.price, \cf8 \strokec8 0\cf0 \strokec4 );\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  uniqueEvents = \cf2 \strokec2 new\cf0 \strokec4  \cf5 \strokec5 Set\cf0 \strokec4 (parsedData.map(d => d.date + d.eventName)).size;\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  totalPax = parsedData.length;\cb1 \
+\cb3     \cf7 \strokec7 // \uc0\u35611 \u24107 \u32113 \u35336 \u38656 \u25286 \u20998 \u22810 \u20491 \u35611 \u24107 \u30340 \u24773 \u27841 \cf0 \cb1 \strokec4 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  instructorCounts = \{\};\cb1 \
+\cb3     parsedData.forEach(curr => \{\cb1 \
+\cb3         \cf2 \strokec2 if\cf0 \strokec4 (curr.instructor)\{\cb1 \
+\cb3             \cf2 \strokec2 const\cf0 \strokec4  instructors = curr.instructor.split(\cf9 \strokec9 /[&,]/\cf0 \strokec4 ).map(s => s.trim());\cb1 \
+\cb3             instructors.forEach(ins => \{\cb1 \
+\cb3                 instructorCounts[ins] = (instructorCounts[ins] || \cf8 \strokec8 0\cf0 \strokec4 ) + \cf8 \strokec8 1\cf0 \strokec4 ;\cb1 \
+\cb3             \});\cb1 \
+\cb3         \}\cb1 \
+\cb3     \});\cb1 \
+\
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  eventsGrouped = parsedData.reduce((acc, curr) => \{\cb1 \
+\cb3       \cf2 \strokec2 const\cf0 \strokec4  rawKey = \cf6 \strokec6 `\cf0 \strokec4 $\{curr.date\}\cf6 \strokec6 _\cf0 \strokec4 $\{curr.eventName\}\cf6 \strokec6 _\cf0 \strokec4 $\{curr.instructor\}\cf6 \strokec6 `\cf0 \strokec4 ;\cb1 \
+\cb3       \cf2 \strokec2 const\cf0 \strokec4  configKey = rawKey.replace(\cf9 \strokec9 /[\\/\\\\#\\?]/\cf2 \strokec2 g\cf0 \strokec4 , \cf6 \strokec6 '-'\cf0 \strokec4 ); \cb1 \
+\cb3       \cf2 \strokec2 if\cf0 \strokec4  (!acc[configKey]) \{\cb1 \
+\cb3         acc[configKey] = \{ \cb1 \
+\cb3           ...curr, \cb1 \
+\cb3           count: \cf8 \strokec8 0\cf0 \strokec4 , \cb1 \
+\cb3           customers: [], \cb1 \
+\cb3           configKey \cb1 \
+\cb3         \};\cb1 \
+\cb3       \}\cb1 \
+\cb3       \cf2 \strokec2 if\cf0 \strokec4  (curr.customerName !== \cf6 \strokec6 '\uc0\u38283 \u25918 \u22577 \u21517 \u20013 '\cf0 \strokec4 ) \{\cb1 \
+\cb3         acc[configKey].count += \cf8 \strokec8 1\cf0 \strokec4 ;\cb1 \
+\cb3         acc[configKey].customers.push(\{\cb1 \
+\cb3           name: curr.customerName,\cb1 \
+\cb3           transport: curr.transport,\cb1 \
+\cb3           id: curr.idNo,\cb1 \
+\cb3           birthday: curr.birthday\cb1 \
+\cb3         \});\cb1 \
+\cb3       \}\cb1 \
+\cb3       \cf2 \strokec2 return\cf0 \strokec4  acc;\cb1 \
+\cb3     \}, \{\});\cb1 \
+\
+\cb3     \cf2 \strokec2 return\cf0 \strokec4  \{ totalRevenue, uniqueEvents, totalPax, instructorCounts, eventsGrouped \};\cb1 \
+\cb3   \}, [parsedData]);\cb1 \
+\
+\cb3   \cf7 \strokec7 // \uc0\u21462 \u24471 \u25152 \u26377 \u20986 \u29694 \u36942 \u30340 \u21807 \u19968 \u35611 \u24107 \u21517 \u21934 \cf0 \cb1 \strokec4 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  availableInstructors = useMemo(() => \{\cb1 \
+\cb3       \cf2 \strokec2 return\cf0 \strokec4  \cf5 \strokec5 Object\cf0 \strokec4 .keys(stats.instructorCounts).sort();\cb1 \
+\cb3   \}, [stats.instructorCounts]);\cb1 \
+\
+\cb3   \cf7 \strokec7 // --- \uc0\u20219 \u21209 \u20013 \u24515 \u25976 \u25818  (Pending Tasks) ---\cf0 \cb1 \strokec4 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  pendingTasksData = useMemo(() => \{\cb1 \
+\cb3     \cf2 \strokec2 const\cf0 \strokec4  list = [];\cb1 \
+\cb3     \cf5 \strokec5 Object\cf0 \strokec4 .values(stats.eventsGrouped).forEach(evt => \{\cb1 \
+\cb3       \cf2 \strokec2 const\cf0 \strokec4  config = eventConfigs[evt.configKey] || \{\};\cb1 \
+\cb3       \cf2 \strokec2 const\cf0 \strokec4  tasks = config.tasks || \cf5 \strokec5 DEFAULT_TASKS_TEMPLATE\cf0 \strokec4 ; \cb1 \
+\cb3       tasks.forEach((task, idx) => \{\cb1 \
+\cb3         \cf2 \strokec2 if\cf0 \strokec4  (!task.completed) \{\cb1 \
+\cb3           \cf2 \strokec2 const\cf0 \strokec4  style = getTaskStatusStyle(task.\cf2 \strokec2 type\cf0 \strokec4 , evt.date);\cb1 \
+\cb3           list.push(\{\cb1 \
+\cb3             ...task,\cb1 \
+\cb3             taskIndex: idx,\cb1 \
+\cb3             eventDate: evt.date,\cb1 \
+\cb3             eventName: evt.eventName,\cb1 \
+\cb3             configKey: evt.configKey,\cb1 \
+\cb3             style: style,\cb1 \
+\cb3             fullEventData: evt \cb1 \
+\cb3           \});\cb1 \
+\cb3         \}\cb1 \
+\cb3       \});\cb1 \
+\cb3     \});\cb1 \
+\cb3     \cf2 \strokec2 return\cf0 \strokec4  list.sort((a, b) => \cf2 \strokec2 new\cf0 \strokec4  \cf5 \strokec5 Date\cf0 \strokec4 (a.eventDate) - \cf2 \strokec2 new\cf0 \strokec4  \cf5 \strokec5 Date\cf0 \strokec4 (b.eventDate));\cb1 \
+\cb3   \}, [stats.eventsGrouped, eventConfigs]);\cb1 \
+\
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  uniqueCustomers = useMemo(() => [...\cf2 \strokec2 new\cf0 \strokec4  \cf5 \strokec5 Set\cf0 \strokec4 (parsedData.map(d => d.customerName))].filter(n => n !== \cf6 \strokec6 '\uc0\u38283 \u25918 \u22577 \u21517 \u20013 '\cf0 \strokec4 ), [parsedData]);\cb1 \
+\cb3   \cf2 \strokec2 const\cf0 \strokec4  customerHistory = useMemo(() => \{\cb1 \
+\cb3     \cf2 \strokec2 if\cf0 \strokec4  (!selectedCustomer) \cf2 \strokec2 return\cf0 \strokec4  [];\cb1 \
+\cb3     \cf2 \strokec2 return\cf0 \strokec4  parsedData.filter(d => d.customerName === selectedCustomer);\cb1 \
+\cb3   \}, [parsedData, selectedCustomer]);\cb1 \
+\
+\
+\cb3   \cf2 \strokec2 if\cf0 \strokec4  (loading && !parsedData.length) \{\cb1 \
+\cb3     \cf2 \strokec2 return\cf0 \strokec4  (\cb1 \
+\cb3       <div className=\cf6 \strokec6 "min-h-screen flex items-center justify-center bg-slate-50 flex-col space-y-4"\cf0 \strokec4 >\cb1 \
+\cb3         <\cf5 \strokec5 Loader2\cf0 \strokec4  className=\cf6 \strokec6 "animate-spin text-blue-600"\cf0 \strokec4  size=\{\cf8 \strokec8 48\cf0 \strokec4 \} />\cb1 \
+\cb3         <p className=\cf6 \strokec6 "text-slate-500 font-medium"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u31995 \u32113 \u21516 \u27493 \u20013 \cf0 \strokec4 ...</p>\cb1 \
+\cb3       </div>\cb1 \
+\cb3     );\cb1 \
+\cb3   \}\cb1 \
+\
+\cb3   \cf2 \strokec2 return\cf0 \strokec4  (\cb1 \
+\cb3     <div className=\cf6 \strokec6 "min-h-screen bg-slate-50 font-sans text-slate-800 flex"\cf0 \strokec4 >\cb1 \
+\cb3       \{\cf7 \strokec7 /* Sidebar (\uc0\u19981 \u35722 ) */\cf0 \strokec4 \}\cb1 \
+\cb3       <aside className=\cf6 \strokec6 "w-64 bg-white border-r border-slate-200 p-4 flex flex-col hidden md:flex"\cf0 \strokec4 >\cb1 \
+\cb3         <div className=\cf6 \strokec6 "mb-8 px-4 flex items-center space-x-2"\cf0 \strokec4 >\cb1 \
+\cb3           <div className=\cf6 \strokec6 "w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-xl"\cf0 \strokec4 >\cf5 \strokec5 S\cf0 \strokec4 </div>\cb1 \
+\cb3           <h1 className=\cf6 \strokec6 "text-xl font-bold text-slate-800"\cf0 \strokec4 >\cf5 \strokec5 SuperOps\cf0 \strokec4  <span className=\cf6 \strokec6 "text-xs font-normal text-green-600 bg-green-100 px-1 rounded ml-1"\cf0 \strokec4 >\cf5 \strokec5 Cloud\cf0 \strokec4 </span></h1>\cb1 \
+\cb3         </div>\cb1 \
+\cb3         <nav className=\cf6 \strokec6 "space-y-2 flex-1"\cf0 \strokec4 >\cb1 \
+\cb3           <\cf5 \strokec5 NavItem\cf0 \strokec4  id=\cf6 \strokec6 "dashboard"\cf0 \strokec4  icon=\{\cf5 \strokec5 TrendingUp\cf0 \strokec4 \} label=\cf6 \strokec6 "\uc0\u29151 \u36939 \u20736 \u34920 \u26495 "\cf0 \strokec4  activeTab=\{activeTab\} setActiveTab=\{setActiveTab\} />\cb1 \
+\cb3           <\cf5 \strokec5 NavItem\cf0 \strokec4  id=\cf6 \strokec6 "events"\cf0 \strokec4  icon=\{\cf5 \strokec5 CalendarIcon\cf0 \strokec4 \} label=\cf6 \strokec6 "\uc0\u27963 \u21205 \u22580 \u27425 \u34920 "\cf0 \strokec4  activeTab=\{activeTab\} setActiveTab=\{setActiveTab\} />\cb1 \
+\cb3           <\cf5 \strokec5 NavItem\cf0 \strokec4  id=\cf6 \strokec6 "tasks"\cf0 \strokec4  icon=\{\cf5 \strokec5 CheckSquare\cf0 \strokec4 \} label=\cf6 \strokec6 "\uc0\u20219 \u21209 \u25351 \u25582 \u20013 \u24515 "\cf0 \strokec4  activeTab=\{activeTab\} setActiveTab=\{setActiveTab\} />\cb1 \
+\cb3           <\cf5 \strokec5 NavItem\cf0 \strokec4  id=\cf6 \strokec6 "crm"\cf0 \strokec4  icon=\{\cf5 \strokec5 Users\cf0 \strokec4 \} label=\cf6 \strokec6 "\uc0\u23458 \u25142  CRM"\cf0 \strokec4  activeTab=\{activeTab\} setActiveTab=\{setActiveTab\} />\cb1 \
+\cb3           <\cf5 \strokec5 NavItem\cf0 \strokec4  id=\cf6 \strokec6 "projects"\cf0 \strokec4  icon=\{\cf5 \strokec5 Briefcase\cf0 \strokec4 \} label=\cf6 \strokec6 "\uc0\u23560 \u26696 \u36914 \u24230 "\cf0 \strokec4  activeTab=\{activeTab\} setActiveTab=\{setActiveTab\} />\cb1 \
+\cb3         </nav>\cb1 \
+\cb3         <div className=\cf6 \strokec6 "pt-4 border-t border-slate-200"\cf0 \strokec4 >\cb1 \
+\cb3           <\cf5 \strokec5 NavItem\cf0 \strokec4  id=\cf6 \strokec6 "import"\cf0 \strokec4  icon=\{\cf5 \strokec5 FileText\cf0 \strokec4 \} label=\cf6 \strokec6 "\uc0\u21295 \u20837 /\u26356 \u26032 \u36039 \u26009 "\cf0 \strokec4  activeTab=\{activeTab\} setActiveTab=\{setActiveTab\} />\cb1 \
+\cb3         </div>\cb1 \
+\cb3       </aside>\cb1 \
+\
+\cb3       \{\cf7 \strokec7 /* Main Content */\cf0 \strokec4 \}\cb1 \
+\cb3       <main className=\cf6 \strokec6 "flex-1 p-4 md:p-8 overflow-y-auto mt-12 md:mt-0 relative"\cf0 \strokec4 >\cb1 \
+\cb3         <div className=\cf6 \strokec6 "md:hidden fixed top-0 left-0 w-full bg-white z-10 border-b p-4 flex justify-between"\cf0 \strokec4 >\cb1 \
+\cb3            <h1 className=\cf6 \strokec6 "font-bold flex items-center"\cf0 \strokec4 >\cf5 \strokec5 SuperOps\cf0 \strokec4 </h1>\cb1 \
+\cb3         </div>\cb1 \
+\cb3         \cb1 \
+\cb3         \{\cf7 \strokec7 /* --- 1. Dashboard --- */\cf0 \strokec4 \}\cb1 \
+\cb3         \{activeTab === \cf6 \strokec6 'dashboard'\cf0 \strokec4  && (\cb1 \
+\cb3           <div className=\cf6 \strokec6 "space-y-6"\cf0 \strokec4 >\cb1 \
+\cb3             <header className=\cf6 \strokec6 "mb-6"\cf0 \strokec4 ><h2 className=\cf6 \strokec6 "text-2xl font-bold text-slate-800"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u29151 \u36939 \u32317 \u35261 \cf0 \strokec4 </h2></header>\cb1 \
+\cb3             <div className=\cf6 \strokec6 "grid grid-cols-1 md:grid-cols-3 gap-6"\cf0 \strokec4 >\cb1 \
+\cb3               <div className=\cf6 \strokec6 "bg-white p-6 rounded-xl shadow-sm border border-slate-100"\cf0 \strokec4 >\cb1 \
+\cb3                 <p className=\cf6 \strokec6 "text-sm font-medium text-slate-500"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u32317 \u29151 \u25910 \u38928 \u20272 \cf0 \strokec4 </p>\cb1 \
+\cb3                 <h3 className=\cf6 \strokec6 "text-3xl font-bold text-slate-800 mt-2"\cf0 \strokec4 >$\{stats.totalRevenue.toLocaleString()\}</h3>\cb1 \
+\cb3               </div>\cb1 \
+\cb3               <div className=\cf6 \strokec6 "bg-white p-6 rounded-xl shadow-sm border border-slate-100"\cf0 \strokec4 >\cb1 \
+\cb3                 <p className=\cf6 \strokec6 "text-sm font-medium text-slate-500"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u32317 \u22577 \u21517 \u20154 \u25976 \cf0 \strokec4 </p>\cb1 \
+\cb3                 <h3 className=\cf6 \strokec6 "text-3xl font-bold text-slate-800 mt-2"\cf0 \strokec4 >\{stats.totalPax\} \cf10 \strokec10 \uc0\u20154 \u27425 \cf0 \strokec4 </h3>\cb1 \
+\cb3               </div>\cb1 \
+\cb3               <div className=\cf6 \strokec6 "bg-white p-6 rounded-xl shadow-sm border border-slate-100"\cf0 \strokec4 >\cb1 \
+\cb3                 <p className=\cf6 \strokec6 "text-sm font-medium text-slate-500"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u26412 \u26376 \u38283 \u22296 \u25976 \cf0 \strokec4 </p>\cb1 \
+\cb3                 <h3 className=\cf6 \strokec6 "text-3xl font-bold text-slate-800 mt-2"\cf0 \strokec4 >\{stats.uniqueEvents\} \cf10 \strokec10 \uc0\u22580 \cf0 \strokec4 </h3>\cb1 \
+\cb3               </div>\cb1 \
+\cb3             </div>\cb1 \
+\cb3           </div>\cb1 \
+\cb3         )\}\cb1 \
+\
+\cb3         \{\cf7 \strokec7 /* --- 2. Events (Enhanced with Create Button) --- */\cf0 \strokec4 \}\cb1 \
+\cb3         \{activeTab === \cf6 \strokec6 'events'\cf0 \strokec4  && (\cb1 \
+\cb3           <div className=\cf6 \strokec6 "space-y-6"\cf0 \strokec4 >\cb1 \
+\cb3             <header className=\cf6 \strokec6 "flex flex-col md:flex-row md:items-center justify-between gap-4"\cf0 \strokec4 >\cb1 \
+\cb3                <div>\cb1 \
+\cb3                  <h2 className=\cf6 \strokec6 "text-2xl font-bold text-slate-800"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u27963 \u21205 \u22580 \u27425 \u21015 \u34920 \cf0 \strokec4 </h2>\cb1 \
+\cb3                  <p className=\cf6 \strokec6 "text-slate-500"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u27298 \u35222 \u25152 \u26377 \u38283 \u22296 \u36039 \u35338 \u33287 \u22577 \u21517 \u35443 \u24773 \cf0 \strokec4 </p>\cb1 \
+\cb3                </div>\cb1 \
+\cb3                <div className=\cf6 \strokec6 "flex space-x-2"\cf0 \strokec4 >\cb1 \
+\cb3                  <button \cb1 \
+\cb3                    onClick=\{() => setShowCreateEvent(\cf2 \strokec2 true\cf0 \strokec4 )\}\cb1 \
+\cb3                    className=\cf6 \strokec6 "px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium shadow-sm hover:bg-blue-700 flex items-center transition"\cf0 \cb1 \strokec4 \
+\cb3                  >\cb1 \
+\cb3                    <\cf5 \strokec5 PlusCircle\cf0 \strokec4  size=\{\cf8 \strokec8 16\cf0 \strokec4 \} className=\cf6 \strokec6 "mr-2"\cf0 \strokec4  />\cb1 \
+\cb3                    \cf10 \strokec10 \uc0\u24555 \u36895 \u38283 \u22296 \cf0 \cb1 \strokec4 \
+\cb3                  </button>\cb1 \
+\cb3                  <div className=\cf6 \strokec6 "flex bg-slate-100 p-1 rounded-lg"\cf0 \strokec4 >\cb1 \
+\cb3                    <button \cb1 \
+\cb3                      onClick=\{() => setEventsViewMode(\cf6 \strokec6 'list'\cf0 \strokec4 )\}\cb1 \
+\cb3                      className=\{\cf6 \strokec6 `px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center \cf0 \strokec4 $\{eventsViewMode === \cf6 \strokec6 'list'\cf0 \strokec4  ? \cf6 \strokec6 'bg-white text-slate-800 shadow-sm'\cf0 \strokec4  : \cf6 \strokec6 'text-slate-500 hover:text-slate-700'\cf0 \strokec4 \}\cf6 \strokec6 `\cf0 \strokec4 \}\cb1 \
+\cb3                    >\cb1 \
+\cb3                      <\cf5 \strokec5 List\cf0 \strokec4  size=\{\cf8 \strokec8 16\cf0 \strokec4 \} className=\cf6 \strokec6 "mr-2"\cf0 \strokec4  />\cb1 \
+\cb3                      \cf10 \strokec10 \uc0\u21015 \u34920 \cf0 \cb1 \strokec4 \
+\cb3                    </button>\cb1 \
+\cb3                    <button \cb1 \
+\cb3                      onClick=\{() => setEventsViewMode(\cf6 \strokec6 'calendar'\cf0 \strokec4 )\}\cb1 \
+\cb3                      className=\{\cf6 \strokec6 `px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center \cf0 \strokec4 $\{eventsViewMode === \cf6 \strokec6 'calendar'\cf0 \strokec4  ? \cf6 \strokec6 'bg-white text-slate-800 shadow-sm'\cf0 \strokec4  : \cf6 \strokec6 'text-slate-500 hover:text-slate-700'\cf0 \strokec4 \}\cf6 \strokec6 `\cf0 \strokec4 \}\cb1 \
+\cb3                    >\cb1 \
+\cb3                      <\cf5 \strokec5 CalendarIcon\cf0 \strokec4  size=\{\cf8 \strokec8 16\cf0 \strokec4 \} className=\cf6 \strokec6 "mr-2"\cf0 \strokec4  />\cb1 \
+\cb3                      \cf10 \strokec10 \uc0\u26376 \u26310 \cf0 \cb1 \strokec4 \
+\cb3                    </button>\cb1 \
+\cb3                  </div>\cb1 \
+\cb3                </div>\cb1 \
+\cb3             </header>\cb1 \
+\
+\cb3             \{\cf7 \strokec7 /* List View */\cf0 \strokec4 \}\cb1 \
+\cb3             \{eventsViewMode === \cf6 \strokec6 'list'\cf0 \strokec4  && (\cb1 \
+\cb3               <div className=\cf6 \strokec6 "bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden"\cf0 \strokec4 >\cb1 \
+\cb3                 <table className=\cf6 \strokec6 "w-full text-left"\cf0 \strokec4 >\cb1 \
+\cb3                   <thead className=\cf6 \strokec6 "bg-slate-50 border-b border-slate-200"\cf0 \strokec4 >\cb1 \
+\cb3                     <tr>\cb1 \
+\cb3                       <th className=\cf6 \strokec6 "px-6 py-4 text-sm font-semibold text-slate-600"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u26085 \u26399 \cf0 \strokec4 </th>\cb1 \
+\cb3                       <th className=\cf6 \strokec6 "px-6 py-4 text-sm font-semibold text-slate-600"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u27963 \u21205 \u21517 \u31281 \cf0 \strokec4 </th>\cb1 \
+\cb3                       <th className=\cf6 \strokec6 "px-6 py-4 text-sm font-semibold text-slate-600"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u22577 \u21517 \u29376 \u27841 \cf0 \strokec4 </th>\cb1 \
+\cb3                       <th className=\cf6 \strokec6 "px-6 py-4 text-sm font-semibold text-slate-600"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u25805 \u20316 \cf0 \strokec4 </th>\cb1 \
+\cb3                     </tr>\cb1 \
+\cb3                   </thead>\cb1 \
+\cb3                   <tbody className=\cf6 \strokec6 "divide-y divide-slate-100"\cf0 \strokec4 >\cb1 \
+\cb3                     \{\cf5 \strokec5 Object\cf0 \strokec4 .values(stats.eventsGrouped).map((evt, idx) => (\cb1 \
+\cb3                       <tr key=\{idx\} className=\cf6 \strokec6 "hover:bg-slate-50 transition-colors group"\cf0 \strokec4 >\cb1 \
+\cb3                         <td className=\cf6 \strokec6 "px-6 py-4 text-sm text-slate-600"\cf0 \strokec4 >\{evt.date\}</td>\cb1 \
+\cb3                         <td className=\cf6 \strokec6 "px-6 py-4"\cf0 \strokec4 >\cb1 \
+\cb3                           <span className=\cf6 \strokec6 "font-medium text-slate-800"\cf0 \strokec4 >\{evt.eventName\}</span>\cb1 \
+\cb3                           <div className=\cf6 \strokec6 "text-xs text-slate-400"\cf0 \strokec4 >\{evt.instructor\}</div>\cb1 \
+\cb3                         </td>\cb1 \
+\cb3                         <td className=\cf6 \strokec6 "px-6 py-4"\cf0 \strokec4 >\cb1 \
+\cb3                           <span className=\cf6 \strokec6 "font-bold text-slate-800"\cf0 \strokec4 >\{evt.count\}</span>\cb1 \
+\cb3                           <span className=\cf6 \strokec6 "text-xs text-slate-400"\cf0 \strokec4 > \cf10 \strokec10 \uc0\u20154 \cf0 \strokec4 </span>\cb1 \
+\cb3                         </td>\cb1 \
+\cb3                         <td className=\cf6 \strokec6 "px-6 py-4"\cf0 \strokec4 >\cb1 \
+\cb3                             <button className=\cf6 \strokec6 "text-blue-600 font-medium text-sm flex items-center hover:bg-blue-50 px-3 py-1.5 rounded"\cf0 \strokec4 >\cb1 \
+\cb3                                 <\cf5 \strokec5 Settings\cf0 \strokec4  size=\{\cf8 \strokec8 14\cf0 \strokec4 \} className=\cf6 \strokec6 "mr-1"\cf0 \strokec4 /> \cf10 \strokec10 \uc0\u31649 \u29702 \cf0 \cb1 \strokec4 \
+\cb3                             </button>\cb1 \
+\cb3                         </td>\cb1 \
+\cb3                       </tr>\cb1 \
+\cb3                     ))\}\cb1 \
+\cb3                   </tbody>\cb1 \
+\cb3                 </table>\cb1 \
+\cb3               </div>\cb1 \
+\cb3             )\}\cb1 \
+\cb3             \cb1 \
+\cb3             \{\cf7 \strokec7 /* Calendar View (Placeholder) */\cf0 \strokec4 \}\cb1 \
+\cb3             \{eventsViewMode === \cf6 \strokec6 'calendar'\cf0 \strokec4  && (\cb1 \
+\cb3               <div className=\cf6 \strokec6 "bg-white p-8 text-center text-slate-500 border border-slate-200 rounded-xl"\cf0 \strokec4 >\cb1 \
+\cb3                  (\cf10 \strokec10 \uc0\u26376 \u26310 \u35222 \u22294 \u20195 \u30908 \u20445 \u25345 \u19981 \u35722 \u65292 \u21487 \u20999 \u25563 \u33267 \u21015 \u34920 \u26597 \u30475 \u26032 \u27963 \u21205 \cf0 \strokec4 )\cb1 \
+\cb3               </div>\cb1 \
+\cb3             )\}\cb1 \
+\cb3           </div>\cb1 \
+\cb3         )\}\cb1 \
+\
+\cb3         \{\cf7 \strokec7 /* --- 3. Mission Control (Enhanced) --- */\cf0 \strokec4 \}\cb1 \
+\cb3         \{activeTab === \cf6 \strokec6 'tasks'\cf0 \strokec4  && (\cb1 \
+\cb3           <div className=\cf6 \strokec6 "h-full flex flex-col"\cf0 \strokec4 >\cb1 \
+\cb3             <header className=\cf6 \strokec6 "mb-6 flex justify-between items-center"\cf0 \strokec4 >\cb1 \
+\cb3                <div>\cb1 \
+\cb3                  <h2 className=\cf6 \strokec6 "text-2xl font-bold text-slate-800"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u20219 \u21209 \u25351 \u25582 \u20013 \u24515 \cf0 \strokec4 </h2>\cb1 \
+\cb3                  <p className=\cf6 \strokec6 "text-slate-500"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u26234 \u24935 \u36861 \u36452 \u31995 \u32113 \u65292 \u26681 \u25818 \u27963 \u21205 \u26085 \u26399 \u33258 \u21205 \u35336 \u31639 \u32202 \u24613 \u31243 \u24230 \cf0 \strokec4 </p>\cb1 \
+\cb3                </div>\cb1 \
+\cb3                <div className=\cf6 \strokec6 "text-sm font-medium bg-white px-3 py-1 rounded-full border border-slate-200 text-slate-500"\cf0 \strokec4 >\cb1 \
+\cb3                   \cf10 \strokec10 \uc0\u24453 \u34389 \u29702 \cf0 \strokec4 : <span className=\cf6 \strokec6 "text-blue-600 font-bold"\cf0 \strokec4 >\{pendingTasksData.length\}</span>\cb1 \
+\cb3                </div>\cb1 \
+\cb3             </header>\cb1 \
+\
+\cb3             \{pendingTasksData.length === \cf8 \strokec8 0\cf0 \strokec4  ? (\cb1 \
+\cb3               <div className=\cf6 \strokec6 "flex-1 flex flex-col items-center justify-center text-center animate-in zoom-in duration-500"\cf0 \strokec4 >\cb1 \
+\cb3                 <div className=\cf6 \strokec6 "w-24 h-24 bg-yellow-100 text-yellow-500 rounded-full flex items-center justify-center mb-6 shadow-lg animate-bounce"\cf0 \strokec4 >\cb1 \
+\cb3                   <\cf5 \strokec5 PartyPopper\cf0 \strokec4  size=\{\cf8 \strokec8 48\cf0 \strokec4 \} />\cb1 \
+\cb3                 </div>\cb1 \
+\cb3                 <h3 className=\cf6 \strokec6 "text-3xl font-bold text-slate-800 mb-2"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u20219 \u21209 \u28165 \u31354 \u65281 \u22823 \u21513 \u22823 \u21033 \u65281 \cf0 \strokec4 </h3>\cb1 \
+\cb3               </div>\cb1 \
+\cb3             ) : (\cb1 \
+\cb3               <div className=\cf6 \strokec6 "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-min"\cf0 \strokec4 >\cb1 \
+\cb3                  \{pendingTasksData.map((task, idx) => (\cb1 \
+\cb3                    <div \cb1 \
+\cb3                      key=\{\cf6 \strokec6 `\cf0 \strokec4 $\{task.configKey\}\cf6 \strokec6 -\cf0 \strokec4 $\{task.taskIndex\}\cf6 \strokec6 `\cf0 \strokec4 \} \cb1 \
+\cb3                      onClick=\{() => setActiveTaskDetail(task)\} \cf7 \strokec7 // \uc0\u40670 \u25802 \u38283 \u21855 \u35443 \u24773 \cf0 \cb1 \strokec4 \
+\cb3                      className=\{\cf6 \strokec6 `bg-white p-4 rounded-xl border shadow-sm hover:shadow-md transition-all cursor-pointer relative group \cf0 \strokec4 $\{task.style.bg\}\cf6 \strokec6  \cf0 \strokec4 $\{task.style.border\}\cf6 \strokec6 `\cf0 \strokec4 \}\cb1 \
+\cb3                    >\cb1 \
+\cb3                      \{\cf7 \strokec7 /* \uc0\u29376 \u24907 \u27161 \u31844  */\cf0 \strokec4 \}\cb1 \
+\cb3                      \{task.style.label && (\cb1 \
+\cb3                        <div className=\{\cf6 \strokec6 `absolute top-2 right-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/80 backdrop-blur border \cf0 \strokec4 $\{task.style.color\}\cf6 \strokec6  border-current`\cf0 \strokec4 \}>\cb1 \
+\cb3                          \{task.style.label\}\cb1 \
+\cb3                        </div>\cb1 \
+\cb3                      )\}\cb1 \
+\
+\cb3                      <div className=\cf6 \strokec6 "flex justify-between items-start mb-3"\cf0 \strokec4 >\cb1 \
+\cb3                        <div className=\cf6 \strokec6 "bg-white/60 text-slate-600 text-xs px-2 py-1 rounded font-mono border border-slate-200/50"\cf0 \strokec4 >\cb1 \
+\cb3                          \{task.eventDate\}\cb1 \
+\cb3                        </div>\cb1 \
+\cb3                      </div>\cb1 \
+\cb3                      \cb1 \
+\cb3                      <div className=\cf6 \strokec6 "mb-1 text-xs text-slate-500 font-medium"\cf0 \strokec4 >\{task.eventName\}</div>\cb1 \
+\cb3                      <h4 className=\{\cf6 \strokec6 `font-bold text-lg mb-4 \cf0 \strokec4 $\{task.style.color\}\cf6 \strokec6 `\cf0 \strokec4 \}>\{task.name\}</h4>\cb1 \
+\cb3                      \cb1 \
+\cb3                      <div className=\cf6 \strokec6 "flex space-x-2"\cf0 \strokec4 >\cb1 \
+\cb3                        <button \cb1 \
+\cb3                          onClick=\{(e) => \{ e.stopPropagation(); handleToggleTaskInCenter(task.configKey, task.taskIndex); \}\}\cb1 \
+\cb3                          className=\cf6 \strokec6 "flex-1 py-2 rounded-lg bg-white border border-slate-200 text-slate-400 font-bold hover:bg-green-500 hover:text-white hover:border-green-500 transition-all flex items-center justify-center shadow-sm"\cf0 \cb1 \strokec4 \
+\cb3                        >\cb1 \
+\cb3                          <\cf5 \strokec5 CheckCircle2\cf0 \strokec4  size=\{\cf8 \strokec8 18\cf0 \strokec4 \} className=\cf6 \strokec6 "mr-2"\cf0 \strokec4  />\cb1 \
+\cb3                          \cf10 \strokec10 \uc0\u23436 \u25104 \cf0 \cb1 \strokec4 \
+\cb3                        </button>\cb1 \
+\cb3                        <button className=\cf6 \strokec6 "px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-blue-600 hover:border-blue-300 transition-all"\cf0 \strokec4 >\cb1 \
+\cb3                          <\cf5 \strokec5 ChevronRight\cf0 \strokec4  size=\{\cf8 \strokec8 18\cf0 \strokec4 \} />\cb1 \
+\cb3                        </button>\cb1 \
+\cb3                      </div>\cb1 \
+\cb3                    </div>\cb1 \
+\cb3                  ))\}\cb1 \
+\cb3               </div>\cb1 \
+\cb3             )\}\cb1 \
+\cb3           </div>\cb1 \
+\cb3         )\}\cb1 \
+\
+\cb3         \{\cf7 \strokec7 /* --- 4. CRM (Keep existing) --- */\cf0 \strokec4 \}\cb1 \
+\cb3         \{activeTab === \cf6 \strokec6 'crm'\cf0 \strokec4  && (\cb1 \
+\cb3           <div className=\cf6 \strokec6 "space-y-6"\cf0 \strokec4 >\cb1 \
+\cb3             <header><h2 className=\cf6 \strokec6 "text-2xl font-bold text-slate-800"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u23458 \u25142 \u38364 \u20418 \u31649 \u29702 \cf0 \strokec4 </h2></header>\cb1 \
+\cb3             <div className=\cf6 \strokec6 "bg-white p-6 rounded-xl shadow-sm border border-slate-200"\cf0 \strokec4 >\cb1 \
+\cb3                (\cf5 \strokec5 CRM\cf0 \strokec4  \cf10 \strokec10 \uc0\u20171 \u38754 \u20445 \u30041 \u65292 \u25903 \u25588 \u36523 \u20998 \u35657 \u12289 \u29983 \u26085 \u27298 \u35222 \cf0 \strokec4 )\cb1 \
+\cb3             </div>\cb1 \
+\cb3           </div>\cb1 \
+\cb3         )\}\cb1 \
+\
+\cb3         \{\cf7 \strokec7 /* --- 6. Import (Keep existing) --- */\cf0 \strokec4 \}\cb1 \
+\cb3         \{activeTab === \cf6 \strokec6 'import'\cf0 \strokec4  && (\cb1 \
+\cb3           <div className=\cf6 \strokec6 "max-w-3xl mx-auto space-y-6"\cf0 \strokec4 >\cb1 \
+\cb3             <header><h2 className=\cf6 \strokec6 "text-2xl font-bold text-slate-800"\cf0 \strokec4 >\cf10 \strokec10 \uc0\u36039 \u26009 \u25209 \u27425 \u26356 \u26032 \cf0 \strokec4 </h2></header>\cb1 \
+\cb3             <div className=\cf6 \strokec6 "bg-white p-6 rounded-xl shadow-sm border border-slate-200"\cf0 \strokec4 >\cb1 \
+\cb3                <label className=\cf6 \strokec6 "block text-sm font-medium text-slate-700 mb-2"\cf0 \strokec4 >\cf5 \strokec5 CSV\cf0 \strokec4  \cf10 \strokec10 \uc0\u21407 \u22987 \u25976 \u25818 \cf0 \strokec4  (\cf10 \strokec10 \uc0\u24050 \u25844 \u20805 \u27396 \u20301 \cf0 \strokec4 )</label>\cb1 \
+\cb3                <textarea className=\cf6 \strokec6 "w-full h-64 p-4 font-mono text-sm bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"\cf0 \strokec4  value=\{csvInput\} onChange=\{(e) => setCsvInput(e.target.value)\} placeholder=\cf6 \strokec6 "\uc0\u35531 \u22312 \u27492 \u36028 \u19978 \u24744 \u30340 \u25976 \u25818 ..."\cf0 \strokec4  />\cb1 \
+\cb3                <div className=\cf6 \strokec6 "mt-4 flex justify-between"\cf0 \strokec4 ><div className=\cf6 \strokec6 "text-sm text-slate-500 flex items-center"\cf0 \strokec4 ><\cf5 \strokec5 AlertCircle\cf0 \strokec4  size=\{\cf8 \strokec8 16\cf0 \strokec4 \} className=\cf6 \strokec6 "mr-1"\cf0 \strokec4  />\cf10 \strokec10 \uc0\u35531 \u35352 \u24471 \u20786 \u23384 \cf0 \strokec4 </div><button onClick=\{() => handleSaveCSV(csvInput)\} disabled=\{isSaving\} className=\{\cf6 \strokec6 `px-6 py-2 text-white font-medium rounded-lg flex items-center \cf0 \strokec4 $\{isSaving ? \cf6 \strokec6 'bg-slate-400'\cf0 \strokec4  : \cf6 \strokec6 'bg-blue-600 hover:bg-blue-700'\cf0 \strokec4 \}\cf6 \strokec6 `\cf0 \strokec4 \}>\{isSaving ? <><\cf5 \strokec5 Loader2\cf0 \strokec4  size=\{\cf8 \strokec8 18\cf0 \strokec4 \} className=\cf6 \strokec6 "mr-2 animate-spin"\cf0 \strokec4  />\cf10 \strokec10 \uc0\u20786 \u23384 \u20013 \cf0 \strokec4 ...</> : <><\cf5 \strokec5 Save\cf0 \strokec4  size=\{\cf8 \strokec8 18\cf0 \strokec4 \} className=\cf6 \strokec6 "mr-2"\cf0 \strokec4  />\cf10 \strokec10 \uc0\u20786 \u23384 \u20006 \u21516 \u27493 \cf0 \strokec4 </>\}</button></div>\cb1 \
+\cb3             </div>\cb1 \
+\cb3           </div>\cb1 \
+\cb3         )\}\cb1 \
+\
+\cb3       </main>\cb1 \
+\
+\cb3       \{\cf7 \strokec7 /* --- Modals --- */\cf0 \strokec4 \}\cb1 \
+\cb3       \{showCreateEvent && (\cb1 \
+\cb3         <\cf5 \strokec5 CreateEventModal\cf0 \strokec4  \cb1 \
+\cb3           onClose=\{() => setShowCreateEvent(\cf2 \strokec2 false\cf0 \strokec4 )\} \cb1 \
+\cb3           onSave=\{handleCreateEvent\} \cb1 \
+\cb3           customTemplates=\{customTemplates\}\cb1 \
+\cb3           onAddTemplate=\{handleAddTemplate\}\cb1 \
+\cb3           onDeleteTemplate=\{handleDeleteTemplate\}\cb1 \
+\cb3           availableInstructors=\{availableInstructors\} \cf7 \strokec7 // \uc0\u20659 \u20837 \u25152 \u26377 \u21487 \u29992 \u35611 \u24107 \cf0 \cb1 \strokec4 \
+\cb3         />\cb1 \
+\cb3       )\}\cb1 \
+\
+\cb3       \{activeTaskDetail && (\cb1 \
+\cb3         <\cf5 \strokec5 TaskDetailModal\cf0 \strokec4  \cb1 \
+\cb3           task=\{activeTaskDetail\}\cb1 \
+\cb3           eventData=\{activeTaskDetail.fullEventData\}\cb1 \
+\cb3           onClose=\{() => setActiveTaskDetail(\cf2 \strokec2 null\cf0 \strokec4 )\}\cb1 \
+\cb3         />\cb1 \
+\cb3       )\}\cb1 \
+\
+\cb3     </div>\cb1 \
+\cb3   );\cb1 \
+\cb3 \}\cb1 \
+}
