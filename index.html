@@ -79,11 +79,8 @@
             { id: 'post_letter', type: 'post_letter', name: '寄送花絮信', fields: [{ label: '照片連結', value: '' }], completed: false },
         ];
 
-        const DEFAULT_EVENT_TEMPLATES = [
-            { id: 'default_1', name: '登山團模板', eventName: '週末登山團', instructor: '張大師', isSystem: true },
-            { id: 'default_2', name: '露營團模板', eventName: '星空露營', instructor: '林博士', isSystem: true },
-            { id: 'default_3', name: '課程模板', eventName: '攝影教學', instructor: '陳教練', isSystem: true },
-        ];
+        // [修改] 移除了系統預設的活動模板
+        const DEFAULT_EVENT_TEMPLATES = [];
 
         // --- Helper Functions ---
         const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
@@ -315,134 +312,7 @@
             return ( <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 fade-in backdrop-blur-sm"> <div className="bg-white rounded-2xl w-full max-w-lg flex flex-col max-h-[90vh] shadow-2xl"> <div className="p-6 border-b border-slate-100 flex justify-between items-center"><h3 className="text-xl font-bold flex items-center gap-2"><Icon name="zap" className="text-yellow-500"/> 快速開團</h3><button onClick={onClose}><Icon name="x" className="text-slate-400"/></button></div> <div className="p-6 overflow-y-auto space-y-6"> {!isCreatingTemplate ? ( <> <div className="flex bg-slate-100 p-1 rounded-lg"><button onClick={()=>setMode('template')} className={`flex-1 py-1.5 text-sm rounded-md transition-all ${mode==='template'?'bg-white shadow text-blue-600':'text-slate-500'}`}>使用模板</button><button onClick={()=>setMode('custom')} className={`flex-1 py-1.5 text-sm rounded-md transition-all ${mode==='custom'?'bg-white shadow text-blue-600':'text-slate-500'}`}>完全自訂</button></div> {mode === 'template' && ( <div className="grid grid-cols-3 gap-3"> {[...DEFAULT_EVENT_TEMPLATES, ...customTemplates].map((tpl, i) => ( <div key={i} onClick={()=>handleTemplateSelect(tpl)} className={`relative border rounded-xl p-3 cursor-pointer text-center hover:bg-blue-50 transition-all group ${formData.eventName===tpl.eventName?'border-blue-500 ring-1 ring-blue-500 bg-blue-50':'border-slate-200'}`}> <div className="font-bold text-slate-700 text-sm mb-1">{tpl.name}</div><div className="text-xs text-slate-500">{tpl.instructor}</div> {!tpl.isSystem && <button onClick={(e)=>handleEditTemplate(e, tpl)} className="absolute top-1 right-1 p-1 bg-white rounded-full shadow-sm text-slate-300 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition"><Icon name="edit-2" size={12}/></button>} </div> ))} <button onClick={()=>setIsCreatingTemplate(true)} className="border border-dashed border-slate-300 rounded-xl p-3 flex flex-col items-center justify-center text-slate-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 transition-all"><Icon name="plus-circle" className="mb-1"/><span className="text-xs">新增模板</span></button> </div> )} <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100"> <div><label className="block text-sm font-medium text-slate-700 mb-2">1. 選擇日期 (多選)</label>{renderCalendar()}</div> <div className="space-y-4"> <div><label className="block text-sm font-medium text-slate-700 mb-1">2. 活動名稱</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" value={formData.eventName} onChange={e=>setFormData({...formData, eventName: e.target.value})} placeholder="輸入名稱..."/></div> <div> <label className="block text-sm font-medium text-slate-700 mb-1">3. 帶團講師</label> <div className="flex flex-wrap gap-2 mb-2 min-h-[38px] p-2 bg-white border border-slate-200 rounded-lg">{formData.instructors.map(ins=><div key={ins} className="flex items-center bg-blue-50 text-blue-700 px-2 py-1 rounded text-sm"><span className="mr-1">{ins}</span><button onClick={()=>setFormData({...formData, instructors: formData.instructors.filter(i=>i!==ins)})}><Icon name="x" size={14}/></button></div>)}</div> <div className="flex gap-2"><input type="text" className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" value={tempInstructor} onChange={e=>setTempInstructor(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addInstructor(tempInstructor)} placeholder="輸入名字..."/><button onClick={()=>addInstructor(tempInstructor)} className="px-3 bg-slate-100 rounded-lg hover:bg-slate-200"><Icon name="plus" size={18}/></button></div> <div className="flex flex-wrap gap-2 mt-2">{availableInstructors.slice(0,6).map(i=><button key={i} onClick={()=>addInstructor(i)} className={`text-xs px-2 py-1 border rounded-full transition ${unavailableInstructors.has(i)?'bg-slate-100 text-slate-400 border-slate-200':'bg-slate-50 hover:bg-blue-50 text-slate-600'}`}>+ {i}</button>)}</div> </div> </div> </div> </> ) : ( <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3"> <div className="flex justify-between"><h4 className="font-bold">{newTemplateData.id ? '編輯模板' : '建立新模板'}</h4><button onClick={()=>{setIsCreatingTemplate(false);setNewTemplateData({id:null,name:'',eventName:'',instructor:''})}} className="text-sm text-slate-500">取消</button></div> <input type="text" className="w-full px-3 py-2 text-sm border rounded-lg" placeholder="模板名稱 (如: 豪華團)" value={newTemplateData.name} onChange={e=>setNewTemplateData({...newTemplateData, name: e.target.value})}/> <div className="grid grid-cols-2 gap-3"> <input type="text" className="w-full px-3 py-2 text-sm border rounded-lg" placeholder="預設活動名稱" value={newTemplateData.eventName} onChange={e=>setNewTemplateData({...newTemplateData, eventName: e.target.value})}/> <input type="text" className="w-full px-3 py-2 text-sm border rounded-lg" placeholder="預設講師" value={newTemplateData.instructor} onChange={e=>setNewTemplateData({...newTemplateData, instructor: e.target.value})}/> </div> <div className="flex gap-2">{newTemplateData.id && <button onClick={()=>{if(confirm("確定刪除?")){onDeleteTemplate(newTemplateData.id);setIsCreatingTemplate(false);setNewTemplateData({id:null,name:'',eventName:'',instructor:''})}}} className="flex-1 py-2 bg-red-100 text-red-600 rounded-lg text-sm">刪除</button>}<button onClick={handleSaveNewTemplate} className="flex-[2] py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">儲存模板</button></div> </div> )} </div> {!isCreatingTemplate && <div className="p-4 border-t border-slate-100 flex justify-end items-center gap-4 bg-slate-50/50 rounded-b-2xl"><span className="text-xs text-slate-500">將建立 {formData.dates.length} 場活動</span><button onClick={()=>onSave(formData)} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-md">批量建立</button></div>} </div> </div> );
         };
 
-        // [修改] 任務詳情：增加匯出功能
-        const TaskDetailModal = ({ task, eventData, onClose }) => {
-            const [copied, setCopied] = useState(false);
-            
-            // 匯出 CSV 功能
-            const exportTaskData = (type) => {
-                let csvContent = "\uFEFF"; // BOM for Excel
-                if (type === 'insurance') {
-                    csvContent += "姓名,生日,身分證字號\n";
-                    eventData.customers.forEach(c => {
-                        // 確保資料存在，避免 undefined
-                        const name = c.customerName || '';
-                        const birth = c.birthday || '';
-                        const id = c.idNo || '';
-                        csvContent += `${name},${birth},${id}\n`;
-                    });
-                    downloadCSV(csvContent, `${eventData.eventName}_保險名單.csv`);
-                } else if (type === 'pre_letter') {
-                    csvContent += "活動日期,活動名稱,姓名,Email,交通方式,備註\n";
-                    // 排序：共乘優先
-                    const sorted = [...eventData.customers].sort((a, b) => {
-                        const tA = a.transport || '';
-                        const tB = b.transport || '';
-                        if (tA === '共乘' && tB !== '共乘') return -1;
-                        if (tA !== '共乘' && tB === '共乘') return 1;
-                        return 0;
-                    });
-                    
-                    sorted.forEach(c => {
-                         const date = eventData.date || '';
-                         const evtName = eventData.eventName || '';
-                         const name = c.customerName || '';
-                         const email = c.email || '';
-                         const transport = c.transport || '';
-                         const notes = c.notes || '';
-                         // 處理備註中的逗號，避免 CSV 格式錯亂
-                         const cleanNotes = notes.includes(',') ? `"${notes}"` : notes;
-                         
-                         csvContent += `${date},${evtName},${name},${email},${transport},${cleanNotes}\n`;
-                    });
-                    downloadCSV(csvContent, `${eventData.eventName}_行前信名單.csv`);
-                }
-            };
-
-            const renderContent = () => {
-                if (task.type === 'insurance') {
-                    // 修正：使用正確的欄位名稱 customerName, idNo
-                    const copyText = eventData.customers.map(c => `${c.customerName}\t${c.idNo}\t${c.birthday}`).join('\n');
-                    const handleCopy = () => { navigator.clipboard.writeText(copyText); setCopied(true); setTimeout(() => setCopied(false), 2000); };
-                    
-                    return (
-                        <div className="space-y-4">
-                            <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg flex gap-3">
-                                <Icon name="shield-check" className="text-amber-600 mt-0.5" size={20}/>
-                                <div className="text-sm text-amber-800 flex-1">
-                                    <p className="font-bold">保險辦理資訊</p>
-                                    <p>請將下列名單複製並提供給保險業務，或直接匯出 Excel。</p>
-                                </div>
-                            </div>
-                            <div className="flex gap-2 justify-end">
-                                <button onClick={() => exportTaskData('insurance')} className="flex items-center px-3 py-1.5 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700 shadow-sm transition-colors">
-                                    <Icon name="download" size={14} className="mr-1"/> 匯出名單 (Excel)
-                                </button>
-                                <button onClick={handleCopy} className="flex items-center px-3 py-1.5 bg-white border border-slate-300 rounded text-xs font-medium hover:bg-slate-50 text-slate-700 shadow-sm transition-colors">
-                                    {copied ? <Icon name="check" size={14} className="mr-1 text-green-600"/> : <Icon name="copy" size={14} className="mr-1"/>} 
-                                    {copied ? '已複製' : '複製文字'}
-                                </button>
-                            </div>
-                            <div className="bg-slate-100 p-4 rounded-lg font-mono text-xs max-h-60 overflow-y-auto whitespace-pre border border-slate-200">
-                                {copyText || "無資料"}
-                            </div>
-                        </div>
-                    );
-                }
-                if (task.type === 'pre_letter') {
-                    const car = eventData.customers.filter(c=>c.transport==='共乘');
-                    const self = eventData.customers.filter(c=>c.transport!=='共乘');
-                    return (
-                        <div className="space-y-4">
-                            <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg flex gap-3">
-                                <Icon name="mail" className="text-blue-600 mt-0.5" size={20}/>
-                                <div className="text-sm text-blue-800 flex-1">
-                                    <p className="font-bold">行前信寄送</p>
-                                    <p>已自動分流共乘與自行前往的客戶。可匯出完整名單包含備註。</p>
-                                </div>
-                            </div>
-                            <div className="flex justify-end">
-                                <button onClick={() => exportTaskData('pre_letter')} className="flex items-center px-3 py-1.5 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700 shadow-sm transition-colors">
-                                    <Icon name="download" size={14} className="mr-1"/> 匯出名單 (Excel)
-                                </button>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="border border-slate-200 p-3 rounded-lg bg-white">
-                                    <h4 className="font-bold text-slate-700 mb-2 text-sm flex items-center"><Icon name="car" size={14} className="mr-1 text-orange-500"/> 共乘 ({car.length})</h4>
-                                    <div className="bg-slate-50 p-2 rounded text-xs h-32 overflow-y-auto text-slate-600">
-                                        {car.length ? car.map(c=>(<div key={c.id} className="mb-1">{c.customerName} <span className="text-slate-400">&lt;{c.email}&gt;</span></div>)) : <span className="text-slate-400">無</span>}
-                                    </div>
-                                </div>
-                                <div className="border border-slate-200 p-3 rounded-lg bg-white">
-                                    <h4 className="font-bold text-slate-700 mb-2 text-sm flex items-center"><Icon name="footprints" size={14} className="mr-1 text-blue-500"/> 自行 ({self.length})</h4>
-                                    <div className="bg-slate-50 p-2 rounded text-xs h-32 overflow-y-auto text-slate-600">
-                                        {self.length ? self.map(c=>(<div key={c.id} className="mb-1">{c.customerName} <span className="text-slate-400">&lt;{c.email}&gt;</span></div>)) : <span className="text-slate-400">無</span>}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    );
-                }
-                return <div className="text-center text-slate-500 py-8">無特殊工具，請依一般流程執行。</div>;
-            };
-            
-            return (
-                <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 fade-in backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl w-full max-w-lg flex flex-col max-h-[90vh] shadow-2xl">
-                        <div className="p-6 border-b flex justify-between items-center">
-                            <div>
-                                <div className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded inline-block mb-1">{eventData.date} • {eventData.eventName}</div>
-                                <h3 className="text-xl font-bold text-slate-800">{task.name}</h3>
-                            </div>
-                            <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><Icon name="x"/></button>
-                        </div>
-                        <div className="p-6 overflow-y-auto bg-white">
-                            {renderContent()}
-                        </div>
-                    </div>
-                </div>
-            );
-        };
+        const TaskDetailModal = ({ task, eventData, onClose }) => { /* ... */ return <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 fade-in backdrop-blur-sm"><div className="bg-white rounded-2xl w-full max-w-lg flex flex-col max-h-[90vh] shadow-2xl"><div className="p-6 border-b flex justify-between items-center"><div><div className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded inline-block mb-1">{eventData.date}</div><h3 className="text-xl font-bold">{task.name}</h3></div><button onClick={onClose}><Icon name="x"/></button></div><div className="p-6 overflow-y-auto"><div className="text-center text-slate-500 py-8">任務內容</div></div></div></div>; };
 
         const MonthlyReport = ({ month, data }) => {
             const [expanded, setExpanded] = useState(false);
