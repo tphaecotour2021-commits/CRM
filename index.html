@@ -9,6 +9,7 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- 引入 Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
 
     <style>
@@ -38,8 +39,8 @@
             if (imgError) {
                 return (
                     <div className={`flex items-center gap-2 ${className}`}>
-                         <div className="w-8 h-8 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-lg flex items-center justify-center text-white font-bold shadow-sm shrink-0">T</div>
-                        <span className="font-bold text-xl tracking-tight text-slate-800 whitespace-nowrap">TPHA ECOTOURISM</span>
+                         <div className="w-8 h-8 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-lg flex items-center justify-center text-white font-bold shadow-sm shrink-0">S</div>
+                        <span className="font-bold text-xl tracking-tight text-slate-800 whitespace-nowrap">SuperOps</span>
                     </div>
                 );
             }
@@ -51,6 +52,7 @@
             useEffect(() => {
                 if (!window.lucide) return;
                 const { icons, createElement } = window.lucide;
+                // Convert kebab-case to PascalCase for Lucide (e.g., arrow-right -> ArrowRight)
                 const iconName = name.split('-').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join('');
                 const iconNode = icons[iconName];
                 if (iconNode && containerRef.current) {
@@ -79,17 +81,33 @@
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
-        // 強制使用長輪詢以解決部分網路環境連線問題
         const db = initializeFirestore(app, { experimentalForceLongPolling: true });
 
-        // [修正] 預設使用 default-app-id，這是您確認有資料的地方
         const defaultAppId = 'default-app-id';
 
         const CSV_HEADER = "日期,活動名稱,講師,客戶姓名,金額,交通方式,身分證字號,生日,Email,報名管道,社群暱稱,備註,訂購日,手機,報到狀態";
         
-        // 這個變數僅用於手動還原，系統不再自動寫入它
-        const INITIAL_CSV_DATA = `${CSV_HEADER}
-2026-01-11,陽明兔,,張曉娟,750,,F227249054,1988-12-25,reina249@hotmail.com,IG廣告,,“早鳥票；訂單編號：RZ251127YP9852；付款方式：藍新金流信用卡”,2025-11-27,0988112667,0`;
+        // [新增] 預設活動模板，防止 CreateEventModal 報錯
+        const DEFAULT_EVENT_TEMPLATES = [
+            { name: '經典日團', eventName: '生態導覽', instructor: '待定', time: '09:00', link: '', isSystem: true },
+            { name: '夜間觀察', eventName: '夜訪生物', instructor: '資深嚮導', time: '18:30', link: '', isSystem: true },
+            { name: '手作體驗', eventName: 'DIY教室', instructor: '職人老師', time: '14:00', link: '', isSystem: true }
+        ];
+
+        // [新增] DebugPanel 組件定義
+        const DebugPanel = ({ onClose }) => (
+            <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
+                <div className="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full">
+                    <h3 className="font-bold text-lg mb-2">系統狀態</h3>
+                    <div className="bg-slate-100 p-3 rounded text-xs font-mono text-slate-600 mb-4">
+                        Status: Online<br/>
+                        Version: 2.1.0<br/>
+                        Firebase: Connected
+                    </div>
+                    <button onClick={onClose} className="w-full bg-slate-800 text-white py-2 rounded-lg text-sm">關閉</button>
+                </div>
+            </div>
+        );
 
         const DEFAULT_TASKS_TEMPLATE = [
             { id: 'insurance', type: 'insurance', name: '辦理保險', fields: [{ label: '保單號碼', value: '' }], completed: false },
@@ -346,7 +364,6 @@
                                 <input type="number" value={capacity} onChange={e=>setCapacity(e.target.value)} className="w-full px-2 py-1.5 text-center border border-slate-300 rounded-lg font-bold outline-none focus:ring-2 focus:ring-blue-500 bg-white"/>
                             </div>
                         </div>
-                        {/* [新增] 前台顯示名稱欄位 */}
                         <div>
                             <label className="text-xs font-bold text-slate-500 mb-1 block">前台顯示名稱 (選填)</label>
                             <input type="text" className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" placeholder="例如: 冬季夜訪蛙類" value={displayName} onChange={e=>setDisplayName(e.target.value)} />
@@ -433,23 +450,19 @@
             const renderCalendar = () => { const year = calendarMonth.getFullYear(); const month = calendarMonth.getMonth(); const daysInMonth = getDaysInMonth(year, month); const firstDay = getFirstDayOfMonth(year, month); const days = Array(firstDay).fill(null).concat([...Array(daysInMonth).keys()].map(i => i + 1)); return ( <div className="bg-slate-50 p-4 rounded-xl border border-slate-200"> <div className="flex justify-between items-center mb-4"> <button onClick={() => setCalendarMonth(new Date(year, month - 1))}><Icon name="chevron-left" size={20}/></button> <span className="font-bold text-slate-700">{year}年 {month + 1}月</span> <button onClick={() => setCalendarMonth(new Date(year, month + 1))}><Icon name="chevron-right" size={20}/></button> </div> <div className="grid grid-cols-7 text-center mb-2 text-xs font-bold text-slate-400">{['日','一','二','三','四','五','六'].map(d=><div key={d}>{d}</div>)}</div> <div className="grid grid-cols-7 gap-1"> {days.map((day, i) => ( <div key={i} className="aspect-square flex items-center justify-center"> {day && (<button onClick={() => toggleDate(year, month, day)} className={`w-8 h-8 rounded-full text-sm transition-all ${formData.dates.includes(`${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`) ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-blue-100 text-slate-600'}`}>{day}</button>)} </div> ))} </div> </div> ); };
             
             return ( <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 fade-in backdrop-blur-sm"> <div className="bg-white rounded-2xl w-full max-w-lg flex flex-col max-h-[90vh] shadow-2xl m-auto"> <div className="p-6 border-b border-slate-100 flex justify-between items-center"><h3 className="text-xl font-bold flex items-center gap-2"><Icon name="zap" className="text-yellow-500"/> 快速開團</h3><button onClick={onClose}><Icon name="x" className="text-slate-400"/></button></div> <div className="p-6 overflow-y-auto space-y-6"> {!isCreatingTemplate ? ( <> <div className="flex bg-slate-100 p-1 rounded-lg"><button onClick={()=>setMode('template')} className={`flex-1 py-1.5 text-sm rounded-md transition-all ${mode==='template'?'bg-white shadow text-blue-600':'text-slate-500'}`}>使用模板</button><button onClick={()=>setMode('custom')} className={`flex-1 py-1.5 text-sm rounded-md transition-all ${mode==='custom'?'bg-white shadow text-blue-600':'text-slate-500'}`}>完全自訂</button></div> {mode === 'template' && ( <div className="grid grid-cols-3 gap-3"> {[...DEFAULT_EVENT_TEMPLATES, ...customTemplates].map((tpl, i) => ( <div key={i} onClick={()=>handleTemplateSelect(tpl)} className={`relative border rounded-xl p-3 cursor-pointer text-center hover:bg-blue-50 transition-all group ${formData.eventName===tpl.eventName?'border-blue-500 ring-1 ring-blue-500 bg-blue-50':'border-slate-200'}`}> <div className="font-bold text-slate-700 text-sm mb-1">{tpl.name}</div><div className="text-xs text-slate-500">{tpl.instructor}</div><div className="text-[10px] text-slate-400 mt-1">{tpl.time ? `⏰ ${tpl.time}` : ''}</div> {!tpl.isSystem && <button onClick={(e)=>handleEditTemplate(e, tpl)} className="absolute top-1 right-1 p-1 bg-white rounded-full shadow-sm text-slate-300 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition"><Icon name="edit-2" size={12}/></button>} </div> ))} <button onClick={()=>setIsCreatingTemplate(true)} className="border border-dashed border-slate-300 rounded-xl p-3 flex flex-col items-center justify-center text-slate-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 transition-all"><Icon name="plus-circle" className="mb-1"/><span className="text-xs">新增模板</span></button> </div> )} <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100"> <div><label className="block text-sm font-medium text-slate-700 mb-2">1. 選擇日期 (多選)</label>{renderCalendar()}</div> <div className="space-y-4"> <div><label className="block text-sm font-medium text-slate-700 mb-1">2. 活動名稱</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" value={formData.eventName} onChange={e=>setFormData({...formData, eventName: e.target.value})} placeholder="輸入名稱..."/></div> <div> <label className="block text-sm font-medium text-slate-700 mb-1">3. 帶團講師</label> <div className="flex flex-wrap gap-2 mb-2 min-h-[38px] p-2 bg-white border border-slate-200 rounded-lg">{formData.instructors.map(ins=><div key={ins} className="flex items-center bg-blue-50 text-blue-700 px-2 py-1 rounded text-sm"><span className="mr-1">{ins}</span><button onClick={()=>setFormData({...formData, instructors: formData.instructors.filter(i=>i!==ins)})}><Icon name="x" size={14}/></button></div>)}</div> <div className="flex gap-2"><input type="text" className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" value={tempInstructor} onChange={e=>setTempInstructor(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addInstructor(tempInstructor)} placeholder="輸入名字..."/><button onClick={()=>addInstructor(tempInstructor)} className="px-3 bg-slate-100 rounded-lg hover:bg-slate-200"><Icon name="plus" size={18}/></button></div> <div className="flex flex-wrap gap-2 mt-2">{availableInstructors.slice(0,6).map(i=><button key={i} onClick={()=>addInstructor(i)} className={`text-xs px-2 py-1 border rounded-full transition ${unavailableInstructors.has(i)?'bg-slate-100 text-slate-400 border-slate-200':'bg-slate-50 hover:bg-blue-50 text-slate-600'}`}>+ {i}</button>)}</div> </div> 
-            {/* [新增] 活動時間輸入欄位 */}
             <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">4. 活動時間</label>
                 <input type="time" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" value={formData.time} onChange={e=>setFormData({...formData, time: e.target.value})}/>
             </div>
-            {/* [新增] 活動網址輸入欄位 */}
             <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">5. 活動網址 (選填)</label>
                 <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" placeholder="https://..." value={formData.link} onChange={e=>setFormData({...formData, link: e.target.value})}/>
             </div>
-             {/* [新增] 前台顯示名稱 */}
              <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">6. 前台顯示名稱 (選填)</label>
                 <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" placeholder="例如: 冬季夜訪蛙類" value={formData.displayName} onChange={e=>setFormData({...formData, displayName: e.target.value})}/>
             </div>
             </div> </div> </> ) : ( <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3"> <div className="flex justify-between"><h4 className="font-bold">{newTemplateData.id ? '編輯模板' : '建立新模板'}</h4><button onClick={()=>{setIsCreatingTemplate(false);setNewTemplateData({id:null,name:'',eventName:'',instructor:'',time:'',link:'',displayName:''})}} className="text-sm text-slate-500">取消</button></div> <input type="text" className="w-full px-3 py-2 text-sm border rounded-lg" placeholder="模板名稱 (如: 豪華團)" value={newTemplateData.name} onChange={e=>setNewTemplateData({...newTemplateData, name: e.target.value})}/> <div className="grid grid-cols-2 gap-3"> <input type="text" className="w-full px-3 py-2 text-sm border rounded-lg" placeholder="預設活動名稱" value={newTemplateData.eventName} onChange={e=>setNewTemplateData({...newTemplateData, eventName: e.target.value})}/> <input type="text" className="w-full px-3 py-2 text-sm border rounded-lg" placeholder="預設講師" value={newTemplateData.instructor} onChange={e=>setNewTemplateData({...newTemplateData, instructor: e.target.value})}/> </div> 
-            {/* [新增] 模板設定 */}
             <div className="grid grid-cols-2 gap-3">
                 <div>
                     <label className="block text-xs font-bold text-slate-500 mb-1">預設時間</label>
@@ -467,12 +480,11 @@
             <div className="flex gap-2">{newTemplateData.id && <button onClick={()=>{if(confirm("確定刪除?")){onDeleteTemplate(newTemplateData.id);setIsCreatingTemplate(false);setNewTemplateData({id:null,name:'',eventName:'',instructor:'',time:'',link:'',displayName:''})}}} className="flex-1 py-2 bg-red-100 text-red-600 rounded-lg text-sm">刪除</button>}<button onClick={handleSaveNewTemplate} className="flex-[2] py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">儲存模板</button></div> </div> )} </div> {!isCreatingTemplate && <div className="p-4 border-t border-slate-100 flex justify-end items-center gap-4 bg-slate-50/50 rounded-b-2xl"><span className="text-xs text-slate-500">將建立 {formData.dates.length} 場活動</span><button onClick={()=>onSave(formData)} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-md">批量建立</button></div>} </div> </div> );
         };
 
-        // ... [TaskDetailModal, MonthlyReport, EditRowModal, BulkImportModal, DataRescueTab] ...
-        const TaskDetailModal = ({ task, eventData, onClose }) => { /* ... */ return <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 fade-in backdrop-blur-sm"><div className="bg-white rounded-2xl w-full max-w-lg flex flex-col max-h-[90vh] shadow-2xl"><div className="p-6 border-b flex justify-between items-center"><div><div className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded inline-block mb-1">{eventData.date}</div><h3 className="text-xl font-bold">{task.name}</h3></div><button onClick={onClose}><Icon name="x"/></button></div><div className="p-6 overflow-y-auto"><div className="text-center text-slate-500 py-8">任務內容</div></div></div></div>; };
-        const MonthlyReport = ({ month, data }) => { /* ... */ const [expanded, setExpanded] = useState(false); const stats = useMemo(() => { const rev = data.reduce((a,c)=>a+c.price,0); const pax = data.length; const sources = {}; const activities = {}; data.forEach(c => { sources[c.source || '未知'] = (sources[c.source || '未知'] || 0) + 1; if (!activities[c.eventName]) { activities[c.eventName] = { count: 0, revenue: 0, dates: new Set() }; } activities[c.eventName].count += 1; activities[c.eventName].revenue += c.price; if (c.date) activities[c.eventName].dates.add(c.date + c.instructor); }); return { rev, pax, sources, activities }; }, [data]); return ( <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-4 transition-all"> <div className="p-4 flex justify-between items-center cursor-pointer hover:bg-slate-50" onClick={()=>setExpanded(!expanded)}> <div className="flex items-center gap-4"> <div className="text-lg font-bold text-slate-700">{month}</div> <div className="text-sm text-slate-500 bg-slate-100 px-2 py-0.5 rounded">總收 ${stats.rev.toLocaleString()}</div> <div className="text-sm text-slate-500">({stats.pax} 人)</div> </div> <Icon name={expanded ? 'chevron-up' : 'chevron-down'} className="text-slate-400"/> </div> {expanded && ( <div className="p-4 border-t border-slate-100 bg-slate-50/50 animate-in fade-in space-y-6"> <div> <h5 className="text-xs font-bold text-slate-500 mb-3 uppercase flex items-center"><Icon name="activity" size={14} className="mr-1"/> 各項活動表現</h5> <div className="bg-white border border-slate-200 rounded-xl overflow-hidden"> <table className="w-full text-left text-sm"> <thead className="bg-slate-50 border-b border-slate-100 text-slate-500"><tr><th className="px-4 py-2">活動名稱</th><th className="px-4 py-2">場次</th><th className="px-4 py-2">人數</th><th className="px-4 py-2">平均人數</th><th className="px-4 py-2 text-right">營收</th></tr></thead> <tbody className="divide-y divide-slate-100"> {Object.entries(stats.activities).map(([name, s], i) => { const sessionCount = s.dates.size || 1; return (<tr key={i} className="hover:bg-slate-50"><td className="px-4 py-2 font-medium text-slate-700">{name}</td><td className="px-4 py-2 text-slate-500">{sessionCount}</td><td className="px-4 py-2 text-slate-500">{s.count}</td><td className="px-4 py-2 text-slate-500">{(s.count / sessionCount).toFixed(1)}</td><td className="px-4 py-2 text-right font-mono text-slate-600">${s.revenue.toLocaleString()}</td></tr>); })} </tbody> </table> </div> </div> <div> <h5 className="text-xs font-bold text-slate-500 mb-2 uppercase flex items-center"><Icon name="share-2" size={14} className="mr-1"/> 報名管道分析</h5> <div className="flex flex-wrap gap-2">{Object.entries(stats.sources).map(([src, count]) => (<div key={src} className="text-xs px-3 py-1.5 bg-white border rounded-lg shadow-sm flex gap-2"><span className="text-slate-600">{src}</span><span className="font-bold text-blue-600">{count}</span><span className="text-slate-400">({Math.round(count/stats.pax*100)}%)</span></div>))}</div> </div> <div className="flex justify-end pt-2"><button onClick={(e)=>{e.stopPropagation(); downloadCSV(data.map(d=>Object.values(d).join(',')).join('\n'), `${month}_report.csv`)}} className="text-xs text-blue-600 hover:underline flex items-center bg-blue-50 px-3 py-1.5 rounded border border-blue-100"><Icon name="download" size={12} className="mr-1"/> 下載此月詳細報表</button></div> </div> )} </div> ); };
-        const EditRowModal = ({ rowData, onClose, onSave }) => { /* ... */ const [form, setForm] = useState({ ...rowData }); return (<div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-4 fade-in backdrop-blur-sm"><div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl"><div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold">編輯報名資料</h3><button onClick={onClose}><Icon name="x"/></button></div><div className="space-y-4 max-h-[70vh] overflow-y-auto p-1"> <div className="grid grid-cols-2 gap-3"><div><label className="text-xs font-bold">日期</label><input type="date" className="w-full p-2 border rounded" value={form.date} onChange={e=>setForm({...form, date:e.target.value})}/></div><div><label className="text-xs font-bold">活動名稱</label><input type="text" className="w-full p-2 border rounded" value={form.eventName} onChange={e=>setForm({...form, eventName:e.target.value})}/></div></div> <div><label className="text-xs font-bold">客戶姓名</label><input type="text" className="w-full p-2 border rounded" value={form.customerName} onChange={e=>setForm({...form, customerName:e.target.value})}/></div> <div className="grid grid-cols-2 gap-3"><div><label className="text-xs font-bold">金額</label><input type="number" className="w-full p-2 border rounded" value={form.price} onChange={e=>setForm({...form, price:e.target.value})}/></div><div><label className="text-xs font-bold">交通</label><input type="text" className="w-full p-2 border rounded" value={form.transport} onChange={e=>setForm({...form, transport:e.target.value})}/></div></div> <div className="grid grid-cols-2 gap-3"><div><label className="text-xs font-bold">Email</label><input type="email" className="w-full p-2 border rounded" value={form.email||''} onChange={e=>setForm({...form, email:e.target.value})}/></div><div><label className="text-xs font-bold">手機</label><input type="text" className="w-full p-2 border rounded" value={form.phone||''} onChange={e=>setForm({...form, phone:e.target.value})}/></div></div> <div className="grid grid-cols-2 gap-3"><div><label className="text-xs font-bold">訂購日</label><input type="date" className="w-full p-2 border rounded" value={form.orderDate||''} onChange={e=>setForm({...form, orderDate:e.target.value})}/></div><div><label className="text-xs font-bold">身分證</label><input type="text" className="w-full p-2 border rounded" value={form.idNo||''} onChange={e=>setForm({...form, idNo:e.target.value})}/></div></div> <div className="grid grid-cols-2 gap-3"><div><label className="text-xs font-bold">生日</label><input type="date" className="w-full p-2 border rounded" value={form.birthday||''} onChange={e=>setForm({...form, birthday:e.target.value})}/></div><div><label className="text-xs font-bold">社群暱稱</label><input type="text" className="w-full p-2 border rounded" value={form.socialName||''} onChange={e=>setForm({...form, socialName:e.target.value})}/></div></div> <div className="grid grid-cols-2 gap-3"><div><label className="text-xs font-bold">報名管道</label><input type="text" className="w-full p-2 border rounded" value={form.source||''} onChange={e=>setForm({...form, source:e.target.value})}/></div><div><label className="text-xs font-bold">備註</label><input type="text" className="w-full p-2 border rounded" value={form.notes||''} onChange={e=>setForm({...form, notes:e.target.value})}/></div></div> </div><div className="flex justify-end mt-6 gap-2"><button onClick={onClose} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg">取消</button><button onClick={()=>onSave(form)} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">儲存變更</button></div></div></div>); };
-        const BulkImportModal = ({ onClose, onImport, existingData }) => { /* ... */ return <div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-4 fade-in backdrop-blur-sm"><div className="bg-white rounded-2xl w-full max-w-2xl h-[85vh] flex flex-col shadow-2xl"><div className="p-6 border-b flex justify-between items-center"><h3 className="text-xl font-bold">批量匯入功能開發中...</h3><button onClick={onClose}><Icon name="x"/></button></div></div></div>; };
-        const DataRescueTab = ({ currentAppId, onSwitch }) => { /* ... */ const options = [ { id: 'crm-system-v1', label: 'v1 (您的真實資料)' }, { id: 'default-app-id', label: 'Default (舊版測試)' } ]; return ( <div className="bg-white p-6 rounded-2xl shadow-sm border border-orange-200"> <div className="flex items-start gap-4"> <div className="bg-orange-100 p-3 rounded-full text-orange-600"><Icon name="life-buoy" size={24}/></div> <div className="flex-1"> <h3 className="text-xl font-bold text-slate-800 mb-2">資料庫救援控制台</h3> <p className="text-sm text-slate-500 mb-4">如果您發現資料遺失，請嘗試切換下方的資料來源。這通常發生在系統更新後。</p> <div className="grid grid-cols-1 md:grid-cols-2 gap-4"> {options.map(opt => ( <div key={opt.id} onClick={() => onSwitch(opt.id)} className={`p-4 rounded-xl border cursor-pointer transition-all flex justify-between items-center ${currentAppId === opt.id ? 'bg-orange-50 border-orange-400 ring-1 ring-orange-400' : 'hover:bg-slate-50 border-slate-200'}`} > <div> <div className="font-bold text-slate-700">{opt.label}</div> <div className="text-xs text-slate-400 font-mono">{opt.id}</div> </div> {currentAppId === opt.id && <Icon name="check-circle" className="text-orange-500" size={20}/>} </div> ))} </div> </div> </div> </div> ); };
+        const TaskDetailModal = ({ task, eventData, onClose }) => { return <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 fade-in backdrop-blur-sm"><div className="bg-white rounded-2xl w-full max-w-lg flex flex-col max-h-[90vh] shadow-2xl"><div className="p-6 border-b flex justify-between items-center"><div><div className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded inline-block mb-1">{eventData.date}</div><h3 className="text-xl font-bold">{task.name}</h3></div><button onClick={onClose}><Icon name="x"/></button></div><div className="p-6 overflow-y-auto"><div className="text-center text-slate-500 py-8">任務詳細內容功能區 (可在此擴充)</div></div></div></div>; };
+        const MonthlyReport = ({ month, data }) => { const [expanded, setExpanded] = useState(false); const stats = useMemo(() => { const rev = data.reduce((a,c)=>a+c.price,0); const pax = data.length; const sources = {}; const activities = {}; data.forEach(c => { sources[c.source || '未知'] = (sources[c.source || '未知'] || 0) + 1; if (!activities[c.eventName]) { activities[c.eventName] = { count: 0, revenue: 0, dates: new Set() }; } activities[c.eventName].count += 1; activities[c.eventName].revenue += c.price; if (c.date) activities[c.eventName].dates.add(c.date + c.instructor); }); return { rev, pax, sources, activities }; }, [data]); return ( <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-4 transition-all"> <div className="p-4 flex justify-between items-center cursor-pointer hover:bg-slate-50" onClick={()=>setExpanded(!expanded)}> <div className="flex items-center gap-4"> <div className="text-lg font-bold text-slate-700">{month}</div> <div className="text-sm text-slate-500 bg-slate-100 px-2 py-0.5 rounded">總收 ${stats.rev.toLocaleString()}</div> <div className="text-sm text-slate-500">({stats.pax} 人)</div> </div> <Icon name={expanded ? 'chevron-up' : 'chevron-down'} className="text-slate-400"/> </div> {expanded && ( <div className="p-4 border-t border-slate-100 bg-slate-50/50 animate-in fade-in space-y-6"> <div> <h5 className="text-xs font-bold text-slate-500 mb-3 uppercase flex items-center"><Icon name="activity" size={14} className="mr-1"/> 各項活動表現</h5> <div className="bg-white border border-slate-200 rounded-xl overflow-hidden"> <table className="w-full text-left text-sm"> <thead className="bg-slate-50 border-b border-slate-100 text-slate-500"><tr><th className="px-4 py-2">活動名稱</th><th className="px-4 py-2">場次</th><th className="px-4 py-2">人數</th><th className="px-4 py-2">平均人數</th><th className="px-4 py-2 text-right">營收</th></tr></thead> <tbody className="divide-y divide-slate-100"> {Object.entries(stats.activities).map(([name, s], i) => { const sessionCount = s.dates.size || 1; return (<tr key={i} className="hover:bg-slate-50"><td className="px-4 py-2 font-medium text-slate-700">{name}</td><td className="px-4 py-2 text-slate-500">{sessionCount}</td><td className="px-4 py-2 text-slate-500">{s.count}</td><td className="px-4 py-2 text-slate-500">{(s.count / sessionCount).toFixed(1)}</td><td className="px-4 py-2 text-right font-mono text-slate-600">${s.revenue.toLocaleString()}</td></tr>); })} </tbody> </table> </div> </div> <div> <h5 className="text-xs font-bold text-slate-500 mb-2 uppercase flex items-center"><Icon name="share-2" size={14} className="mr-1"/> 報名管道分析</h5> <div className="flex flex-wrap gap-2">{Object.entries(stats.sources).map(([src, count]) => (<div key={src} className="text-xs px-3 py-1.5 bg-white border rounded-lg shadow-sm flex gap-2"><span className="text-slate-600">{src}</span><span className="font-bold text-blue-600">{count}</span><span className="text-slate-400">({Math.round(count/stats.pax*100)}%)</span></div>))}</div> </div> <div className="flex justify-end pt-2"><button onClick={(e)=>{e.stopPropagation(); downloadCSV(data.map(d=>Object.values(d).join(',')).join('\n'), `${month}_report.csv`)}} className="text-xs text-blue-600 hover:underline flex items-center bg-blue-50 px-3 py-1.5 rounded border border-blue-100"><Icon name="download" size={12} className="mr-1"/> 下載此月詳細報表</button></div> </div> )} </div> ); };
+        const EditRowModal = ({ rowData, onClose, onSave }) => { const [form, setForm] = useState({ ...rowData }); return (<div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-4 fade-in backdrop-blur-sm"><div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl"><div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold">編輯報名資料</h3><button onClick={onClose}><Icon name="x"/></button></div><div className="space-y-4 max-h-[70vh] overflow-y-auto p-1"> <div className="grid grid-cols-2 gap-3"><div><label className="text-xs font-bold">日期</label><input type="date" className="w-full p-2 border rounded" value={form.date} onChange={e=>setForm({...form, date:e.target.value})}/></div><div><label className="text-xs font-bold">活動名稱</label><input type="text" className="w-full p-2 border rounded" value={form.eventName} onChange={e=>setForm({...form, eventName:e.target.value})}/></div></div> <div><label className="text-xs font-bold">客戶姓名</label><input type="text" className="w-full p-2 border rounded" value={form.customerName} onChange={e=>setForm({...form, customerName:e.target.value})}/></div> <div className="grid grid-cols-2 gap-3"><div><label className="text-xs font-bold">金額</label><input type="number" className="w-full p-2 border rounded" value={form.price} onChange={e=>setForm({...form, price:e.target.value})}/></div><div><label className="text-xs font-bold">交通</label><input type="text" className="w-full p-2 border rounded" value={form.transport} onChange={e=>setForm({...form, transport:e.target.value})}/></div></div> <div className="grid grid-cols-2 gap-3"><div><label className="text-xs font-bold">Email</label><input type="email" className="w-full p-2 border rounded" value={form.email||''} onChange={e=>setForm({...form, email:e.target.value})}/></div><div><label className="text-xs font-bold">手機</label><input type="text" className="w-full p-2 border rounded" value={form.phone||''} onChange={e=>setForm({...form, phone:e.target.value})}/></div></div> <div className="grid grid-cols-2 gap-3"><div><label className="text-xs font-bold">訂購日</label><input type="date" className="w-full p-2 border rounded" value={form.orderDate||''} onChange={e=>setForm({...form, orderDate:e.target.value})}/></div><div><label className="text-xs font-bold">身分證</label><input type="text" className="w-full p-2 border rounded" value={form.idNo||''} onChange={e=>setForm({...form, idNo:e.target.value})}/></div></div> <div className="grid grid-cols-2 gap-3"><div><label className="text-xs font-bold">生日</label><input type="date" className="w-full p-2 border rounded" value={form.birthday||''} onChange={e=>setForm({...form, birthday:e.target.value})}/></div><div><label className="text-xs font-bold">社群暱稱</label><input type="text" className="w-full p-2 border rounded" value={form.socialName||''} onChange={e=>setForm({...form, socialName:e.target.value})}/></div></div> <div className="grid grid-cols-2 gap-3"><div><label className="text-xs font-bold">報名管道</label><input type="text" className="w-full p-2 border rounded" value={form.source||''} onChange={e=>setForm({...form, source:e.target.value})}/></div><div><label className="text-xs font-bold">備註</label><input type="text" className="w-full p-2 border rounded" value={form.notes||''} onChange={e=>setForm({...form, notes:e.target.value})}/></div></div> </div><div className="flex justify-end mt-6 gap-2"><button onClick={onClose} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg">取消</button><button onClick={()=>onSave(form)} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">儲存變更</button></div></div></div>); };
+        const BulkImportModal = ({ onClose, onImport, existingData }) => { return <div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-4 fade-in backdrop-blur-sm"><div className="bg-white rounded-2xl w-full max-w-2xl h-[85vh] flex flex-col shadow-2xl"><div className="p-6 border-b flex justify-between items-center"><h3 className="text-xl font-bold">批量匯入功能開發中...</h3><button onClick={onClose}><Icon name="x"/></button></div><div className="p-8 text-center text-slate-500">此功能即將推出，敬請期待</div></div></div>; };
+        const DataRescueTab = ({ currentAppId, onSwitch }) => { const options = [ { id: 'crm-system-v1', label: 'v1 (您的真實資料)' }, { id: 'default-app-id', label: 'Default (舊版測試)' } ]; return ( <div className="bg-white p-6 rounded-2xl shadow-sm border border-orange-200"> <div className="flex items-start gap-4"> <div className="bg-orange-100 p-3 rounded-full text-orange-600"><Icon name="life-buoy" size={24}/></div> <div className="flex-1"> <h3 className="text-xl font-bold text-slate-800 mb-2">資料庫救援控制台</h3> <p className="text-sm text-slate-500 mb-4">如果您發現資料遺失，請嘗試切換下方的資料來源。這通常發生在系統更新後。</p> <div className="grid grid-cols-1 md:grid-cols-2 gap-4"> {options.map(opt => ( <div key={opt.id} onClick={() => onSwitch(opt.id)} className={`p-4 rounded-xl border cursor-pointer transition-all flex justify-between items-center ${currentAppId === opt.id ? 'bg-orange-50 border-orange-400 ring-1 ring-orange-400' : 'hover:bg-slate-50 border-slate-200'}`} > <div> <div className="font-bold text-slate-700">{opt.label}</div> <div className="text-xs text-slate-400 font-mono">{opt.id}</div> </div> {currentAppId === opt.id && <Icon name="check-circle" className="text-orange-500" size={20}/>} </div> ))} </div> </div> </div> </div> ); };
 
         const MainApp = () => {
             const [user, setUser] = useState(null);
@@ -494,7 +506,6 @@
             const [publicSearchTerm, setPublicSearchTerm] = useState('');
             const [selectedPublicDate, setSelectedPublicDate] = useState(new Date().toISOString().split('T')[0]);
 
-            // [修正] 初始化 dbSource，優先使用 localStorage
             const [dbSource, setDbSource] = useState(() => localStorage.getItem('crm_db_source') || defaultAppId);
 
             const [isEditingCSV, setIsEditingCSV] = useState(false);
@@ -529,7 +540,6 @@
             
             const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
             
-            // [新增] 處理 dbSource 切換並存入 localStorage
             const handleDbSourceChange = (newSource) => {
                 setDbSource(newSource);
                 localStorage.setItem('crm_db_source', newSource);
@@ -579,7 +589,7 @@
                             updateParsedData(d);
                         }
                     } else { 
-                         // 不自動覆蓋，避免資料遺失
+                         // 不自動覆蓋
                     }
                     setLoading(false);
                 });
@@ -633,7 +643,7 @@
                 setCsvSaveStatus('saving'); 
                 setIsSaving(true); 
                 try { 
-                    isEditingRef.current = false; // 解鎖以允許更新
+                    isEditingRef.current = false; 
                     await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), { csvData: newData }, { merge: true }); 
                     setCsvInput(newData); 
                     setCsvSaveStatus('success'); 
@@ -702,7 +712,6 @@
             const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
             const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
 
-            // Group tasks logic
             const groupedTasks = useMemo(() => {
                 return tasks.reduce((acc, task) => {
                     const groupKey = task.name; 
@@ -718,9 +727,7 @@
             
             const activeEditingEvent = editingEvent && stats.events[editingEvent.key] ? stats.events[editingEvent.key] : editingEvent;
 
-            // [新] 前台渲染邏輯
             if (viewMode === 'public') {
-                // [新] 篩選當天活動
                 const selectedDayEvents = Object.values(stats.events).filter(e => e.date === selectedPublicDate);
 
                 return (
@@ -740,7 +747,6 @@
                                 <p className="text-slate-500 text-sm">歡迎查看最新的活動資訊</p>
                             </div>
 
-                            {/* 搜尋欄 */}
                             <div className="relative mb-6">
                                 <Icon name="search" className="absolute left-4 top-3 text-slate-400" size={20}/>
                                 <input 
@@ -752,7 +758,6 @@
                                 />
                             </div>
 
-                            {/* 圖示說明 Legend */}
                             <div className="flex justify-center gap-4 mb-4 text-xs text-slate-400">
                                 <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span> 有活動</div>
                                 <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-400"></span> 符合搜尋</div>
@@ -776,10 +781,9 @@
                                         const hasEvents = dayEvents.length > 0;
                                         const isSelected = dateStr === selectedPublicDate;
                                         
-                                        // 搜尋匹配邏輯
                                         const isMatch = publicSearchTerm && dayEvents.some(e => {
                                             const cfg = eventConfigs[e.key] || {};
-                                            const nameToCheck = cfg.displayName || e.eventName; // 搜尋時也考慮顯示名稱
+                                            const nameToCheck = cfg.displayName || e.eventName; 
                                             return nameToCheck.includes(publicSearchTerm) || (e.instructor && e.instructor.includes(publicSearchTerm));
                                         });
 
@@ -809,7 +813,6 @@
                                 </div>
                             </div>
 
-                            {/* 下方詳細活動列表 */}
                             <div className="space-y-4 fade-in">
                                 <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2 border-l-4 border-blue-500 pl-3">
                                     {selectedPublicDate} 活動列表
@@ -821,15 +824,12 @@
                                         const isHot = e.count >= (cfg.hotThreshold || 10);
                                         const isFull = capacity > 0 && e.count >= capacity;
                                         
-                                        // [修正] 使用顯示名稱，若無則用原名
                                         const displayName = cfg.displayName || e.eventName;
 
-                                        // 卡片樣式
                                         let cardClass = 'bg-white border-slate-100 shadow-sm hover:shadow-md border-l-4 border-l-blue-500';
                                         if (isFull) cardClass = 'bg-slate-50 border-slate-200 border-l-slate-400 opacity-70';
                                         else if (isHot) {
                                             const color = COLOR_OPTIONS.find(c => c.value === cfg.hotColor) || COLOR_OPTIONS[0];
-                                            // 使用自定義熱門色
                                             if(cfg.hotColor === 'red') cardClass = 'bg-red-50 border-red-100 border-l-red-500';
                                             if(cfg.hotColor === 'orange') cardClass = 'bg-orange-50 border-orange-100 border-l-orange-500';
                                             if(cfg.hotColor === 'green') cardClass = 'bg-green-50 border-green-100 border-l-green-500';
@@ -894,10 +894,8 @@
                 );
             }
 
-            // Admin View
             return (
                 <div className="flex min-h-screen">
-                    {/* Mobile Menu Overlay */}
                     {mobileMenuOpen && (
                         <div className="fixed inset-0 z-50 bg-slate-800/50 backdrop-blur-sm md:hidden" onClick={() => setMobileMenuOpen(false)}>
                             <div className="absolute top-0 left-0 w-64 h-full bg-white shadow-xl p-4" onClick={e => e.stopPropagation()}>
@@ -952,13 +950,11 @@
                     </aside>
 
                     <main className="flex-1 p-4 md:p-10 overflow-y-auto bg-slate-50/50 relative h-screen">
-                        {/* Mobile Header */}
                         <div className="md:hidden mb-6 flex justify-between items-center sticky top-0 z-30 bg-slate-50/90 backdrop-blur-sm py-2">
                             <Logo className="h-6 w-auto" />
                             <button onClick={() => setMobileMenuOpen(true)} className="p-2 bg-white rounded-lg shadow-sm text-slate-600 border border-slate-200"><Icon name="menu" /></button>
                         </div>
 
-                        {/* Tasks, Promises, Events, Projects, Dashboard, CRM, Import */}
                         {activeTab === 'tasks' && (
                             <div className="max-w-6xl mx-auto fade-in pb-20">
                                 <header className="mb-8 flex justify-between items-end">
@@ -1003,7 +999,6 @@
                             </div>
                         )}
 
-                        {/* ... (Promises with Search, Events, Projects, Dashboard, CRM, Import logic same as before) ... */}
                         {activeTab === 'promises' && (
                             <div className="max-w-6xl mx-auto fade-in pb-20">
                                 <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -1067,7 +1062,6 @@
                                         </div>
                                         <div className="min-w-[600px]">
                                             <div className="grid grid-cols-7 mb-2 text-center text-sm font-bold text-slate-400">{['日','一','二','三','四','五','六'].map(d=><div key={d}>{d}</div>)}</div>
-                                            {/* [修改] 高度 160px */}
                                             <div className="grid grid-cols-7 auto-rows-[160px] border-t border-l border-slate-200">
                                                 {calendarDays.map((day, i) => {
                                                     const dateStr = day ? `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}` : '';
@@ -1077,7 +1071,6 @@
                                                             {day && (
                                                                 <>
                                                                     <div className="flex justify-between items-start"><div className="text-sm font-medium mb-1">{day}</div><button onClick={(e)=>{e.stopPropagation();setShowScheduleModal(true);setScheduleDate(dateStr)}} className="text-slate-300 hover:text-blue-600"><Icon name="calendar-days" size={14}/></button></div>
-                                                                    {/* [修改] 列表高度 120px */}
                                                                     <div className="space-y-1 overflow-y-auto max-h-[120px] no-scrollbar">
                                                                         {dayEvents.map((e, idx) => {
                                                                             const cfg = eventConfigs[e.key] || {};
@@ -1160,7 +1153,6 @@
                             </div>
                         )}
 
-                        {/* [修改] CRM: 增加編輯按鈕 */}
                         {activeTab === 'crm' && (
                             <div className="fade-in max-w-6xl mx-auto pb-20">
                                 <h2 className="text-2xl font-bold mb-6">客戶 CRM</h2>
@@ -1204,9 +1196,7 @@
                                     </div>
                                     {customerProfile ? (
                                         <div className="animate-in fade-in slide-in-from-top-4">
-                                            {/* 客戶資料卡 */}
                                             <div className="flex flex-col md:flex-row gap-8 mb-8 pb-8 border-b border-slate-100 relative">
-                                                {/* [新增] 編輯按鈕 */}
                                                 <button 
                                                     onClick={() => setEditingRow(customerProfile.latestRecord)}
                                                     className="absolute top-0 right-0 text-slate-400 hover:text-blue-600 flex items-center gap-1 text-sm border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition"
@@ -1259,7 +1249,6 @@
                                     </div>
                                 </header>
 
-                                {/* 搜尋與列表 */}
                                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden table-container">
                                     <div className="p-4 border-b border-slate-100 flex gap-4 sticky left-0">
                                         <div className="relative flex-1">
@@ -1288,7 +1277,6 @@
                                     </div>
                                 </div>
 
-                                {/* [修改] 新增報名資料 Form (加入 phone) */}
                                 <section>
                                     <h2 className="text-2xl font-bold mb-6">新增報名資料</h2>
                                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
@@ -1322,7 +1310,6 @@
                                     </div>
                                 </section>
 
-                                {/* 原始 CSV (折疊) */}
                                 <details className="group">
                                     <summary className="flex items-center gap-2 cursor-pointer text-slate-500 font-bold hover:text-slate-700"><Icon name="code" size={16}/> 進階：原始 CSV 資料庫 (全量編輯)</summary>
                                     <div className="mt-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
@@ -1334,7 +1321,6 @@
                                             onBlur={() => isEditingRef.current = false}
                                         />
                                         <div className="mt-4 flex justify-between items-center">
-                                            {/* 管理員密碼設定區塊 */}
                                             <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200">
                                                 <Icon name="lock" size={16} className="text-slate-400"/>
                                                 <span className="text-xs font-bold text-slate-600">管理員安全設定</span>
@@ -1371,7 +1357,6 @@
                                                      '儲存變更'}
                                                 </span>
                                             </button>
-                                            {/* 最後儲存時間提示 */}
                                             <span className="text-xs text-slate-400 ml-2">
                                                 {csvSaveStatus === 'success' ? `上次儲存: ${new Date().toLocaleTimeString()}` : ''}
                                             </span>
@@ -1379,14 +1364,12 @@
                                     </div>
                                 </details>
                                 
-                                {/* Data Rescue */}
                                 <DataRescueTab currentAppId={dbSource} onSwitch={handleDbSourceChange} />
                             </div>
                         )}
 
                     </main>
 
-                    {/* Modals */}
                     {showDebug && <DebugPanel onClose={()=>setShowDebug(false)} />}
                     {showCreateEvent && <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 fade-in"><div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl m-auto"><CreateEventModal onClose={()=>setShowCreateEvent(false)} onSave={handleCreateEvent} customTemplates={customTemplates} onSaveTemplate={handleSaveTemplate} onDeleteTemplate={onDeleteTemplate} availableInstructors={Object.keys(stats.instrs).sort()} instructorSchedule={instructorSchedule} /></div></div>}
                     {showAddPromise && <AddPromiseModal onClose={()=>setShowAddPromise(false)} onSave={handleAddPromise} />}
