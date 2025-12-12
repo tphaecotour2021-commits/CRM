@@ -183,7 +183,8 @@
                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                     {renderGroup('活動等級', 'levels', definitions.levels || [], 'border-blue-200', 'bg-blue-600 text-white border-blue-600 shadow-sm')}
                     {renderGroup('活動種類', 'types', definitions.types || [], 'border-emerald-200', 'bg-emerald-600 text-white border-emerald-600 shadow-sm')}
-                    {renderGroup('活動地點', 'locations', 'border-purple-200', 'bg-purple-600 text-white border-purple-600 shadow-sm')}
+                    {/* 下面這一行是修正重點：補上了 definitions.locations || [] */}
+                    {renderGroup('活動地點', 'locations', definitions.locations || [], 'border-purple-200', 'bg-purple-600 text-white border-purple-600 shadow-sm')}
                 </div>
             );
         };
