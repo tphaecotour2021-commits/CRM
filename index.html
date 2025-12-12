@@ -114,7 +114,7 @@
 
         const defaultAppId = 'default-app-id';
         const CSV_HEADER = "日期,活動名稱,講師,客戶姓名,金額,交通方式,身分證字號,生日,Email,報名管道,社群暱稱,備註,訂購日,手機,報到狀態";
-        
+       
         // --- UI Components ---
         const Logo = ({ className }) => {
             return (
@@ -183,7 +183,7 @@
                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                     {renderGroup('活動等級', 'levels', definitions.levels || [], 'border-blue-200', 'bg-blue-600 text-white border-blue-600 shadow-sm')}
                     {renderGroup('活動種類', 'types', definitions.types || [], 'border-emerald-200', 'bg-emerald-600 text-white border-emerald-600 shadow-sm')}
-                    {renderGroup('活動地點', 'locations', definitions.locations || [], 'border-purple-200', 'bg-purple-600 text-white border-purple-600 shadow-sm')}
+                    {renderGroup('活動地點', 'locations', 'border-purple-200', 'bg-purple-600 text-white border-purple-600 shadow-sm')}
                 </div>
             );
         };
@@ -209,7 +209,7 @@
             { min: 11, max: 20, label: '最後席次', color: 'orange' },
             { min: 21, max: 999, label: '已額滿', color: 'red' }
         ];
-        
+       
         const DEFAULT_TAG_DEFS = {
             levels: ['一般大眾', '進階', '親子限定', '社群限定', '包團'],
             types: ['蛇類觀察', '夜間生態', '步道導覽', '生態講座', '蛙類觀察', '昆蟲觀察'],
@@ -325,7 +325,7 @@
             const circumference = radius * 2 * Math.PI;
             const safeValue = Math.min(Math.max(value, 0), max);
             const offset = circumference - (safeValue / max) * circumference;
-            
+           
             return (
                 <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
                     <svg className="transform -rotate-90 w-full h-full">
@@ -351,6 +351,129 @@
         const AddPromiseModal = ({ onClose, onSave }) => {
             const [form, setForm] = useState({ content: '', who: '', date: new Date().toISOString().split('T')[0], time: '12:00' });
             return (<div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-4 fade-in backdrop-blur-sm"><div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl"><div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><Icon name="message-square" className="text-purple-500"/> 新增承諾</h3><button onClick={onClose}><Icon name="x" className="text-slate-400 hover:text-slate-600"/></button></div><div className="space-y-4"><div><label className="block text-xs font-bold text-slate-500 mb-1">內容</label><textarea className="w-full p-3 border rounded-xl resize-none h-24" value={form.content} onChange={e=>setForm({...form, content: e.target.value})}></textarea></div><div><label className="block text-xs font-bold text-slate-500 mb-1">對象</label><input type="text" className="w-full p-3 border rounded-xl" value={form.who} onChange={e=>setForm({...form, who: e.target.value})} /></div><div className="grid grid-cols-2 gap-3"><input type="date" className="w-full p-3 border rounded-xl" value={form.date} onChange={e=>setForm({...form, date: e.target.value })} /><input type="time" className="w-full p-3 border rounded-xl" value={form.time} onChange={e=>setForm({...form, time: e.target.value })} /></div><button onClick={()=>{if(!form.content)return;onSave(form)}} className="w-full py-3 bg-purple-600 text-white rounded-xl font-bold shadow-lg shadow-purple-200 mt-2">建立</button></div></div></div>);
+        };
+
+        // --- NEW COMPONENT: ProjectTaskEditModal ---
+        const ProjectTaskEditModal = ({ task, phaseId, onClose, onSave }) => {
+            const [form, setForm] = useState({
+                title: task.title,
+                assignee: task.assignee || '',
+                dueDate: task.dueDate || ''
+            });
+            const [kpi, setKpi] = useState(task.kpi || { name: '', target: '', current: '', unit: '' });
+            const [notes, setNotes] = useState(task.notes || []);
+            const [newNote, setNewNote] = useState('');
+
+            const handleAddNote = () => {
+                if (!newNote.trim()) return;
+                const note = {
+                    id: Date.now(),
+                    content: newNote,
+                    date: new Date().toLocaleString()
+                };
+                setNotes([note, ...notes]);
+                setNewNote('');
+            };
+
+            const handleSave = () => {
+                const updatedTask = {
+                    ...task,
+                    ...form,
+                    kpi,
+                    notes
+                };
+                onSave(phaseId, task.id, updatedTask);
+            };
+
+            return (
+                <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 fade-in backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl max-h-[90vh] overflow-y-auto flex flex-col">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                <Icon name="edit-3" className="text-blue-500"/> 編輯任務
+                            </h3>
+                            <button onClick={onClose}><Icon name="x" className="text-slate-400 hover:text-slate-600"/></button>
+                        </div>
+
+                        <div className="space-y-6 flex-1 overflow-y-auto pr-2">
+                            <div className="space-y-3">
+                                <h4 className="text-sm font-bold text-slate-700 border-b pb-1">基本資訊</h4>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">任務名稱</label>
+                                    <input type="text" className="w-full p-2 border rounded-lg text-sm" value={form.title} onChange={e => setForm({...form, title: e.target.value})} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-1">負責人</label>
+                                        <input type="text" className="w-full p-2 border rounded-lg text-sm" value={form.assignee} onChange={e => setForm({...form, assignee: e.target.value})} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-1">截止日期</label>
+                                        <input type="date" className="w-full p-2 border rounded-lg text-sm" value={form.dueDate} onChange={e => setForm({...form, dueDate: e.target.value})} />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3 bg-blue-50 p-4 rounded-xl border border-blue-100">
+                                <h4 className="text-sm font-bold text-blue-700 border-b border-blue-200 pb-1 flex items-center gap-2">
+                                    <Icon name="target" size={14}/> KPI 設定
+                                </h4>
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div className="col-span-3">
+                                        <label className="block text-xs font-bold text-blue-600 mb-1">目標名稱</label>
+                                        <input type="text" placeholder="例如: 觸及人數" className="w-full p-2 border border-blue-200 rounded-lg text-sm" value={kpi.name} onChange={e => setKpi({...kpi, name: e.target.value})} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-blue-600 mb-1">目標值</label>
+                                        <input type="number" placeholder="100" className="w-full p-2 border border-blue-200 rounded-lg text-sm" value={kpi.target} onChange={e => setKpi({...kpi, target: e.target.value})} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-blue-600 mb-1">目前進度</label>
+                                        <input type="number" placeholder="50" className="w-full p-2 border border-blue-200 rounded-lg text-sm" value={kpi.current} onChange={e => setKpi({...kpi, current: e.target.value})} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-blue-600 mb-1">單位</label>
+                                        <input type="text" placeholder="人" className="w-full p-2 border border-blue-200 rounded-lg text-sm" value={kpi.unit} onChange={e => setKpi({...kpi, unit: e.target.value})} />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <h4 className="text-sm font-bold text-slate-700 border-b pb-1 flex items-center gap-2">
+                                    <Icon name="file-text" size={14}/> 備註紀錄
+                                </h4>
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="text" 
+                                        className="flex-1 p-2 border rounded-lg text-sm" 
+                                        placeholder="新增一筆備註..." 
+                                        value={newNote}
+                                        onChange={e => setNewNote(e.target.value)}
+                                        onKeyDown={e => e.key === 'Enter' && handleAddNote()}
+                                    />
+                                    <button onClick={handleAddNote} className="px-3 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700">
+                                        <Icon name="plus" size={16} />
+                                    </button>
+                                </div>
+                                <div className="max-h-40 overflow-y-auto space-y-2">
+                                    {notes.length === 0 && <div className="text-center text-slate-400 text-xs py-4">尚無備註</div>}
+                                    {notes.map(note => (
+                                        <div key={note.id} className="bg-slate-50 p-2.5 rounded-lg border border-slate-100 text-sm">
+                                            <div className="text-xs text-slate-400 mb-1">{note.date}</div>
+                                            <div className="text-slate-700 break-words">{note.content}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2 mt-6 pt-4 border-t">
+                            <button onClick={onClose} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg text-sm">取消</button>
+                            <button onClick={handleSave} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow-md text-sm">儲存變更</button>
+                        </div>
+                    </div>
+                </div>
+            );
         };
 
         const InstructorScheduleModal = ({ date, availableInstructors, restingList, onClose, onToggle, isCompanyRest, onToggleCompanyRest }) => {
@@ -382,7 +505,7 @@
                                     <div key={name} onClick={() => onToggle(date, name)} className={`flex justify-between items-center p-3 rounded-xl border cursor-pointer transition-all ${isResting ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
                                         <span className={`font-bold ${isResting ? 'text-red-700' : 'text-green-700'}`}>{name}</span>
                                         <span className={`text-xs px-2 py-1 rounded-full font-bold ${isResting ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>{isResting ? '休假' : '可上工'}</span>
-                                    </div>
+                                    </div> 
                                 ); 
                             })} 
                             {availableInstructors.length === 0 && <div className="text-center text-slate-400 py-4">暫無講師資料，請先建立活動或手動輸入。</div>}
@@ -753,7 +876,7 @@
                 </div>
             );
         };
-        
+       
         const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, onDeleteTemplate, availableInstructors, instructorSchedule, tagDefinitions, onAddTag }) => {
             const [mode, setMode] = useState('template'); 
             const [isCreatingTemplate, setIsCreatingTemplate] = useState(false); 
@@ -823,8 +946,8 @@
                                 <div className="space-y-4"> 
                                     <div><label className="block text-sm font-medium text-slate-700 mb-1">2. 活動名稱</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" value={formData.eventName} onChange={e=>setFormData({...formData, eventName: e.target.value})} placeholder="輸入名稱..."/></div> 
                                     <div> <label className="block text-sm font-medium text-slate-700 mb-1">3. 帶團講師</label> <div className="flex flex-wrap gap-2 mb-2 min-h-[38px] p-2 bg-white border border-slate-200 rounded-lg">{formData.instructors.map(ins=><div key={ins} className="flex items-center bg-blue-50 text-blue-700 px-2 py-1 rounded text-sm"><span className="mr-1">{ins}</span><button onClick={()=>setFormData({...formData, instructors: formData.instructors.filter(i=>i!==ins)})}><Icon name="x" size={14}/></button></div>)}</div> <div className="flex gap-2"><input type="text" className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" value={tempInstructor} onChange={e=>setTempInstructor(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addInstructor(tempInstructor)} placeholder="輸入名字..."/><button onClick={()=>addInstructor(tempInstructor)} className="px-3 bg-slate-100 rounded-lg hover:bg-slate-200"><Icon name="plus" size={18}/></button></div> <div className="flex flex-wrap gap-2 mt-2">{availableInstructors.slice(0,6).map(i=><button key={i} onClick={()=>addInstructor(i)} className={`text-xs px-2 py-1 border rounded-full transition ${unavailableInstructors.has(i)?'bg-slate-100 text-slate-400 border-slate-200':'bg-slate-50 hover:bg-blue-50 text-slate-600'}`}>+ {i}</button>)}</div> </div> 
-                                    <div><label className="block text-sm font-medium text-slate-700 mb-1">4. 活動時間</label><input type="time" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" value={formData.time} onChange={e=>setFormData({...formData, time: e.target.value})}/></div>
-                                    <div><label className="block text-sm font-medium text-slate-700 mb-1">5. 活動網址 (選填)</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" placeholder="https://..." value={formData.link} onChange={e=>setFormData({...formData, link: e.target.value})}/></div>
+                                    <div><label className="block text-sm font-medium text-slate-700 mb-1">4. 活動時間</label><input type="time" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" value={formData.time} onChange={e=>setFormData({...formData, time: e.target.value})}/></div> 
+                                    <div><label className="block text-sm font-medium text-slate-700 mb-1">5. 活動網址 (選填)</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" placeholder="https://..." value={formData.link} onChange={e=>setFormData({...formData, link: e.target.value})}/></div> 
                                     <div><label className="block text-sm font-medium text-slate-700 mb-1">6. 前台顯示名稱 (選填)</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" placeholder="例如: 冬季夜訪蛙類" value={formData.displayName} onChange={e=>setFormData({...formData, displayName: e.target.value})}/></div>
                                     <div><label className="block text-sm font-medium text-indigo-600 mb-1">7. 活動性質名稱 (選填)</label><input type="text" className="w-full px-3 py-2 border border-indigo-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 bg-indigo-50/20" placeholder="例如: 象山夜間導覽" value={formData.activityCategory} onChange={e=>setFormData({...formData, activityCategory: e.target.value})}/></div>
                                     
@@ -843,7 +966,7 @@
                                 <input type="text" className="w-full px-3 py-2 text-sm border rounded-lg" placeholder="預設活動名稱" value={newTemplateData.eventName} onChange={e=>setNewTemplateData({...newTemplateData, eventName: e.target.value})}/> 
                                 <input type="text" className="w-full px-3 py-2 text-sm border rounded-lg" placeholder="預設講師" value={newTemplateData.instructor} onChange={e=>setNewTemplateData({...newTemplateData, instructor: e.target.value})}/> 
                             </div> 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><div><label className="block text-xs font-bold text-slate-500 mb-1">預設時間</label><input type="time" className="w-full px-3 py-2 text-sm border rounded-lg" value={newTemplateData.time} onChange={e=>setNewTemplateData({...newTemplateData, time: e.target.value})}/></div><div><label className="block text-xs font-bold text-slate-500 mb-1">預設網址</label><input type="text" className="w-full px-3 py-2 text-sm border rounded-lg" placeholder="https://..." value={newTemplateData.link} onChange={e=>setNewTemplateData({...newTemplateData, link: e.target.value})}/></div></div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><div><label className="block text-xs font-bold text-slate-500 mb-1">預設時間</label><input type="time" className="w-full px-3 py-2 text-sm border rounded-lg" value={newTemplateData.time} onChange={e=>setNewTemplateData({...newTemplateData, time: e.target.value})}/></div><div><label className="block text-xs font-bold text-slate-500 mb-1">預設網址</label><input type="text" className="w-full px-3 py-2 text-sm border rounded-lg" placeholder="https://..." value={newTemplateData.link} onChange={e=>setNewTemplateData({...newTemplateData, link: e.target.value})}/></div></div> 
                             <div><label className="block text-xs font-bold text-slate-500 mb-1">預設前台名稱</label><input type="text" className="w-full px-3 py-2 text-sm border rounded-lg" placeholder="例如: 冬季夜訪蛙類" value={newTemplateData.displayName} onChange={e=>setNewTemplateData({...newTemplateData, displayName: e.target.value})}/></div>
                             <div><label className="block text-xs font-bold text-indigo-600 mb-1">預設性質名稱</label><input type="text" className="w-full px-3 py-2 text-sm border rounded-lg border-indigo-200 bg-indigo-50/20" placeholder="例如: 象山夜間導覽" value={newTemplateData.activityCategory} onChange={e=>setNewTemplateData({...newTemplateData, activityCategory: e.target.value})}/></div>
                             
@@ -870,9 +993,238 @@
             });
             
             if (!activities[c.eventName]) { activities[c.eventName] = { count: 0, revenue: 0, dates: new Set() }; } activities[c.eventName].count += 1; activities[c.eventName].revenue += c.price; if (c.date) activities[c.eventName].dates.add(c.date + c.instructor); }); return { rev, pax, sources, activities }; }, [data]); return ( <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-4 transition-all"> <div className="p-4 flex justify-between items-center cursor-pointer hover:bg-slate-50" onClick={()=>setExpanded(!expanded)}> <div className="flex items-center gap-4"> <div className="text-lg font-bold text-slate-700">{month}</div> <div className="text-sm text-slate-500 bg-slate-100 px-2 py-0.5 rounded">總收 ${stats.rev.toLocaleString()}</div> <div className="text-sm text-slate-500">({stats.pax} 人)</div> </div> <Icon name={expanded ? 'chevron-up' : 'chevron-down'} className="text-slate-400"/> </div> {expanded && ( <div className="p-4 border-t border-slate-100 bg-slate-50/50 animate-in fade-in space-y-6"> <div> <h5 className="text-xs font-bold text-slate-500 mb-3 uppercase flex items-center"><Icon name="activity" size={14} className="mr-1"/> 各項活動表現</h5> <div className="bg-white border border-slate-200 rounded-xl overflow-hidden"> <table className="w-full text-left text-sm"> <thead className="bg-slate-50 border-b border-slate-100 text-slate-500"><tr><th className="px-4 py-2">活動名稱</th><th className="px-4 py-2">場次</th><th className="px-4 py-2">人數</th><th className="px-4 py-2">平均人數</th><th className="px-4 py-2 text-right">營收</th></tr></thead> <tbody className="divide-y divide-slate-100"> {Object.entries(stats.activities).map(([name, s], i) => { const sessionCount = s.dates.size || 1; return (<tr key={i} className="hover:bg-slate-50"><td className="px-4 py-2 font-medium text-slate-700">{name}</td><td className="px-4 py-2 text-slate-500">{sessionCount}</td><td className="px-4 py-2 text-slate-500">{s.count}</td><td className="px-4 py-2 text-slate-500">{(s.count / sessionCount).toFixed(1)}</td><td className="px-4 py-2 text-right font-mono text-slate-600">${s.revenue.toLocaleString()}</td></tr>); })} </tbody> </table> </div> </div> <div> <h5 className="text-xs font-bold text-slate-500 mb-2 uppercase flex items-center"><Icon name="share-2" size={14} className="mr-1"/> 報名管道分析</h5> <div className="flex flex-wrap gap-2">{Object.entries(stats.sources).map(([src, count]) => (<div key={src} className="text-xs px-3 py-1.5 bg-white border rounded-lg shadow-sm flex gap-2"><span className="text-slate-600">{src}</span><span className="font-bold text-blue-600">{count}</span><span className="text-slate-400">({Math.round(count/stats.pax*100)}%)</span></div>))}</div> </div> <div className="flex justify-end pt-2"><button onClick={(e)=>{e.stopPropagation(); downloadCSV(data.map(d=>Object.values(d).join(',')).join('\n'), `${month}_report.csv`)}} className="text-xs text-blue-600 hover:underline flex items-center bg-blue-50 px-3 py-1.5 rounded border border-blue-100"><Icon name="download" size={12} className="mr-1"/> 下載此月詳細報表</button></div> </div> )} </div> ); };
-        
+       // --- FIXED COMPONENT: 連動式時間分析模組 (保持原版面) ---
+        const TimeAnalysisModal = ({ title, data, onClose }) => {
+            const [selectedYear, setSelectedYear] = useState(null);
+            const [selectedMonth, setSelectedMonth] = useState(null); // 0-11
+
+            // 處理點擊年份
+            const handleYearClick = (year) => {
+                if (selectedYear === year) {
+                    setSelectedYear(null); 
+                    setSelectedMonth(null); 
+                } else {
+                    setSelectedYear(year);
+                    setSelectedMonth(null); 
+                }
+            };
+
+            // 處理點擊月份
+            const handleMonthClick = (idx) => {
+                if (selectedMonth === idx) {
+                    setSelectedMonth(null);
+                } else {
+                    setSelectedMonth(idx);
+                }
+            };
+
+            // 重置所有篩選
+            const resetFilters = () => {
+                setSelectedYear(null);
+                setSelectedMonth(null);
+            };
+
+            // --- 數據計算邏輯 ---
+            const yearStats = useMemo(() => {
+                const stats = {};
+                let max = 0;
+                data.forEach(row => {
+                    if (!row.date || row.customerName === '開放報名中') return;
+                    const d = new Date(row.date);
+                    if (isNaN(d.getTime())) return;
+                    const y = d.getFullYear();
+                    const price = Number(row.price) || 0;
+
+                    if (!stats[y]) stats[y] = { count: 0, revenue: 0 };
+                    stats[y].count += 1;
+                    stats[y].revenue += price;
+                    if (stats[y].revenue > max) max = stats[y].revenue;
+                });
+                return { data: stats, max };
+            }, [data]);
+
+            const monthStats = useMemo(() => {
+                const stats = Array(12).fill(0).map(() => ({ count: 0, revenue: 0 }));
+                let max = 0;
+                
+                data.forEach(row => {
+                    if (!row.date || row.customerName === '開放報名中') return;
+                    const d = new Date(row.date);
+                    if (isNaN(d.getTime())) return;
+                    
+                    if (selectedYear !== null && d.getFullYear() !== selectedYear) return;
+
+                    const m = d.getMonth();
+                    const price = Number(row.price) || 0;
+                    
+                    stats[m].count += 1;
+                    stats[m].revenue += price;
+                    if (stats[m].revenue > max) max = stats[m].revenue;
+                });
+                return { data: stats, max };
+            }, [data, selectedYear]);
+
+            const weekStats = useMemo(() => {
+                const stats = Array(7).fill(0).map(() => ({ count: 0, revenue: 0 }));
+                let max = 0;
+
+                data.forEach(row => {
+                    if (!row.date || row.customerName === '開放報名中') return;
+                    const d = new Date(row.date);
+                    if (isNaN(d.getTime())) return;
+
+                    if (selectedYear !== null && d.getFullYear() !== selectedYear) return;
+                    if (selectedMonth !== null && d.getMonth() !== selectedMonth) return;
+
+                    const w = d.getDay();
+                    const price = Number(row.price) || 0;
+
+                    stats[w].count += 1;
+                    stats[w].revenue += price;
+                    if (stats[w].revenue > max) max = stats[w].revenue;
+                });
+                return { data: stats, max };
+            }, [data, selectedYear, selectedMonth]);
+
+            const weekdayNames = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+
+            const renderBar = (label, value, count, max, baseColorClass, isSelected, onClick) => {
+                const percent = max > 0 ? (value / max) * 100 : 0;
+                const activeColor = isSelected ? baseColorClass.replace('500', '700') : baseColorClass;
+                const containerClass = isSelected 
+                    ? "bg-slate-100 ring-1 ring-slate-300" 
+                    : "hover:bg-slate-50"; 
+
+                return (
+                    <div 
+                        onClick={onClick}
+                        className={`flex items-center gap-4 py-2 px-2 rounded-lg cursor-pointer transition-all ${containerClass}`}
+                    >
+                        <div className={`w-14 text-sm font-bold text-right shrink-0 ${isSelected ? 'text-slate-900 underline' : 'text-slate-600'}`}>{label}</div>
+                        <div className="flex-1">
+                            <div className="flex justify-between text-xs mb-1">
+                                <span className={`font-bold ${isSelected ? 'text-slate-900' : 'text-slate-700'}`}>${value.toLocaleString()}</span>
+                                <span className="text-slate-400">{count} 人</span>
+                            </div>
+                            <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full transition-all duration-500 ${activeColor}`} style={{ width: `${percent}%` }}></div>
+                            </div>
+                        </div>
+                        {isSelected && <Icon name="check-circle" size={14} className="text-slate-400 shrink-0"/>}
+                    </div>
+                );
+            };
+
+            return (
+                <div className="fixed inset-0 bg-black/50 z-[90] flex items-center justify-center p-4 fade-in backdrop-blur-sm" onClick={onClose}>
+                    <div className="bg-white rounded-2xl w-full max-w-5xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                        
+                        <div className="flex justify-between items-center mb-6 pb-4 border-b">
+                            <div>
+                                <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                    <Icon name="bar-chart-2" className="text-blue-600"/> 時間維度銷售分析
+                                </h3>
+                                <div className="flex items-center gap-2 mt-1 text-sm text-slate-500">
+                                    <span>目前檢視：</span>
+                                    <span className={`px-2 py-0.5 rounded font-bold ${selectedYear ? 'bg-blue-100 text-blue-700' : 'bg-slate-100'}`}>
+                                        {selectedYear ? `${selectedYear}年` : '所有年份'}
+                                    </span>
+                                    <Icon name="chevron-right" size={12}/>
+                                    <span className={`px-2 py-0.5 rounded font-bold ${selectedMonth !== null ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100'}`}>
+                                        {selectedMonth !== null ? `${selectedMonth + 1}月` : '全年'}
+                                    </span>
+                                    {(selectedYear !== null || selectedMonth !== null) && (
+                                        <button onClick={resetFilters} className="ml-2 text-xs text-red-500 hover:underline flex items-center gap-1">
+                                            <Icon name="x-circle" size={12}/> 重置
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                            <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full"><Icon name="x" className="text-slate-400"/></button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col h-full">
+                                <h4 className="font-bold text-slate-700 mb-4 flex items-center gap-2 pb-2 border-b border-slate-100">
+                                    <div className="bg-blue-100 p-1.5 rounded text-blue-600"><Icon name="calendar" size={16}/></div> 
+                                    年份表現 (點擊篩選)
+                                </h4>
+                                <div className="space-y-1 overflow-y-auto flex-1 custom-scrollbar max-h-[400px]">
+                                    {Object.keys(yearStats.data).sort().map(year => {
+                                        const y = parseInt(year);
+                                        return (
+                                            <div key={y}>
+                                                {renderBar(
+                                                    y, 
+                                                    yearStats.data[y].revenue, 
+                                                    yearStats.data[y].count, 
+                                                    yearStats.max, 
+                                                    'bg-blue-500', 
+                                                    selectedYear === y,
+                                                    () => handleYearClick(y)
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col h-full">
+                                <h4 className="font-bold text-slate-700 mb-4 flex items-center gap-2 pb-2 border-b border-slate-100">
+                                    <div className="bg-emerald-100 p-1.5 rounded text-emerald-600"><Icon name="moon" size={16}/></div> 
+                                    月份淡旺季 (點擊篩選)
+                                </h4>
+                                <div className="space-y-1 overflow-y-auto flex-1 custom-scrollbar max-h-[400px]">
+                                    {monthStats.data.map((d, idx) => (
+                                        <div key={idx}>
+                                            {renderBar(
+                                                `${idx + 1}月`, 
+                                                d.revenue, 
+                                                d.count, 
+                                                monthStats.max, 
+                                                'bg-emerald-500', 
+                                                selectedMonth === idx,
+                                                () => handleMonthClick(idx)
+                                            )}
+                                        </div>
+                                    ))}
+                                    {monthStats.max === 0 && <div className="text-center text-slate-400 py-10">該年份無數據</div>}
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col h-full">
+                                <h4 className="font-bold text-slate-700 mb-4 flex items-center gap-2 pb-2 border-b border-slate-100">
+                                    <div className="bg-purple-100 p-1.5 rounded text-purple-600"><Icon name="sun" size={16}/></div> 
+                                    星期分佈 (結果)
+                                </h4>
+                                <div className="space-y-1 overflow-y-auto flex-1 custom-scrollbar max-h-[400px]">
+                                    {weekStats.data.map((d, idx) => (
+                                        <div key={idx}>
+                                            {renderBar(
+                                                weekdayNames[idx], 
+                                                d.revenue, 
+                                                d.count, 
+                                                weekStats.max, 
+                                                'bg-purple-500',
+                                                false, 
+                                                null
+                                            )}
+                                        </div>
+                                    ))}
+                                    {weekStats.max === 0 && <div className="text-center text-slate-400 py-10">無符合數據</div>}
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            );
+        };
         const ActivityPerformance = ({ parsedData, eventConfigs }) => {
-            const [dimension, setDimension] = useState('category'); 
+            const [dimension, setDimension] = useState('category');
+            // 新增：控制時間分析模組的狀態
+            const [analysisData, setAnalysisData] = useState(null); // { title: string, data: [] }
 
             const activityStats = useMemo(() => {
                 const stats = {};
@@ -897,10 +1249,11 @@
                         groupName = tags.locations || '未分類';
                     }
 
-                    if (!stats[groupName]) stats[groupName] = { revenue: 0, pax: 0, sessions: new Set() };
+                    if (!stats[groupName]) stats[groupName] = { revenue: 0, pax: 0, sessions: new Set(), rawRows: [] };
                     stats[groupName].revenue += (row.price || 0);
                     stats[groupName].pax += 1;
                     stats[groupName].sessions.add(row.date + row.instructor);
+                    stats[groupName].rawRows.push(row); // 儲存原始資料供分析用
                 });
 
                 return Object.entries(stats).map(([name, data]) => ({
@@ -910,7 +1263,8 @@
                     sessions: data.sessions.size,
                     avgRev: data.sessions.size > 0 ? Math.round(data.revenue / data.sessions.size) : 0,
                     avgPax: data.sessions.size > 0 ? (data.pax / data.sessions.size).toFixed(1) : 0,
-                    arpu: data.pax > 0 ? Math.round(data.revenue / data.pax) : 0
+                    arpu: data.pax > 0 ? Math.round(data.revenue / data.pax) : 0,
+                    rawRows: data.rawRows
                 })).sort((a, b) => b.revenue - a.revenue);
             }, [parsedData, eventConfigs, dimension]);
 
@@ -922,6 +1276,23 @@
                 location: '依活動地點 (標籤)'
             };
 
+            // 開啟總體分析
+            const handleGlobalAnalysis = () => {
+                const validRows = parsedData.filter(row => row.customerName !== '開放報名中');
+                setAnalysisData({
+                    title: '所有活動總體分析',
+                    data: validRows
+                });
+            };
+
+            // 開啟個別分析
+            const handleItemAnalysis = (item) => {
+                setAnalysisData({
+                    title: `分析項目: ${item.name}`,
+                    data: item.rawRows
+                });
+            };
+
             return (
                 <div className="fade-in max-w-6xl mx-auto space-y-8 pb-20">
                     <header className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -929,19 +1300,29 @@
                             <h2 className="text-2xl font-bold text-slate-800">活動成效分析</h2>
                             <p className="text-sm text-slate-500">深入了解各項活動的市場表現與轉換率</p>
                         </div>
-                        <div className="flex items-center gap-2 bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
-                            <span className="text-xs font-bold text-slate-500 px-2">分析維度:</span>
-                            <select 
-                                className="text-sm bg-slate-50 border-none rounded-md py-1.5 pl-2 pr-8 focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700 cursor-pointer"
-                                value={dimension}
-                                onChange={e => setDimension(e.target.value)}
+                        <div className="flex flex-wrap items-center gap-2">
+                            {/* 新增總體分析按鈕 */}
+                            <button 
+                                onClick={handleGlobalAnalysis}
+                                className="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-slate-700 shadow-sm"
                             >
-                                <option value="category">依活動性質 (推薦)</option>
-                                <option value="name">依後台名稱</option>
-                                <option value="type">依種類標籤 (如: 蛇類、夜間)</option>
-                                <option value="level">依等級標籤 (如: 包團、親子)</option>
-                                <option value="location">依地點標籤</option>
-                            </select>
+                                <Icon name="pie-chart" size={14}/> 總體時間分析
+                            </button>
+
+                            <div className="flex items-center gap-2 bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
+                                <span className="text-xs font-bold text-slate-500 px-2">分析維度:</span>
+                                <select 
+                                    className="text-sm bg-slate-50 border-none rounded-md py-1.5 pl-2 pr-8 focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700 cursor-pointer"
+                                    value={dimension}
+                                    onChange={e => setDimension(e.target.value)}
+                                >
+                                    <option value="category">依活動性質 (推薦)</option>
+                                    <option value="name">依後台名稱</option>
+                                    <option value="type">依種類標籤 (如: 蛇類、夜間)</option>
+                                    <option value="level">依等級標籤 (如: 包團、親子)</option>
+                                    <option value="location">依地點標籤</option>
+                                </select>
+                            </div>
                         </div>
                     </header>
 
@@ -983,9 +1364,8 @@
                                     <th className="px-6 py-4 font-bold text-right">舉辦場次</th>
                                     <th className="px-6 py-4 font-bold text-right">總人數</th>
                                     <th className="px-6 py-4 font-bold text-right">平均人數</th>
-                                    <th className="px-6 py-4 font-bold text-right">客單價 (ARPU)</th>
-                                    <th className="px-6 py-4 font-bold text-right">場均營收</th>
                                     <th className="px-6 py-4 font-bold text-right">總營收</th>
+                                    <th className="px-6 py-4 font-bold text-right">操作</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
@@ -1002,9 +1382,15 @@
                                                 {stat.avgPax}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-right font-mono text-slate-600">${stat.arpu.toLocaleString()}</td>
-                                        <td className="px-6 py-4 text-right font-mono font-bold text-slate-700">${stat.avgRev.toLocaleString()}</td>
                                         <td className="px-6 py-4 text-right font-mono font-bold text-blue-600 bg-blue-50/30 group-hover:bg-blue-50/50">${stat.revenue.toLocaleString()}</td>
+                                        <td className="px-6 py-4 text-right">
+                                            <button 
+                                                onClick={() => handleItemAnalysis(stat)}
+                                                className="text-xs bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-300 px-3 py-1 rounded-lg shadow-sm transition-all flex items-center gap-1 ml-auto"
+                                            >
+                                                <Icon name="bar-chart-2" size={14}/> 時間分析
+                                            </button>
+                                        </td>
                                     </tr>
                                 ))}
                                 {activityStats.length === 0 && (
@@ -1013,6 +1399,15 @@
                             </tbody>
                         </table>
                     </div>
+
+                    {/* 顯示時間分析 Modal */}
+                    {analysisData && (
+                        <TimeAnalysisModal 
+                            title={analysisData.title}
+                            data={analysisData.data}
+                            onClose={() => setAnalysisData(null)}
+                        />
+                    )}
                 </div>
             );
         };
@@ -1061,8 +1456,9 @@
                 }
                 return [{ id: 'phase_1', name: '第一階段：規劃', tasks: [] }];
             });
-            const [newTask, setNewTask] = useState({ title: '', assignee: '', dueDate: '' });
+            const [newTask, setNewTask] = useState({ title: '', assignee: '', dueDate: '', kpiName: '', kpiTarget: '', kpiUnit: '' });
             const [addingToPhaseId, setAddingToPhaseId] = useState(null);
+            const [editingTaskInfo, setEditingTaskInfo] = useState(null);
             
             const totalTasks = phases.reduce((acc, p) => acc + p.tasks.length, 0);
             const completedTasks = phases.reduce((acc, p) => acc + p.tasks.filter(t => t.completed).length, 0);
@@ -1076,7 +1472,23 @@
             const deleteMetric = (id) => { if(confirm("刪除此目標？")) setMetrics(metrics.filter(m => m.id !== id)); };
             const addPhase = () => { const name = prompt("輸入新階段名稱 (例如：執行期):"); if (name) setPhases([...phases, { id: `phase_${Date.now()}`, name, tasks: [] }]); };
             const deletePhase = (pId) => { if(confirm("刪除此階段及所有任務？")) setPhases(phases.filter(p => p.id !== pId)); };
-            const addTaskToPhase = (phaseId) => { if (!newTask.title) return; const task = { id: Date.now(), title: newTask.title, assignee: newTask.assignee, dueDate: newTask.dueDate, completed: false }; setPhases(phases.map(p => p.id === phaseId ? { ...p, tasks: [...p.tasks, task] } : p)); setNewTask({ title: '', assignee: '', dueDate: '' }); setAddingToPhaseId(null); };
+            
+            const addTaskToPhase = (phaseId) => { 
+                if (!newTask.title) return; 
+                const task = { 
+                    id: Date.now(), 
+                    title: newTask.title, 
+                    assignee: newTask.assignee, 
+                    dueDate: newTask.dueDate, 
+                    completed: false,
+                    kpi: { name: newTask.kpiName, target: newTask.kpiTarget, current: '', unit: newTask.kpiUnit },
+                    notes: []
+                }; 
+                setPhases(phases.map(p => p.id === phaseId ? { ...p, tasks: [...p.tasks, task] } : p)); 
+                setNewTask({ title: '', assignee: '', dueDate: '', kpiName: '', kpiTarget: '', kpiUnit: '' }); 
+                setAddingToPhaseId(null); 
+            };
+            
             const toggleTask = (phaseId, taskId) => { setPhases(phases.map(p => p.id === phaseId ? { ...p, tasks: p.tasks.map(t => t.id === taskId ? { ...t, completed: !t.completed } : t) } : p)); };
             const deleteTask = (phaseId, taskId) => { if(confirm("刪除任務？")) { setPhases(phases.map(p => p.id === phaseId ? { ...p, tasks: p.tasks.filter(t => t.id !== taskId) } : p)); } };
             const handleSave = () => { const flatTasks = phases.flatMap(p => p.tasks); onUpdate(project.id, { name: editName, cloudLink: editLink, status: editStatus, stakeholders: editStakeholders, metrics: metrics, phases: phases, subTasks: flatTasks }); onClose(); };
@@ -1107,12 +1519,34 @@
                             </div>
                             <div className="w-full md:w-2/3 p-4 overflow-y-auto bg-slate-50/50 relative">
                                 <div className="flex justify-between items-center mb-6 sticky top-0 bg-slate-50/95 backdrop-blur z-20 py-2 border-b border-slate-200"><h4 className="font-bold text-slate-700 flex items-center gap-2"><Icon name="map" size={18} className="text-blue-600"/> 任務地圖 (Quest Map)</h4><button onClick={addPhase} className="text-xs bg-slate-800 text-white px-3 py-1.5 rounded-lg shadow hover:bg-slate-700 flex items-center gap-1"><Icon name="plus-circle" size={14}/> 新增階段</button></div>
-                                <div className="space-y-0 pl-2 relative pb-20"><div className="absolute left-[21px] top-4 bottom-0 w-0.5 bg-slate-200 z-0"></div>{phases.map((phase, pIndex) => (<div key={phase.id} className="relative z-10 mb-8 animate-in slide-in-from-bottom-4 duration-500" style={{animationDelay: `${pIndex * 100}ms`}}><div className="flex items-center gap-4 mb-4"><div className={`w-10 h-10 rounded-full flex items-center justify-center border-4 border-slate-50 shadow-md z-10 ${phase.tasks.every(t=>t.completed) && phase.tasks.length>0 ? 'bg-green-500 text-white' : 'bg-blue-600 text-white'}`}>{phase.tasks.every(t=>t.completed) && phase.tasks.length>0 ? <Icon name="check" size={20}/> : <span className="font-bold">{pIndex + 1}</span>}</div><div className="flex-1 bg-white p-2 px-4 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center group"><h5 className="font-bold text-slate-800">{phase.name}</h5><button onClick={()=>deletePhase(phase.id)} className="text-slate-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition"><Icon name="trash-2" size={14}/></button></div></div><div className="ml-14 grid grid-cols-1 sm:grid-cols-2 gap-3">{phase.tasks.map(t => (<div key={t.id} onClick={()=>toggleTask(phase.id, t.id)} className={`quest-card bg-white p-3 rounded-xl border-2 cursor-pointer transition-all group relative ${t.completed ? 'border-green-200 bg-green-50/30' : 'border-slate-100 hover:border-blue-200 shadow-sm'}`}><div className="flex items-start gap-3"><div className={`mt-1 w-5 h-5 rounded border flex items-center justify-center transition-colors ${t.completed ? 'bg-green-500 border-green-500 text-white' : 'border-slate-300 bg-slate-50'}`}>{t.completed && <Icon name="check" size={12}/>}</div><div className="flex-1"><div className={`text-sm font-bold mb-1 ${t.completed ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{t.title}</div><div className="flex flex-wrap gap-2 text-[10px] text-slate-400">{t.assignee && <span className="flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded"><Icon name="user" size={10}/> {t.assignee}</span>}{t.dueDate && <span className={`flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded ${new Date(t.dueDate) < new Date() && !t.completed ? 'text-red-500 font-bold' : ''}`}><Icon name="clock" size={10}/> {t.dueDate}</span>}</div></div><button onClick={(e)=>{e.stopPropagation();deleteTask(phase.id, t.id)}} className="absolute top-2 right-2 text-slate-300 hover:text-red-400 opacity-0 group-hover:opacity-100 p-1"><Icon name="trash-2" size={14}/></button></div></div>))}{addingToPhaseId === phase.id ? (<div className="bg-blue-50 border-2 border-blue-200 border-dashed p-3 rounded-xl animate-in zoom-in-95"><input type="text" className="w-full text-xs p-1.5 border rounded mb-2" placeholder="任務名稱..." value={newTask.title} onChange={e=>setNewTask({...newTask, title: e.target.value})} autoFocus onKeyDown={e=>e.key==='Enter'&&addTaskToPhase(phase.id)}/><div className="flex gap-2 mb-2"><input type="text" className="w-1/2 text-xs p-1.5 border rounded" placeholder="負責人" value={newTask.assignee} onChange={e=>setNewTask({...newTask, assignee: e.target.value})}/><input type="date" className="w-1/2 text-xs p-1.5 border rounded" value={newTask.dueDate} onChange={e=>setNewTask({...newTask, dueDate: e.target.value})}/></div><div className="flex gap-2"><button onClick={()=>setAddingToPhaseId(null)} className="flex-1 py-1 text-xs text-slate-500 hover:bg-slate-200 rounded">取消</button><button onClick={()=>addTaskToPhase(phase.id)} className="flex-1 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700">確定</button></div></div>) : (<button onClick={()=>setAddingToPhaseId(phase.id)} className="border-2 border-dashed border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center text-slate-400 hover:border-blue-300 hover:text-blue-500 hover:bg-blue-50 transition-all min-h-[80px]"><Icon name="plus" size={20} className="mb-1"/><span className="text-xs">新增並行任務</span></button>)}</div></div>))}<div className="ml-4 mt-4 relative z-10"><button onClick={addPhase} className="w-10 h-10 rounded-full bg-slate-200 hover:bg-blue-500 hover:text-white text-slate-500 flex items-center justify-center transition-colors shadow-sm mx-auto md:mx-0"><Icon name="plus" size={20}/></button></div></div></div>
+                                <div className="space-y-0 pl-2 relative pb-20"><div className="absolute left-[21px] top-4 bottom-0 w-0.5 bg-slate-200 z-0"></div>{phases.map((phase, pIndex) => (<div key={phase.id} className="relative z-10 mb-8 animate-in slide-in-from-bottom-4 duration-500" style={{animationDelay: `${pIndex * 100}ms`}}><div className="flex items-center gap-4 mb-4"><div className={`w-10 h-10 rounded-full flex items-center justify-center border-4 border-slate-50 shadow-md z-10 ${phase.tasks.every(t=>t.completed) && phase.tasks.length>0 ? 'bg-green-500 text-white' : 'bg-blue-600 text-white'}`}>{phase.tasks.every(t=>t.completed) && phase.tasks.length>0 ? <Icon name="check" size={20}/> : <span className="font-bold">{pIndex + 1}</span>}</div><div className="flex-1 bg-white p-2 px-4 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center group"><h5 className="font-bold text-slate-800">{phase.name}</h5><button onClick={()=>deletePhase(phase.id)} className="text-slate-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition"><Icon name="trash-2" size={14}/></button></div></div><div className="ml-14 grid grid-cols-1 sm:grid-cols-2 gap-3">{phase.tasks.map(t => (<div key={t.id} onClick={() => setEditingTaskInfo({ phaseId: phase.id, task: t })} className={`quest-card bg-white p-3 rounded-xl border-2 cursor-pointer transition-all group relative ${t.completed ? 'border-green-200 bg-green-50/30' : 'border-slate-100 hover:border-blue-200 shadow-sm'}`}><div className="flex items-start gap-3"><div onClick={(e)=>{e.stopPropagation(); toggleTask(phase.id, t.id)}} className={`mt-1 w-5 h-5 rounded border flex items-center justify-center transition-colors ${t.completed ? 'bg-green-500 border-green-500 text-white' : 'border-slate-300 bg-slate-50'}`}>{t.completed && <Icon name="check" size={12}/>}</div><div className="flex-1"><div className={`text-sm font-bold mb-1 ${t.completed ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{t.title}</div><div className="flex flex-wrap gap-2 text-[10px] text-slate-400">{t.assignee && <span className="flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded"><Icon name="user" size={10}/> {t.assignee}</span>}{t.dueDate && <span className={`flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded ${new Date(t.dueDate) < new Date() && !t.completed ? 'text-red-500 font-bold' : ''}`}><Icon name="clock" size={10}/> {t.dueDate}</span>}</div>
+                                {t.kpi?.target && (<div className="mt-2 text-[10px] bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-100 flex items-center gap-1"><Icon name="target" size={10}/> {t.kpi.name || 'KPI'}: {t.kpi.current || '0'} / {t.kpi.target} {t.kpi.unit}</div>)}
+                                </div><button onClick={(e)=>{e.stopPropagation();deleteTask(phase.id, t.id)}} className="absolute top-2 right-2 text-slate-300 hover:text-red-400 opacity-0 group-hover:opacity-100 p-1"><Icon name="trash-2" size={14}/></button></div></div>))}{addingToPhaseId === phase.id ? (<div className="bg-blue-50 border-2 border-blue-200 border-dashed p-3 rounded-xl animate-in zoom-in-95"><input type="text" className="w-full text-xs p-1.5 border rounded mb-2" placeholder="任務名稱..." value={newTask.title} onChange={e=>setNewTask({...newTask, title: e.target.value})} autoFocus onKeyDown={e=>e.key==='Enter'&&addTaskToPhase(phase.id)}/><div className="flex gap-2 mb-2"><input type="text" className="w-1/2 text-xs p-1.5 border rounded" placeholder="負責人" value={newTask.assignee} onChange={e=>setNewTask({...newTask, assignee: e.target.value})}/><input type="date" className="w-1/2 text-xs p-1.5 border rounded" value={newTask.dueDate} onChange={e=>setNewTask({...newTask, dueDate: e.target.value})}/></div>
+                                <div className="grid grid-cols-3 gap-2 mb-2">
+                                    <input type="text" className="text-xs p-1.5 border rounded" placeholder="KPI 名稱" value={newTask.kpiName} onChange={e=>setNewTask({...newTask, kpiName: e.target.value})} />
+                                    <input type="number" className="text-xs p-1.5 border rounded" placeholder="目標值" value={newTask.kpiTarget} onChange={e=>setNewTask({...newTask, kpiTarget: e.target.value})} />
+                                    <input type="text" className="text-xs p-1.5 border rounded" placeholder="單位" value={newTask.kpiUnit} onChange={e=>setNewTask({...newTask, kpiUnit: e.target.value})} />
+                                </div>
+                                <div className="flex gap-2"><button onClick={()=>setAddingToPhaseId(null)} className="flex-1 py-1 text-xs text-slate-500 hover:bg-slate-200 rounded">取消</button><button onClick={()=>addTaskToPhase(phase.id)} className="flex-1 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700">確定</button></div></div>) : (<button onClick={()=>setAddingToPhaseId(phase.id)} className="border-2 border-dashed border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center text-slate-400 hover:border-blue-300 hover:text-blue-500 hover:bg-blue-50 transition-all min-h-[80px]"><Icon name="plus" size={20} className="mb-1"/><span className="text-xs">新增並行任務</span></button>)}</div></div>))}<div className="ml-4 mt-4 relative z-10"><button onClick={addPhase} className="w-10 h-10 rounded-full bg-slate-200 hover:bg-blue-500 hover:text-white text-slate-500 flex items-center justify-center transition-colors shadow-sm mx-auto md:mx-0"><Icon name="plus" size={20}/></button></div></div></div>
                         </div>
                         <div className="flex justify-between items-center p-4 border-t border-slate-100 bg-white z-30">
                             <button onClick={async () => { if(confirm('確定刪除此專案？')) { await onDelete(project.id); onClose(); } }} className="text-red-500 hover:bg-red-50 px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1"><Icon name="trash-2" size={16}/> 刪除專案</button>
                             <div className="flex gap-2"><button onClick={onClose} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg">取消</button><button onClick={handleSave} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-md font-bold tracking-wide">儲存進度</button></div>
                         </div>
+                        {editingTaskInfo && (
+                            <ProjectTaskEditModal 
+                                task={editingTaskInfo.task} 
+                                phaseId={editingTaskInfo.phaseId} 
+                                onClose={() => setEditingTaskInfo(null)}
+                                onSave={(phaseId, taskId, updatedTask) => {
+                                    setPhases(prev => prev.map(p => p.id === phaseId ? {
+                                        ...p,
+                                        tasks: p.tasks.map(t => t.id === taskId ? updatedTask : t)
+                                    } : p));
+                                    setEditingTaskInfo(null);
+                                }}
+                            />
+                        )}
                     </div>
                 </div>
             );
@@ -1283,16 +1717,79 @@
                         {activeTab === 'projects' && (
                             <div className="fade-in max-w-6xl mx-auto pb-20">
                                 <header className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold">專案進度</h2><button onClick={handleAddProject} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition"><Icon name="plus" size={18}/> 新增專案</button></header>
-                                {/* ... (Projects Content - Keep as is) ... */}
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">{['To Do', 'In Progress', 'Stuck'].map(status => { const statusProjects = projects.filter(p => p.status === status); const isStuck = status === 'Stuck'; return (<div key={status} className={`p-5 rounded-3xl border ${isStuck ? 'bg-red-50/50 border-red-100' : 'bg-slate-100/50 border-slate-200/60'}`}><h3 className={`text-sm font-bold uppercase mb-4 flex justify-between items-center ${isStuck ? 'text-red-500' : 'text-slate-500'}`}><span className="flex items-center gap-2">{isStuck && <Icon name="alert-circle" size={16}/>}{status}</span><span className="bg-white px-2.5 py-0.5 rounded-full shadow-sm text-slate-800 text-xs border border-slate-100">{statusProjects.length}</span></h3><div className="space-y-3">{statusProjects.map(p => { const taskCount = p.subTasks ? p.subTasks.length : 0; const completedCount = p.subTasks ? p.subTasks.filter(t => t.completed).length : 0; const progress = taskCount > 0 ? Math.round((completedCount/taskCount)*100) : 0; return (<div key={p.id} onClick={()=>setEditingProject(p)} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition cursor-pointer group relative hover:-translate-y-1 duration-200"><div className="flex justify-between items-start mb-2"><div className={`text-[10px] font-bold px-2 py-0.5 rounded w-fit ${p.status==='Stuck'?'bg-red-100 text-red-600':'bg-blue-50 text-blue-600'}`}>{p.status}</div><button onClick={(e)=>{e.stopPropagation(); handleProjectStatus(p.id, p.status)}} className="text-slate-300 hover:text-blue-500 p-1 rounded-full hover:bg-slate-50"><Icon name="refresh-cw" size={12}/></button></div><div className="font-bold text-slate-800 mb-2 line-clamp-2">{p.name}</div>{taskCount > 0 && (<div className="mb-3"><div className="flex justify-between text-[10px] text-slate-400 mb-1"><span>進度 {completedCount}/{taskCount}</span><span>{progress}%</span></div><div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full transition-all ${p.status==='Stuck'?'bg-red-400':'bg-blue-500'}`} style={{width: `${progress}%`}}></div></div></div>)}{p.stakeholders && (<div className="mb-2 text-xs text-slate-500 flex items-center gap-1 overflow-hidden"><Icon name="users" size={12} className="shrink-0 text-slate-400"/><span className="truncate">{p.stakeholders}</span></div>)}<div className="flex justify-between items-center mt-3 pt-3 border-t border-slate-50"><div className="text-xs text-slate-400 flex items-center gap-2"><span className="flex items-center gap-1 bg-slate-50 px-1.5 py-0.5 rounded"><Icon name="clock" size={10}/> {p.deadline}</span></div><div className="flex gap-1">{p.cloudLink && (<button onClick={(e)=>{e.stopPropagation(); window.open(p.cloudLink, '_blank')}} className="w-6 h-6 rounded-full flex items-center justify-center bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-600 transition" title="開啟雲端連結"><Icon name="external-link" size={12}/></button>)}<div className="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center text-xs font-bold text-slate-600">{p.owner?.[0]}</div></div></div></div>); })}{statusProjects.length === 0 && <div className="text-center text-slate-300 text-xs py-8 border-2 border-dashed border-slate-200/50 rounded-xl">無專案</div>}</div></div>); })}</div><div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm"><h3 className="text-lg font-bold text-slate-700 mb-6 flex items-center gap-2"><div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600"><Icon name="check-circle" size={18}/></div>已完成專案<span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full border border-slate-200">{projects.filter(p => p.status === 'Done').length}</span></h3><div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">{projects.filter(p => p.status === 'Done').map(p => (<div key={p.id} onClick={()=>setEditingProject(p)} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 hover:border-green-300 hover:bg-green-50/30 transition cursor-pointer group opacity-80 hover:opacity-100"><div className="flex justify-between items-center mb-2"><div className="text-[10px] font-bold px-2 py-0.5 rounded bg-green-100 text-green-700">Done</div>{p.cloudLink && (<button onClick={(e)=>{e.stopPropagation(); window.open(p.cloudLink, '_blank')}} className="text-slate-400 hover:text-blue-500"><Icon name="external-link" size={14}/></button>)}</div><div className="font-bold text-slate-600 mb-1">{p.name}</div><div className="text-xs text-slate-400 flex items-center gap-1"><Icon name="calendar" size={10}/> {p.deadline}</div></div>))}{projects.filter(p => p.status === 'Done').length === 0 && (<div className="col-span-full text-center py-8 text-slate-400 text-sm">尚未有完成的專案，加油！🚀</div>)}</div></div></div>
                         )}
 
                         {activeTab === 'dashboard' && <div className="fade-in max-w-6xl mx-auto space-y-8 pb-20"><header className="flex justify-between items-center"><h2 className="text-2xl font-bold">營運儀表板</h2><button onClick={()=>downloadCSV(csvInput, 'full_export.csv')} className="text-sm bg-slate-800 text-white px-4 py-2 rounded-lg flex items-center gap-2"><Icon name="download" size={16}/> 匯出總表 (Excel)</button></header><div className="grid grid-cols-1 md:grid-cols-3 gap-6"><div className="bg-white p-6 rounded-2xl shadow-sm border border-blue-100 relative overflow-hidden"><div className="absolute -right-4 -top-4 text-blue-50 opacity-50"><Icon name="trending-up" size={100}/></div><div className="relative"><div className="text-sm font-bold text-blue-600 mb-1 uppercase tracking-wider">本月營收</div><div className="text-4xl font-bold text-slate-800">${dashboardData.currentMonthRev.toLocaleString()}</div></div></div><div className="bg-white p-6 rounded-2xl shadow-sm border border-indigo-100 relative overflow-hidden"><div className="absolute -right-4 -top-4 text-indigo-50 opacity-50"><Icon name="users" size={100}/></div><div className="relative"><div className="text-sm font-bold text-indigo-600 mb-1 uppercase tracking-wider">本月人次</div><div className="text-4xl font-bold text-slate-800">{dashboardData.currentMonthPax} <span className="text-lg font-normal text-slate-400">人</span></div></div></div><div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><div className="text-sm font-medium text-slate-500 mb-4">歷史總營收</div><div className="text-2xl font-bold text-slate-700">${stats.totalRev.toLocaleString()}</div></div></div><div><h3 className="text-lg font-bold text-slate-700 mb-4">月度營運報表</h3>{Object.entries(dashboardData.monthlyGroups).sort((a,b)=>b[0].localeCompare(a[0])).map(([month, data]) => (<MonthlyReport key={month} month={month} data={data} />))}</div></div>}
-                        
+                       
                         {activeTab === 'stats' && <ActivityPerformance parsedData={parsedData} eventConfigs={eventConfigs} />}
 
-                        {activeTab === 'crm' && <div className="fade-in max-w-6xl mx-auto pb-20"><header className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4"><div><h2 className="text-2xl font-bold text-slate-800">客戶價值分析 (CRM)</h2><p className="text-sm text-slate-500">掌握高價值客戶與平均客單表現</p></div><div className="flex bg-slate-100 p-1 rounded-xl">{[{id:'all', label:'全時段'}, {id:'year', label:'近一年'}, {id:'quarter', label:'近一季'}, {id:'month', label:'近一月'}].map(t => (<button key={t.id} onClick={() => setLtvTimeframe(t.id)} className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${ltvTimeframe === t.id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>{t.label}</button>))}</div></header><div className="grid grid-cols-3 gap-4 mb-6"><div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-4 text-white shadow-lg shadow-blue-200"><div className="text-blue-100 text-xs font-bold mb-1">區間平均 LTV (人均貢獻)</div><div className="text-2xl font-bold">${ltvStats.avgLtv.toLocaleString()}</div></div><div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm"><div className="text-slate-400 text-xs font-bold mb-1">區間總營收</div><div className="text-2xl font-bold text-slate-700">${ltvStats.periodRevenue.toLocaleString()}</div></div><div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm"><div className="text-slate-400 text-xs font-bold mb-1">活躍客戶數</div><div className="text-2xl font-bold text-slate-700">{ltvStats.activeCustomerCount} <span className="text-sm font-normal text-slate-400">人</span></div></div></div><div className="grid grid-cols-1 lg:grid-cols-3 gap-8"><div className="lg:col-span-1 space-y-4"><div className="relative"><Icon name="search" className="absolute left-3 top-3 text-slate-400" size={20}/><input type="text" className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" placeholder="搜尋客戶姓名..." value={crmSearchTerm} onChange={(e) => { setCrmSearchTerm(e.target.value); setShowCrmDropdown(true); setSelectedCustomer(''); }} onFocus={() => setShowCrmDropdown(true)} onBlur={() => setTimeout(() => setShowCrmDropdown(false), 200)} />{showCrmDropdown && crmSearchTerm && (<div className="absolute z-10 w-full bg-white border border-slate-200 rounded-xl shadow-lg mt-1 max-h-60 overflow-y-auto">{filteredCrmCustomers.length > 0 ? (filteredCrmCustomers.map(c => (<div key={c} className="p-3 hover:bg-blue-50 cursor-pointer text-slate-700 flex justify-between items-center" onClick={() => { setSelectedCustomer(c); setCrmSearchTerm(c); setShowCrmDropdown(false); }}><span>{c}</span><span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono">${ltvStats.map[c]?.toLocaleString()}</span></div>))) : (<div className="p-3 text-slate-400 text-sm">無相符客戶</div>)}</div>)}</div><div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"><div className="p-4 border-b border-slate-100 bg-slate-50/50 font-bold text-slate-700 flex justify-between items-center"><span>🏆 LTV 排行榜 ({ltvTimeframe === 'all' ? '全時段' : '區間'})</span></div><div className="max-h-[500px] overflow-y-auto">{ltvStats.sortedCustomers.slice(0, 50).map((name, idx) => (<div key={name} onClick={() => { setSelectedCustomer(name); setCrmSearchTerm(name); }} className={`p-3 flex items-center justify-between border-b border-slate-50 cursor-pointer hover:bg-blue-50 transition-colors ${selectedCustomer === name ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''}`}><div className="flex items-center gap-3"><div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${idx < 3 ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-500'}`}>{idx + 1}</div><span className="text-sm font-medium text-slate-700 truncate max-w-[100px]">{name}</span></div><div className="text-right"><div className="text-sm font-bold text-blue-600">${ltvStats.map[name].toLocaleString()}</div><div className="text-[10px] text-slate-400">{ltvStats.countMap[name]} 次消費</div></div></div>))}</div></div></div><div className="lg:col-span-2">{customerProfile ? (<div className="animate-in fade-in slide-in-from-top-4"><div className="flex flex-col md:flex-row justify-between items-start gap-6 mb-8 pb-8 border-b border-slate-100"><div className="flex items-center gap-6"><div className="w-24 h-24 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-4xl font-bold text-white shadow-lg shrink-0">{selectedCustomer[0]}</div><div><div className="text-3xl font-bold text-slate-800 mb-1">{selectedCustomer}</div><div className="text-sm text-slate-500 flex items-center gap-2"><Icon name="credit-card" size={14}/> LTV (終身價值): <span className="text-blue-600 font-bold">${customerProfile.totalSpend.toLocaleString()}</span></div></div></div><button onClick={() => setEditingRow(customerProfile.latestRecord)} className="text-slate-400 hover:text-blue-600 flex items-center gap-1 text-sm border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition whitespace-nowrap"><Icon name="edit-2" size={14}/> 編輯資料/備註</button></div><div className="flex-1 bg-slate-50 p-4 rounded-xl border border-slate-100 grid grid-cols-2 gap-y-3 gap-x-6 text-sm mb-8"><div><span className="block text-xs text-slate-400 font-bold uppercase">Email</span>{customerProfile.email || '-'}</div><div><span className="block text-xs text-slate-400 font-bold uppercase">手機</span>{customerProfile.phone || '-'}</div><div><span className="block text-xs text-slate-400 font-bold uppercase">身分證</span>{customerProfile.idNo || '-'}</div><div><span className="block text-xs text-slate-400 font-bold uppercase">生日</span>{customerProfile.birthday || '-'}</div><div><span className="block text-xs text-slate-400 font-bold uppercase">常用交通</span>{customerProfile.transport || '-'}</div><div><span className="block text-xs text-slate-400 font-bold uppercase">來源管道</span>{customerProfile.source || '-'}</div><div><span className="block text-xs text-slate-400 font-bold uppercase">社群暱稱</span>{customerProfile.socialName || '-'}</div><div className="col-span-2"><span className="block text-xs text-slate-400 font-bold uppercase">備註</span>{customerProfile.notes || '-'}</div></div><h4 className="font-bold text-slate-700 mb-4">消費歷史 ({customerProfile.history.length})</h4><div className="space-y-2 table-container max-h-[400px] overflow-y-auto">{customerProfile.history.map((h,i) => (<div key={i} className="flex justify-between items-center p-4 border border-slate-100 rounded-xl hover:bg-slate-50 transition"><div><div className="font-bold text-slate-700">{h.eventName}</div><div className="text-xs text-slate-400 mt-1">{h.date} • {h.instructor}</div>{h.orderDate && <div className="text-xs text-blue-500 mt-0.5">📅 下定於: {h.orderDate}</div>}</div><div className="font-mono font-bold text-slate-600">${h.price}</div></div>))}</div></div>) : (<div className="h-full flex flex-col items-center justify-center text-slate-400 bg-white rounded-2xl border border-dashed border-slate-200 min-h-[400px]"><div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4"><Icon name="user-check" size={32} className="text-slate-300"/></div><p className="font-bold">請從左側排行榜選擇一位客戶</p><p className="text-sm mt-1">或使用上方搜尋欄查找</p></div>)}</div></div></div>}
-                        
+                        {activeTab === 'crm' && (
+                            <div className="fade-in max-w-6xl mx-auto pb-20">
+                                <header className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4"><div><h2 className="text-2xl font-bold text-slate-800">客戶價值分析 (CRM)</h2><p className="text-sm text-slate-500">掌握高價值客戶與平均客單表現</p></div><div className="flex bg-slate-100 p-1 rounded-xl">{[{id:'all', label:'全時段'}, {id:'year', label:'近一年'}, {id:'quarter', label:'近一季'}, {id:'month', label:'近一月'}].map(t => (<button key={t.id} onClick={() => setLtvTimeframe(t.id)} className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${ltvTimeframe === t.id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>{t.label}</button>))}</div></header>
+                                <div className="grid grid-cols-3 gap-4 mb-6">
+                                    <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-4 text-white shadow-lg shadow-blue-200"><div className="text-blue-100 text-xs font-bold mb-1">區間平均 LTV (人均貢獻)</div><div className="text-2xl font-bold">${ltvStats.avgLtv.toLocaleString()}</div></div>
+                                    <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm"><div className="text-slate-400 text-xs font-bold mb-1">區間總營收</div><div className="text-2xl font-bold text-slate-700">${ltvStats.periodRevenue.toLocaleString()}</div></div>
+                                    <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm"><div className="text-slate-400 text-xs font-bold mb-1">活躍客戶數</div><div className="text-2xl font-bold text-slate-700">{ltvStats.activeCustomerCount} <span className="text-sm font-normal text-slate-400">人</span></div></div>
+                                </div>
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                    <div className="lg:col-span-1 space-y-4">
+                                        <div className="relative">
+                                            <Icon name="search" className="absolute left-3 top-3 text-slate-400" size={20}/>
+                                            <input type="text" className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" placeholder="搜尋客戶姓名..." value={crmSearchTerm} onChange={(e) => { setCrmSearchTerm(e.target.value); setShowCrmDropdown(true); setSelectedCustomer(''); }} onFocus={() => setShowCrmDropdown(true)} onBlur={() => setTimeout(() => setShowCrmDropdown(false), 200)} />
+                                            {showCrmDropdown && crmSearchTerm && (<div className="absolute z-10 w-full bg-white border border-slate-200 rounded-xl shadow-lg mt-1 max-h-60 overflow-y-auto">{filteredCrmCustomers.length > 0 ? (filteredCrmCustomers.map(c => (<div key={c} className="p-3 hover:bg-blue-50 cursor-pointer text-slate-700 flex justify-between items-center" onClick={() => { setSelectedCustomer(c); setCrmSearchTerm(c); setShowCrmDropdown(false); }}><span>{c}</span><span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono">${ltvStats.map[c]?.toLocaleString()}</span></div>))) : (<div className="p-3 text-slate-400 text-sm">無相符客戶</div>)}</div>)}
+                                        </div>
+                                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"><div className="p-4 border-b border-slate-100 bg-slate-50/50 font-bold text-slate-700 flex justify-between items-center"><span>🏆 LTV 排行榜 ({ltvTimeframe === 'all' ? '全時段' : '區間'})</span></div><div className="max-h-[500px] overflow-y-auto">{ltvStats.sortedCustomers.slice(0, 50).map((name, idx) => (<div key={name} onClick={() => { setSelectedCustomer(name); setCrmSearchTerm(name); }} className={`p-3 flex items-center justify-between border-b border-slate-50 cursor-pointer hover:bg-blue-50 transition-colors ${selectedCustomer === name ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''}`}><div className="flex items-center gap-3"><div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${idx < 3 ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-500'}`}>{idx + 1}</div><span className="text-sm font-medium text-slate-700 truncate max-w-[100px]">{name}</span></div><div className="text-right"><div className="text-sm font-bold text-blue-600">${ltvStats.map[name].toLocaleString()}</div><div className="text-[10px] text-slate-400">{ltvStats.countMap[name]} 次消費</div></div></div>))}</div></div>
+                                    </div>
+                                    <div className="lg:col-span-2">
+                                        {customerProfile ? (
+                                            <div className="animate-in fade-in slide-in-from-top-4">
+                                                <div className="flex flex-col md:flex-row justify-between items-start gap-6 mb-8 pb-8 border-b border-slate-100">
+                                                    <div className="flex items-center gap-6">
+                                                        <div className="w-24 h-24 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-4xl font-bold text-white shadow-lg shrink-0">{selectedCustomer[0]}</div>
+                                                        <div>
+                                                            <div className="text-3xl font-bold text-slate-800 mb-1">{selectedCustomer}</div>
+                                                            <div className="text-sm text-slate-500 flex items-center gap-2"><Icon name="credit-card" size={14}/> LTV (終身價值): <span className="text-blue-600 font-bold">${customerProfile.totalSpend.toLocaleString()}</span></div>
+                                                        </div>
+                                                    </div>
+                                                    <button onClick={() => setEditingRow(customerProfile.latestRecord)} className="text-slate-400 hover:text-blue-600 flex items-center gap-1 text-sm border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition whitespace-nowrap"><Icon name="edit-2" size={14}/> 編輯資料/備註</button>
+                                                </div>
+                                                <div className="flex-1 bg-slate-50 p-4 rounded-xl border border-slate-100 grid grid-cols-2 gap-y-3 gap-x-6 text-sm mb-8">
+                                                    <div><span className="block text-xs text-slate-400 font-bold uppercase">Email</span>{customerProfile.email || '-'}</div>
+                                                    <div><span className="block text-xs text-slate-400 font-bold uppercase">手機</span>{customerProfile.phone || '-'}</div>
+                                                    <div><span className="block text-xs text-slate-400 font-bold uppercase">身分證</span>{customerProfile.idNo || '-'}</div>
+                                                    <div><span className="block text-xs text-slate-400 font-bold uppercase">生日</span>{customerProfile.birthday || '-'}</div>
+                                                    <div><span className="block text-xs text-slate-400 font-bold uppercase">常用交通</span>{customerProfile.transport || '-'}</div>
+                                                    <div><span className="block text-xs text-slate-400 font-bold uppercase">來源管道</span>{customerProfile.source || '-'}</div>
+                                                    <div><span className="block text-xs text-slate-400 font-bold uppercase">社群暱稱</span>{customerProfile.socialName || '-'}</div>
+                                                    <div className="col-span-2"><span className="block text-xs text-slate-400 font-bold uppercase">備註</span>{customerProfile.notes || '-'}</div>
+                                                </div>
+                                                <h4 className="font-bold text-slate-700 mb-4">消費歷史 ({customerProfile.history.length})</h4>
+                                                <div className="space-y-2 table-container max-h-[400px] overflow-y-auto">
+                                                    {customerProfile.history.map((h,i) => (
+                                                        <div key={i} className="flex justify-between items-center p-4 border border-slate-100 rounded-xl hover:bg-slate-50 transition">
+                                                            <div>
+                                                                <div className="font-bold text-slate-700">{h.eventName}</div>
+                                                                <div className="text-xs text-slate-400 mt-1">{h.date} • {h.instructor}</div>
+                                                                {h.orderDate && <div className="text-xs text-blue-500 mt-0.5">📅 下定於: {h.orderDate}</div>}
+                                                            </div>
+                                                            <div className="font-mono font-bold text-slate-600">${h.price}</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="h-full flex flex-col items-center justify-center text-slate-400 bg-white rounded-2xl border border-dashed border-slate-200 min-h-[400px]">
+                                                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4"><Icon name="user-check" size={32} className="text-slate-300"/></div>
+                                                <p className="font-bold">請從左側排行榜選擇一位客戶</p>
+                                                <p className="text-sm mt-1">或使用上方搜尋欄查找</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {activeTab === 'import' && <div className="fade-in max-w-6xl mx-auto space-y-8 pb-20">
                             <header className="flex flex-col md:flex-row justify-between items-center gap-4">
                                 <h2 className="text-2xl font-bold">資料庫與報名管理</h2>
@@ -1306,17 +1803,17 @@
 
                             <details className="group bg-white p-4 rounded-2xl shadow-sm border border-slate-200 transition-all open:ring-2 open:ring-blue-100">
                                 <summary className="flex items-center justify-between cursor-pointer list-none select-none">
-                                        <div className="flex items-center gap-3">
-                                            <div className="bg-blue-50 p-2 rounded-lg text-blue-600"><Icon name="database" size={20}/></div>
-                                            <div className="flex flex-col">
-                                                <span className="font-bold text-slate-700 text-sm">原始 CSV 資料庫</span>
-                                                <span className="text-xs text-slate-400 font-normal">進階全量編輯模式</span>
-                                            </div>
+                                    <div className="flex items-center gap-3">
+                                        <div className="bg-blue-50 p-2 rounded-lg text-blue-600"><Icon name="database" size={20}/></div>
+                                        <div className="flex flex-col">
+                                            <span className="font-bold text-slate-700 text-sm">原始 CSV 資料庫</span>
+                                            <span className="text-xs text-slate-400 font-normal">進階全量編輯模式</span>
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-1 rounded-full group-open:hidden">展開</span>
-                                            <Icon name="chevron-down" size={18} className="text-slate-400 group-open:rotate-180 transition-transform duration-300"/>
-                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-1 rounded-full group-open:hidden">展開</span>
+                                        <Icon name="chevron-down" size={18} className="text-slate-400 group-open:rotate-180 transition-transform duration-300"/>
+                                    </div>
                                 </summary>
                                 <div className="mt-4 pt-4 border-t border-slate-100 animate-in fade-in slide-in-from-top-2">
                                     <textarea className="w-full h-80 p-3 font-mono text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none leading-relaxed tracking-wide" value={csvInput} onChange={e=>setCsvInput(e.target.value)} onFocus={() => isEditingRef.current = true} onBlur={() => isEditingRef.current = false} spellCheck="false" />
@@ -1428,7 +1925,7 @@
                         onDeleteEvent={handleDeleteEvent}
                         globalRules={globalRules}
                         onEditCustomer={(c) => setEditingRow(c)}
-                        tagDefinitions={tagDefinitions} 
+                        tagDefinitions={tagDefinitions}
                         onAddTag={handleAddTagDefinition}
                         parsedData={parsedData}
                         onAddDirectReg={handleAddDirectReg}
@@ -1437,7 +1934,7 @@
                     {editingProject && <ProjectDetailModal 
                         project={editingProject} 
                         onClose={()=>setEditingProject(null)} 
-                        onUpdate={handleUpdateProject} 
+                        onUpdate={handleUpdateProject}
                         onDelete={handleDeleteProject}
                     />}
 
@@ -1455,7 +1952,6 @@
             const root = ReactDOM.createRoot(document.getElementById('root'));
             root.render(<MainApp />);
         } catch (error) {
-
             document.getElementById('root').innerHTML = '<div style="padding:20px;color:red"><h3>系統載入失敗</h3><p>請檢查 console 錯誤訊息。</p></div>';
             console.error("React Render Error:", error);
         }
