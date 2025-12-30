@@ -2263,6 +2263,10 @@ const AnalyticsDashboard = ({ db, dbSource }) => {
             const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
             // [原有] 跑馬燈公告文字 State
             const [latestNews, setLatestNews] = useState(''); 
+const [marqueeIconHistory, setMarqueeIconHistory] = useState([]);
+const [marqueeBgColor, setMarqueeBgColor] = useState('#0f172a'); 
+const [marqueeTextColor, setMarqueeTextColor] = useState('#ffffff'); // 預設白色
+const [marqueeIconSize, setMarqueeIconSize] = useState(24);
             
             // [新增] 跑馬燈速度與圖示 State
             const [marqueeSpeed, setMarqueeSpeed] = useState(20); // 預設 20秒
@@ -2296,7 +2300,11 @@ const AnalyticsDashboard = ({ db, dbSource }) => {
                             
                             // [新增] 讀取速度與圖示設定
                             if (data.marqueeSpeed) setMarqueeSpeed(data.marqueeSpeed);
-                            if (data.marqueeIcon) setMarqueeIcon(data.marqueeIcon);
+                            if (data.marqueeIcon) setMarqueeIcon(data.marqueeIcon); 
+if (data.marqueeIconHistory) setMarqueeIconHistory(data.marqueeIconHistory);
+if (data.marqueeBgColor) setMarqueeBgColor(data.marqueeBgColor);
+if (data.marqueeTextColor) setMarqueeTextColor(data.marqueeTextColor);
+if (data.marqueeIconSize) setMarqueeIconSize(data.marqueeIconSize);
                             if (data.mascotConfig) setMascotConfig(data.mascotConfig); // 讀取吉祥物設定
                             if (!isEditingRef.current) { 
                                 setCsvInput(d); 
@@ -2442,15 +2450,14 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                         <nav className="glass-nav sticky top-0 z-50 px-6 py-4 flex justify-between items-center relative"><Logo className="h-8 w-auto" /><button onClick={() => setShowLoginModal(true)} className="text-sm text-slate-500 hover:text-blue-600 flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors"><Icon name="lock" size={14}/> 管理員登入</button></nav>
                         {/* [修改] 跑馬燈區塊 (支援速度與圖示) */}
                         {latestNews && (
-                            <div className="bg-slate-900 text-white overflow-hidden py-2 relative z-40 marquee-container border-b border-slate-700 shadow-sm">
-                                <div 
-                                    className="animate-marquee font-bold text-sm tracking-wide flex items-center"
-                                    style={{ animationDuration: `${marqueeSpeed}s` }} // 動態控制速度
-                                >
-                                    {/* 如果有設定圖示，就顯示圖示 */}
-                                    {marqueeIcon && (
-                                        <img src={marqueeIcon} className="h-6 w-auto mr-3 -mt-1 pixel-art inline-block" alt="icon" />
-                                    )}
+                            <div className="overflow-hidden py-2 relative z-40 marquee-container border-b border-slate-700 shadow-sm" style={{ backgroundColor: marqueeBgColor, color: marqueeTextColor }}>
+    <div 
+        className="animate-marquee font-bold text-sm tracking-wide flex items-center"
+        style={{ animationDuration: `${marqueeSpeed}s` }}
+    >
+        {marqueeIcon && (
+            <img src={marqueeIcon} className="w-auto mr-3 -mt-1 pixel-art inline-block" style={{ height: `${marqueeIconSize}px` }} alt="icon" />
+        )}
                                     <span className="text-yellow-400 mr-2"> 最新消息：</span>
                                     {latestNews}
                                 </div>
@@ -2836,45 +2843,67 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                                         
                                         <div className="flex-1">
                                             <label className="block text-xs font-bold text-slate-500 mb-1">跑馬燈圖示 (像素風)</label>
-                                            <select 
-                                                className="w-full p-3 border rounded-xl outline-none bg-white"
-                                                value={marqueeIcon}
-                                                onChange={e => setMarqueeIcon(e.target.value)}
-                                            >
-                                                <option value="">(無圖示)</option>
-                                                <option value="eating.gif">🍔 貪吃松鼠</option>
-                                                <option value="cleaning.gif">🧹 打掃松鼠</option>
-                                                <option value="climbing.gif">🧗 攀岩松鼠</option>
-                                                <option value="sliding.gif">🏄 滑行松鼠</option>
-                                                <option value="milking.gif">🥛 喝奶松鼠</option>
-                                            </select>
+                                            <div className="relative">
+    <input 
+        type="text" 
+        list="marquee-icon-history"
+        className="w-full p-3 border rounded-xl outline-none bg-white" 
+        placeholder="輸入新檔名，儲存後會自動加入清單..." 
+        value={marqueeIcon} 
+        onChange={e => setMarqueeIcon(e.target.value)} 
+    />
+    <datalist id="marquee-icon-history">
+        {/* 預設選項 */}
+        <option value="eating.gif">🍔 貪吃松鼠</option>
+        <option value="cleaning.gif">🧹 打掃松鼠</option>
+        <option value="climbing.gif">🧗 攀岩松鼠</option>
+        <option value="sliding.gif">🏄 滑行松鼠</option>
+        <option value="milking.gif">🥛 喝奶松鼠</option>
+        {/* 自動紀錄的歷史選項 */}
+        {marqueeIconHistory.map(icon => (
+            <option key={icon} value={icon}>{icon}</option>
+        ))}
+    </datalist>
+</div>
                                         </div>
 
                                         <div className="flex-1">
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">滾動速度 (秒)</label>
-                                            <div className="flex items-center gap-2">
-                                                <input 
-                                                    type="range" 
-                                                    min="5" max="60" step="1"
-                                                    className="flex-1"
-                                                    value={marqueeSpeed} 
-                                                    onChange={e => setMarqueeSpeed(Number(e.target.value))} 
-                                                />
-                                                <span className="text-sm font-mono w-12 text-right">{marqueeSpeed}s</span>
-                                            </div>
-                                            <div className="text-[10px] text-slate-400">數值越小越快 (建議 15-30)</div>
-                                        </div>
+    <label className="block text-xs font-bold text-slate-500 mb-1">滾動速度 ({marqueeSpeed}s)</label>
+    <input type="range" min="5" max="60" step="1" className="w-full h-10" value={marqueeSpeed} onChange={e => setMarqueeSpeed(Number(e.target.value))} />
+</div>
+
+<div className="w-24">
+    <label className="block text-xs font-bold text-slate-500 mb-1">背景顏色</label>
+    <input type="color" className="w-full h-10 p-1 border rounded-xl cursor-pointer" title="點擊開啟調色盤，可使用滴管" value={marqueeBgColor} onChange={e => setMarqueeBgColor(e.target.value)} />
+</div>
+
+<div className="w-24">
+    <label className="block text-xs font-bold text-slate-500 mb-1">文字顏色</label>
+    <input type="color" className="w-full h-10 p-1 border rounded-xl cursor-pointer" title="點擊開啟調色盤，可使用滴管" value={marqueeTextColor} onChange={e => setMarqueeTextColor(e.target.value)} />
+</div>
+
+<div className="w-24">
+    <label className="block text-xs font-bold text-slate-500 mb-1">圖案大小</label>
+    <input type="number" className="w-full h-10 p-2 border rounded-xl text-center font-bold" value={marqueeIconSize} onChange={e => setMarqueeIconSize(Number(e.target.value))} />
+</div>
 
                                         <button 
                                             onClick={async () => {
-                                                if(!user) return alert("請先登入");
-                                                await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), { 
-                                                    latestNews: latestNews,
-                                                    marqueeSpeed: marqueeSpeed,
-                                                    marqueeIcon: marqueeIcon
-                                                }, { merge: true });
-                                                alert("公告設定已更新！");
-                                            }}
+    if(!user) return alert("請先登入");
+    // 將新檔名加入歷史，並去除重複與空值
+    const newHistory = Array.from(new Set([...marqueeIconHistory, marqueeIcon])).filter(Boolean);
+    await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), { 
+    latestNews: latestNews,
+    marqueeSpeed: marqueeSpeed,
+    marqueeIcon: marqueeIcon,
+    marqueeIconHistory: newHistory,
+    marqueeBgColor: marqueeBgColor,
+    marqueeTextColor: marqueeTextColor,
+    marqueeIconSize: marqueeIconSize
+}, { merge: true });
+    setMarqueeIconHistory(newHistory);
+    alert("公告設定已更新並紀錄圖檔名稱！");
+}}
                                             className="bg-slate-800 text-white px-6 py-3 rounded-xl hover:bg-slate-700 shadow-md font-bold whitespace-nowrap w-full md:w-auto h-[50px]"
                                         >
                                             <Icon name="save" size={18} className="inline mr-2"/>
