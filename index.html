@@ -26,6 +26,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
     <style>
+
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; -webkit-tap-highlight-color: transparent; }
         .fade-in { animation: fadeIn 0.3s ease-in-out; }
@@ -36,7 +37,20 @@
         .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         /* 隱藏 select 的預設箭頭，使用自定義樣式 */
         .custom-select { -webkit-appearance: none; -moz-appearance: none; appearance: none; }
-
+/* --- [新增] 跑馬燈動畫 --- */
+        @keyframes marquee {
+            0% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+        }
+        .animate-marquee {
+            display: inline-block;
+            white-space: nowrap;
+            animation: marquee 20s linear infinite;
+        }
+        /* 當滑鼠移過去時暫停動畫，讓使用者看清楚 */
+        .marquee-container:hover .animate-marquee {
+            animation-play-state: paused;
+        }
         /* 遊戲化樣式 */
         .xp-bar-fill { transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); }
         .quest-card { transition: all 0.2s ease; }
@@ -608,6 +622,271 @@ const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContain
             );
         };
 
+        // [補上遺失的元件] 吉祥物設定 Modal (支援多主題管理)
+        const MascotSettingsModal = ({ currentList, onClose, onSave }) => {
+            // 預設主題資料結構
+            const defaultThemes = [
+                { 
+                    id: 'theme_squirrel', 
+                    name: '飛鼠系列', 
+                    keywords: '飛鼠,滑翔', 
+                    gifs: [
+                        { filename: 'eating.gif', action: '吃東西', weight: 20 },
+                        { filename: 'cleaning.gif', action: '打掃', weight: 35 },
+                        { filename: 'climbing.gif', action: '攀岩', weight: 35 },
+                        { filename: 'sliding.gif', action: '滑行', weight: 8 },
+                        { filename: 'milking.gif', action: '喝奶', weight: 2 }
+                    ]
+                }
+            ];
+
+            // 如果舊資料是陣列且沒有 id (舊版格式 compatibility)，則包裝成預設主題，否則使用新格式
+            const initData = (currentList && Array.isArray(currentList)) 
+                ? (currentList[0] && currentList[0].id ? currentList : defaultThemes) 
+                : defaultThemes;
+
+            const [themes, setThemes] = useState(initData);
+            const [selectedThemeId, setSelectedThemeId] = useState(initData[0]?.id || 'theme_squirrel');
+            
+            // GIF 編輯狀態
+            const [newGif, setNewGif] = useState({ filename: '', action: '', weight: 10 });
+            const [editGifIndex, setEditGifIndex] = useState(null);
+
+            const activeTheme = themes.find(t => t.id === selectedThemeId) || themes[0];
+
+            // --- 主題管理 ---
+            const addTheme = () => {
+                const name = prompt("請輸入新主題名稱 (例如: 蛙類系列)");
+                if (!name) return;
+                const newId = `theme_${Date.now()}`;
+                const newTheme = { id: newId, name, keywords: '', gifs: [] };
+                const newThemes = [...themes, newTheme];
+                setThemes(newThemes);
+                setSelectedThemeId(newId);
+            };
+
+            const deleteTheme = (id) => {
+                if (themes.length <= 1) return alert("至少保留一個主題");
+                if (!confirm("確定刪除此主題及所有設定？")) return;
+                const newThemes = themes.filter(t => t.id !== id);
+                setThemes(newThemes);
+                setSelectedThemeId(newThemes[0].id);
+            };
+
+            const updateThemeInfo = (key, value) => {
+                setThemes(themes.map(t => t.id === selectedThemeId ? { ...t, [key]: value } : t));
+            };
+
+            // --- GIF 管理 ---
+            const handleAddOrUpdateGif = () => {
+                if (!newGif.filename || !newGif.action) return alert("請輸入完整資訊");
+                const gifData = { ...newGif, weight: parseInt(newGif.weight) || 10 };
+                
+                // 確保 activeTheme.gifs 存在
+                const currentGifs = activeTheme.gifs || [];
+                const updatedGifs = [...currentGifs];
+                
+                if (editGifIndex !== null) {
+                    updatedGifs[editGifIndex] = gifData;
+                    setEditGifIndex(null);
+                } else {
+                    updatedGifs.push(gifData);
+                }
+
+                updateThemeInfo('gifs', updatedGifs);
+                setNewGif({ filename: '', action: '', weight: 10 });
+            };
+
+            const startEditGif = (idx) => {
+                setEditGifIndex(idx);
+                setNewGif(activeTheme.gifs[idx]);
+            };
+
+            const removeGif = (idx) => {
+                const updatedGifs = activeTheme.gifs.filter((_, i) => i !== idx);
+                updateThemeInfo('gifs', updatedGifs);
+                if (editGifIndex === idx) {
+                    setEditGifIndex(null);
+                    setNewGif({ filename: '', action: '', weight: 10 });
+                }
+            };
+
+            if (!activeTheme) return null; // 安全檢查
+
+            return (
+                <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 fade-in backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl w-full max-w-4xl p-0 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+                        {/* Header */}
+                        <div className="p-4 border-b flex justify-between items-center bg-slate-50">
+                            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                <Icon name="settings" className="text-pink-500"/> 吉祥物全域設定
+                            </h3>
+                            <button onClick={onClose}><Icon name="x" className="text-slate-400 hover:text-slate-600"/></button>
+                        </div>
+
+                        <div className="flex flex-1 overflow-hidden">
+                            {/* 左側：主題列表 */}
+                            <div className="w-1/3 border-r bg-slate-50 p-4 flex flex-col gap-2 overflow-y-auto">
+                                <div className="text-xs font-bold text-slate-400 mb-2 uppercase">主題列表</div>
+                                {themes.map(t => (
+                                    <div key={t.id} onClick={() => setSelectedThemeId(t.id)} 
+                                        className={`p-3 rounded-xl cursor-pointer transition-all flex justify-between items-center group ${t.id === selectedThemeId ? 'bg-white shadow-md border-l-4 border-l-pink-500 text-slate-800' : 'hover:bg-white text-slate-500'}`}>
+                                        <span className="font-bold text-sm truncate">{t.name}</span>
+                                        <button onClick={(e)=>{e.stopPropagation(); deleteTheme(t.id)}} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500"><Icon name="trash-2" size={14}/></button>
+                                    </div>
+                                ))}
+                                <button onClick={addTheme} className="mt-2 py-2 border-2 border-dashed border-slate-300 rounded-xl text-slate-400 text-xs font-bold hover:bg-white hover:text-pink-500 hover:border-pink-300 transition-all flex justify-center items-center gap-1">
+                                    <Icon name="plus" size={14}/> 新增主題
+                                </button>
+                            </div>
+
+                            {/* 右側：詳細設定 */}
+                            <div className="w-2/3 p-6 overflow-y-auto bg-white">
+                                <div className="space-y-4 mb-6">
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 mb-1 block">主題名稱</label>
+                                        <input type="text" className="w-full p-2 border rounded-lg text-sm" value={activeTheme.name} onChange={e => updateThemeInfo('name', e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 mb-1 block">觸發關鍵字 (用逗號分隔)</label>
+                                        <input type="text" className="w-full p-2 border rounded-lg text-sm bg-yellow-50 focus:bg-white transition-colors" placeholder="例如: 飛鼠, 滑翔, 夜間觀察" value={activeTheme.keywords} onChange={e => updateThemeInfo('keywords', e.target.value)} />
+                                        <p className="text-[10px] text-slate-400 mt-1">當活動名稱包含上述任一關鍵字時，將會顯示下方的 GIF 動畫。</p>
+                                    </div>
+                                </div>
+
+                                <div className="border-t pt-4">
+                                    <div className="flex justify-between items-end mb-2">
+                                        <label className="text-xs font-bold text-slate-500">GIF 動作列表 ({activeTheme.gifs?.length || 0})</label>
+                                    </div>
+                                    
+                                    <div className="space-y-2 mb-4">
+                                        {(!activeTheme.gifs || activeTheme.gifs.length === 0) && <div className="text-center text-slate-400 text-xs py-4 border border-dashed rounded-lg">尚無 GIF，請新增</div>}
+                                        {activeTheme.gifs?.map((gif, idx) => (
+                                            <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg border text-sm ${editGifIndex === idx ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-200' : 'bg-white'}`}>
+                                                <div className="flex-1 font-mono text-xs truncate" title={gif.filename}>{gif.filename}</div>
+                                                <div className="w-20 truncate">{gif.action}</div>
+                                                <div className="w-12 text-center bg-slate-100 rounded text-xs">{gif.weight}</div>
+                                                <div className="flex gap-1">
+                                                    <button onClick={() => startEditGif(idx)} className="p-1 hover:bg-blue-100 rounded text-blue-500"><Icon name="edit-2" size={14}/></button>
+                                                    <button onClick={() => removeGif(idx)} className="p-1 hover:bg-red-100 rounded text-red-500"><Icon name="trash-2" size={14}/></button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <div className={`p-3 rounded-xl border transition-all ${editGifIndex !== null ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200'}`}>
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className={`text-xs font-bold ${editGifIndex !== null ? 'text-blue-600' : 'text-slate-500'}`}>{editGifIndex !== null ? '編輯中...' : '新增動作'}</span>
+                                            {editGifIndex !== null && <button onClick={()=>{setEditGifIndex(null); setNewGif({filename:'', action:'', weight:10})}} className="text-[10px] text-slate-400 underline">取消</button>}
+                                        </div>
+                                        <div className="flex gap-2 mb-2">
+                                            <input type="text" className="flex-[2] p-2 border rounded text-xs" placeholder="檔名 (如: frog.gif)" value={newGif.filename} onChange={e=>setNewGif({...newGif, filename:e.target.value})}/>
+                                            <input type="text" className="flex-[2] p-2 border rounded text-xs" placeholder="動作 (如: 跳水)" value={newGif.action} onChange={e=>setNewGif({...newGif, action:e.target.value})}/>
+                                            <input type="number" className="flex-1 p-2 border rounded text-xs" placeholder="權重" value={newGif.weight} onChange={e=>setNewGif({...newGif, weight:e.target.value})}/>
+                                        </div>
+                                        <button onClick={handleAddOrUpdateGif} className={`w-full py-2 rounded-lg text-xs font-bold text-white shadow-sm ${editGifIndex !== null ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-800 hover:bg-slate-700'}`}>
+                                            {editGifIndex !== null ? '更新 GIF' : '加入列表'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 border-t bg-slate-50 flex justify-end gap-2">
+                            <button onClick={onClose} className="px-4 py-2 text-slate-500 hover:bg-slate-200 rounded-lg text-sm">取消</button>
+                            <button onClick={() => onSave(themes)} className="px-6 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 text-sm shadow-md font-bold">儲存所有設定</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // ✅ 修改後的 EventMascot：支援多主題關鍵字匹配
+const EventMascot = ({ eventName, db, dbSource, dailyStats, config }) => {
+    // 預設主題 (當後台未設定時的備案)
+    const defaultThemes = [
+        { 
+            id: 'default',
+            keywords: '飛鼠,滑翔', // 舊版邏輯的預設關鍵字
+            gifs: [
+                { filename: 'eating.gif', action: '吃東西', weight: 20 },
+                { filename: 'cleaning.gif', action: '打掃', weight: 35 },
+                { filename: 'climbing.gif', action: '攀岩', weight: 35 },
+                { filename: 'sliding.gif', action: '滑行', weight: 8 },
+                { filename: 'milking.gif', action: '喝奶', weight: 2 }
+            ]
+        }
+    ];
+
+    const themes = (config && config.length > 0) ? config : defaultThemes;
+    const hasCounted = useRef(false);
+
+    // 1. 根據 eventName 尋找匹配的主題
+    const matchedTheme = useMemo(() => {
+        if (!eventName) return null;
+        return themes.find(theme => {
+            if (!theme.keywords) return false;
+            // 將關鍵字字串切割成陣列 (支援逗號分隔)
+            const keywords = theme.keywords.split(/[,，、]/).map(k => k.trim()).filter(k => k);
+            // 檢查活動名稱是否包含任一關鍵字
+            return keywords.some(k => eventName.includes(k));
+        });
+    }, [eventName, themes]);
+
+    // 如果沒有匹配到任何主題，就不顯示
+    if (!matchedTheme || !matchedTheme.gifs || matchedTheme.gifs.length === 0) return null;
+
+    // 2. 從匹配主題中，使用加權隨機決定顯示哪張圖
+    const selectedItem = useMemo(() => {
+        const gifList = matchedTheme.gifs;
+        const totalWeight = gifList.reduce((acc, item) => acc + (item.weight || 0), 0);
+        let random = Math.random() * totalWeight;
+        
+        for (const item of gifList) {
+            if (random < item.weight) return item;
+            random -= item.weight;
+        }
+        return gifList[0];
+    }, [matchedTheme]);
+
+    const gifSrc = selectedItem.filename;
+    const actionName = selectedItem.action;
+
+    // 3. 對資料庫該動作 +1
+    useEffect(() => {
+        if (!db || !dbSource || hasCounted.current) return;
+        hasCounted.current = true; 
+
+        const todayStr = getLocalDateStr();
+        const docRef = doc(db, `artifacts/${dbSource}/analytics`, 'stats', 'daily', todayStr);
+        // 將 .gif 轉為 _gif
+        const safeKey = gifSrc.replace(/\./g, '_');
+        
+        setDoc(docRef, {
+            mascots: {
+                [safeKey]: firebase.firestore.FieldValue.increment(1)
+            }
+        }, { merge: true }).catch(console.error);
+
+    }, [db, dbSource, gifSrc]);
+
+    // 4. 讀取數字
+    const safeKey = gifSrc.replace(/\./g, '_');
+    const luckyNumber = (dailyStats && dailyStats.mascots && dailyStats.mascots[safeKey]) ? dailyStats.mascots[safeKey] : 1;
+
+    return (
+        <div className="absolute bottom-0 right-0 z-10 pointer-events-none flex flex-row items-end">
+            <div className="mb-12 mr-[-10px] bg-white/95 border border-slate-200 shadow-lg rounded-2xl rounded-br-none px-3 py-2 text-[10px] leading-tight text-slate-600 animate-in fade-in slide-in-from-bottom-2 duration-700 relative z-20 max-w-[140px]">
+                你是今天第 <span className="text-orange-500 font-bold text-sm">{luckyNumber}</span> 位<br/>
+                看到<span className="text-slate-800 font-bold">{matchedTheme.name?.replace('系列','') || '吉祥物'}</span> <span className="text-blue-600 font-bold">{actionName}</span>！<br/>
+                <span className="text-yellow-500 font-bold">✨ 好幸運 ✨</span>
+            </div>
+            <img src={gifSrc} alt="Mascot" className="w-36 h-36 object-contain relative z-10" />
+        </div>
+    );
+};
+
         const AddEventCustomerModal = ({ eventData, historicalData, onClose, onSave }) => {
             const [form, setForm] = useState({
                 customerName: '',
@@ -774,7 +1053,7 @@ const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContain
             const removeStatusRule = (idx) => { setStatusRules(statusRules.filter((_, i) => i !== idx)); };
 
             const handleSave = () => { 
-                const newInstructorStr = instructors.join(' & ');
+                const newInstructorStr = [...instructors].sort().join(' & ');
                 onSaveConfig({ capacity: parseInt(capacity), tasks, note: eventNote, time: eventTime, link: eventLink, statusRules, displayName, activityCategory, tags }, newInstructorStr); 
                 onClose(); 
             };
@@ -1276,7 +1555,8 @@ const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContain
                 parsedData.forEach(row => {
                     if (row.customerName === '開放報名中') return;
                     
-                    const rowKey = `${row.date}_${row.eventName}_${row.instructor}`.replace(/[\/\\#\?]/g, '-');
+                    const sortedInstr = row.instructor ? row.instructor.split(/[&,]/).map(s=>s.trim()).sort().join(' & ') : '';
+const rowKey = `${row.date}_${row.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-');
                     const config = eventConfigs[rowKey] || {};
                     const tags = config.tags || {};
                     
@@ -1762,36 +2042,7 @@ const EnrollmentMonitor = ({ stats, eventConfigs, tagDefinitions }) => {
                 </div>
             );
         };
-	// ✅ 修改後的 EventMascot：圖變大、無陰影
-const EventMascot = ({ eventName }) => {
-    // 1. 判斷是否為飛鼠活動
-    if (!eventName || !eventName.includes('飛鼠')) return null;
-
-    // 2. 機率邏輯 (保持不變)
-    const gifSrc = useMemo(() => {
-        const rand = Math.random() * 100;
-        if (rand < 20) return 'eating.gif';
-        if (rand < 55) return 'cleaning.gif';
-        if (rand < 90) return 'climbing.gif';
-        if (rand < 98) return 'sliding.gif';
-        return 'milking.gif';
-    }, []);
-
-    // 3. 回傳圖片
-    return (
-        // 修改位置為 bottom-0 right-0 讓大圖貼底
-        <div className="absolute bottom-0 right-0 z-10 pointer-events-none">
-            <img 
-                src={gifSrc} 
-                alt="Mascot" 
-                // 修改樣式：
-                // w-36 h-36: 變大 (原為 w-24 h-24)
-                // 移除了 drop-shadow-md
-                className="w-36 h-36 object-contain" 
-            />
-        </div>
-    );
-};
+	
 // ✅ 新增/修正：取得當地時間的 YYYY-MM-DD 格式
 const getLocalDateStr = () => {
     const d = new Date();
@@ -2010,10 +2261,18 @@ const AnalyticsDashboard = ({ db, dbSource }) => {
             const [showCrmDropdown, setShowCrmDropdown] = useState(false);
             const [newReg, setNewReg] = useState({ date: new Date().toISOString().split('T')[0], eventName: '', instructor: '', customerName: '', price: '', transport: '', idNo: '', birthday: '', email: '', source: '', orderDate: new Date().toISOString().split('T')[0], phone: '' });
             const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+            // [原有] 跑馬燈公告文字 State
+            const [latestNews, setLatestNews] = useState(''); 
             
+            // [新增] 跑馬燈速度與圖示 State
+            const [marqueeSpeed, setMarqueeSpeed] = useState(20); // 預設 20秒
+            const [marqueeIcon, setMarqueeIcon] = useState('');   // 預設無圖
+            const [dailyStats, setDailyStats] = useState({}); // [修改] 改為儲存每日完整統計資料(含吉祥物數據)
+            const [mascotConfig, setMascotConfig] = useState([]); // [新增] 吉祥物設定檔
+            const [showMascotSettings, setShowMascotSettings] = useState(false); // [新增] 控制 Modal 顯示
             const handleDbSourceChange = (newSource) => { setDbSource(newSource); localStorage.setItem('crm_db_source', newSource); };
             const uniqueTransports = useMemo(() => { const defaults = ['共乘', '自行前往']; const existing = new Set(parsedData.map(r => r.transport).filter(Boolean)); return Array.from(new Set([...defaults, ...existing])); }, [parsedData]);
-useVisitorTracker(db, dbSource, viewMode);
+
 
             useEffect(() => { if (auth) { signInAnonymously(auth).catch(console.error); return onAuthStateChanged(auth, u => setUser(u)); } else { setUser({ isAnonymous: true, uid: 'demo' }); } }, []);
             useEffect(() => {
@@ -2025,7 +2284,27 @@ useVisitorTracker(db, dbSource, viewMode);
                     if (settingsRef) { onSnapshot(settingsRef, s => { if (s && s.exists()) { setAdminPassword(s.data().password || '8888'); } else { setAdminPassword('8888'); } }); }
                     const updateParsedData = (raw) => { try { const lines = raw.trim().split('\n'); const data = lines.slice(1).map((line, i) => { const v = line.split(','); if(v.length < 5) return null; return { id: i, date: v[0]?.trim(), eventName: v[1]?.trim(), instructor: v[2]?.trim(), customerName: v[3]?.trim(), price: parseInt(v[4])||0, transport: v[5]?.trim(), idNo: v[6]?.trim(), birthday: v[7]?.trim(), email: v[8]?.trim(), source: v[9]?.trim(), socialName: v[10]?.trim(), notes: v[11]?.trim(), orderDate: v[12]?.trim(), phone: v[13]?.trim(), isCheckedIn: v[14]?.trim() === '1' }; }).filter(Boolean); setParsedData(data); } catch(e) { console.error(e); } };
                     const mainRef = doc(db, basePath, 'settings', 'main');
-                    const unsub1 = onSnapshot(mainRef, s => { if(s && s.exists()) { const data = s.data(); const d = data.csvData || ''; if (data.globalRules) setGlobalRules(data.globalRules); if (data.tagDefinitions) setTagDefinitions(data.tagDefinitions); if (!isEditingRef.current) { setCsvInput(d); updateParsedData(d); } } setLoading(false); });
+                    const unsub1 = onSnapshot(mainRef, s => { 
+                        if(s && s.exists()) { 
+                            const data = s.data(); 
+                            const d = data.csvData || ''; 
+                            if (data.globalRules) setGlobalRules(data.globalRules); 
+                            if (data.tagDefinitions) setTagDefinitions(data.tagDefinitions); 
+                            
+                            // [原有] 讀取跑馬燈資料
+                            if (data.latestNews) setLatestNews(data.latestNews);
+                            
+                            // [新增] 讀取速度與圖示設定
+                            if (data.marqueeSpeed) setMarqueeSpeed(data.marqueeSpeed);
+                            if (data.marqueeIcon) setMarqueeIcon(data.marqueeIcon);
+                            if (data.mascotConfig) setMascotConfig(data.mascotConfig); // 讀取吉祥物設定
+                            if (!isEditingRef.current) { 
+                                setCsvInput(d); 
+                                updateParsedData(d); 
+                            } 
+                        } 
+                        setLoading(false); 
+                    });
                     const templatesRef = doc(db, basePath, 'settings', 'templates');
                     const unsub2 = onSnapshot(templatesRef, s => { if(s && s.exists()) setCustomTemplates(s.data()?.list || []) });
                     const configsRef = collection(db, basePath, 'event_configs');
@@ -2036,7 +2315,13 @@ useVisitorTracker(db, dbSource, viewMode);
                     const unsub5 = onSnapshot(promisesRef, s => { const p = []; if(s) s.forEach(d => p.push({id: d.id, ...d.data()})); setPromises(p.sort((a,b) => new Date(a.date+'T'+a.time) - new Date(b.date+'T'+b.time))); });
                     const scheduleRef = doc(db, basePath, 'settings', 'schedule');
                     const unsub6 = onSnapshot(scheduleRef, s => { if (s && s.exists()) { setInstructorSchedule(s.data().resting || {}); setCompanyRestDates(s.data().companyRest || []); } });
-                    return () => { if(unsub1) unsub1(); if(unsub2) unsub2(); if(unsub3) unsub3(); if(unsub4) unsub4(); if(unsub5) unsub5(); if(unsub6) unsub6(); };
+                    
+                    // [修改] 監聽今日完整統計資料 (含吉祥物計數)
+                    const todayStr = getLocalDateStr();
+                    const analyticsRef = doc(db, `artifacts/${dbSource}/analytics`, 'stats', 'daily', todayStr);
+                    const unsub7 = onSnapshot(analyticsRef, s => { if(s && s.exists()) setDailyStats(s.data() || {}); });
+
+                    return () => { if(unsub1) unsub1(); if(unsub2) unsub2(); if(unsub3) unsub3(); if(unsub4) unsub4(); if(unsub5) unsub5(); if(unsub6) unsub6(); if(unsub7) unsub7(); };
                 } else { setLoading(false); console.warn("Running in offline/demo mode"); }
             }, [user, dbSource]);
 
@@ -2053,7 +2338,7 @@ useVisitorTracker(db, dbSource, viewMode);
             const handleAddDirectReg = async (eventInfo, customerData) => { let currentData = csvInput.trim(); if (!currentData || !currentData.startsWith("日期")) { currentData = CSV_HEADER + "\n" + currentData; } const newRow = `\n${eventInfo.date},${eventInfo.eventName},${eventInfo.instructor},${customerData.customerName},${customerData.price},${customerData.transport},${customerData.idNo},${customerData.birthday},${customerData.email},${customerData.source},,${toCSVField(customerData.notes)},${customerData.orderDate},${customerData.phone},0`; const updatedCSV = currentData + newRow; await handleSaveCSV(updatedCSV); };
             const handleCreateEvent = async ({ dates, eventName, instructors, time, link, displayName, activityCategory, tags, capacity }) => { 
                 let rows = ''; 
-                const instr = instructors.join(' & '); 
+                const instr = [...instructors].sort().join(' & ');
                 dates.forEach(d => rows += `\n${d},${eventName},${instr},開放報名中,0,,,,,,,,,0`); 
                 await handleSaveCSV(csvInput + rows); 
                 const batch = writeBatch(db); 
@@ -2121,7 +2406,8 @@ useVisitorTracker(db, dbSource, viewMode);
                     alert("❌ 初始化失敗，請檢查 Console 錯誤訊息");
                 }
             };
-            const stats = useMemo(() => { const totalRev = parsedData.reduce((a,c) => a + c.price, 0); const events = {}; const instrs = {}; parsedData.forEach(c => { const key = `${c.date}_${c.eventName}_${c.instructor}`.replace(/[\/\\#\?]/g, '-'); if(!events[key]) events[key] = { ...c, count: 0, customers: [], key }; if(c.customerName !== '開放報名中') { events[key].count++; events[key].customers.push(c); } if(c.instructor) c.instructor.split(/[&,]/).forEach(i => { const name = i.trim(); if(name && name !== '未定') instrs[name] = (instrs[name]||0)+1; }); }); return { totalRev, totalPax: parsedData.length, events, instrs }; }, [parsedData]);
+            const stats = useMemo(() => { const totalRev = parsedData.reduce((a,c) => a + c.price, 0); const events = {}; const instrs = {}; parsedData.forEach(c => { const sortedInstr = c.instructor ? c.instructor.split(/[&,]/).map(s=>s.trim()).sort().join(' & ') : '';
+const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-'); if(!events[key]) events[key] = { ...c, count: 0, customers: [], key }; if(c.customerName !== '開放報名中') { events[key].count++; events[key].customers.push(c); } if(c.instructor) c.instructor.split(/[&,]/).forEach(i => { const name = i.trim(); if(name && name !== '未定') instrs[name] = (instrs[name]||0)+1; }); }); return { totalRev, totalPax: parsedData.length, events, instrs }; }, [parsedData]);
             const dashboardData = useMemo(() => { const now = new Date(); const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`; const monthlyGroups = {}; parsedData.forEach(c => { if (!c.date) return; const m = c.date.substring(0, 7); if (c.customerName === '開放報名中') return; if (!monthlyGroups[m]) monthlyGroups[m] = []; monthlyGroups[m].push(c); }); const currentMonthData = monthlyGroups[currentMonthStr] || []; const currentMonthRev = currentMonthData.reduce((a,c)=>a+c.price,0); const currentMonthPax = currentMonthData.length; return { monthlyGroups, currentMonthRev, currentMonthPax }; }, [parsedData]);
             const tasks = useMemo(() => { const list = []; Object.values(stats.events).forEach(evt => { const cfg = eventConfigs[evt.key] || {}; const tList = cfg.tasks || DEFAULT_TASKS_TEMPLATE; tList.forEach((t, i) => { if(!t.completed) list.push({ ...t, taskIdx: i, evtDate: evt.date, evtName: evt.eventName, cfgKey: evt.key, style: getTaskStatusStyle(t.type, evt.date), fullEvent: evt }); }); }); return list.sort((a,b) => new Date(a.evtDate) - new Date(b.evtDate)); }, [stats.events, eventConfigs]);
             const toggleTask = async (key, idx) => { const cfg = eventConfigs[key] || {}; const tList = cfg.tasks || JSON.parse(JSON.stringify(DEFAULT_TASKS_TEMPLATE)); tList[idx].completed = !tList[idx].completed; await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', key), { ...cfg, tasks: tList }, { merge: true }); };
@@ -2136,7 +2422,7 @@ useVisitorTracker(db, dbSource, viewMode);
             const groupedTasks = useMemo(() => { return tasks.reduce((acc, task) => { const groupKey = task.name; if (!acc[groupKey]) acc[groupKey] = []; acc[groupKey].push(task); return acc; }, {}); }, [tasks]);
             const checkEventMatchesFilters = (eventKey, filters = publicFilters) => { if (filters.level.length === 0 && filters.type.length === 0 && filters.location.length === 0) return true; const cfg = eventConfigs[eventKey] || {}; const tags = cfg.tags || {}; const matchLevel = filters.level.length === 0 || filters.level.includes(tags.levels); const matchType = filters.type.length === 0 || filters.type.includes(tags.types); const matchLocation = filters.location.length === 0 || filters.location.includes(tags.locations); return matchLevel && matchType && matchLocation; };
             const availableOptions = useMemo(() => { const result = { levels: new Set(), types: new Set(), locations: new Set() }; const allEvents = Object.values(stats.events); allEvents.forEach(e => { const cfg = eventConfigs[e.key] || {}; const t = cfg.tags || {}; const matchType = publicFilters.type.length === 0 || publicFilters.type.includes(t.types); const matchLocation = publicFilters.location.length === 0 || publicFilters.location.includes(t.locations); if (matchType && matchLocation && t.levels) result.levels.add(t.levels); }); allEvents.forEach(e => { const cfg = eventConfigs[e.key] || {}; const t = cfg.tags || {}; const matchLevel = publicFilters.level.length === 0 || publicFilters.level.includes(t.levels); const matchLocation = publicFilters.location.length === 0 || publicFilters.location.includes(t.locations); if (matchLevel && matchLocation && t.types) result.types.add(t.types); }); allEvents.forEach(e => { const cfg = eventConfigs[e.key] || {}; const t = cfg.tags || {}; const matchLevel = publicFilters.level.length === 0 || publicFilters.level.includes(t.levels); const matchType = publicFilters.type.length === 0 || publicFilters.type.includes(t.types); if (matchLevel && matchType && t.locations) result.locations.add(t.locations); }); return result; }, [stats.events, eventConfigs, publicFilters]);
-            const matchingDates = useMemo(() => { if (!publicSearchTerm) return []; return Object.values(stats.events).filter(e => { const cfg = eventConfigs[e.key] || {}; const nameToCheck = cfg.displayName || e.eventName; if (!checkEventMatchesFilters(e.key)) return false; return nameToCheck.includes(publicSearchTerm) || (e.instructor && e.instructor.includes(publicSearchTerm)); }).map(e => e.date).sort(); }, [publicSearchTerm, stats.events, eventConfigs, publicFilters]);
+            const matchingDates = useMemo(() => { const filtersActive = publicFilters.level.length > 0 || publicFilters.type.length > 0 || publicFilters.location.length > 0; if (!publicSearchTerm && !filtersActive) return []; return Object.values(stats.events).filter(e => { const cfg = eventConfigs[e.key] || {}; const nameToCheck = cfg.displayName || e.eventName; if (!checkEventMatchesFilters(e.key)) return false; if (publicSearchTerm) { return nameToCheck.includes(publicSearchTerm) || (e.instructor && e.instructor.includes(publicSearchTerm)); } return true; }).map(e => e.date).sort(); }, [publicSearchTerm, stats.events, eventConfigs, publicFilters]);
             const matchingMonths = useMemo(() => { const months = new Set(matchingDates.map(d => d.substring(0, 7))); return Array.from(months); }, [matchingDates]);
             const toggleFilter = (type, value) => { setPublicFilters(prev => { const list = prev[type]; if (list.includes(value)) { return { ...prev, [type]: list.filter(item => item !== value) }; } else { return { ...prev, [type]: [...list, value] }; } }); };
             const clearFilters = () => setPublicFilters({ level: [], type: [], location: [] });
@@ -2154,7 +2440,24 @@ useVisitorTracker(db, dbSource, viewMode);
                        
 
                         <nav className="glass-nav sticky top-0 z-50 px-6 py-4 flex justify-between items-center relative"><Logo className="h-8 w-auto" /><button onClick={() => setShowLoginModal(true)} className="text-sm text-slate-500 hover:text-blue-600 flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors"><Icon name="lock" size={14}/> 管理員登入</button></nav>
+                        {/* [修改] 跑馬燈區塊 (支援速度與圖示) */}
+                        {latestNews && (
+                            <div className="bg-slate-900 text-white overflow-hidden py-2 relative z-40 marquee-container border-b border-slate-700 shadow-sm">
+                                <div 
+                                    className="animate-marquee font-bold text-sm tracking-wide flex items-center"
+                                    style={{ animationDuration: `${marqueeSpeed}s` }} // 動態控制速度
+                                >
+                                    {/* 如果有設定圖示，就顯示圖示 */}
+                                    {marqueeIcon && (
+                                        <img src={marqueeIcon} className="h-6 w-auto mr-3 -mt-1 pixel-art inline-block" alt="icon" />
+                                    )}
+                                    <span className="text-yellow-400 mr-2"> 最新消息：</span>
+                                    {latestNews}
+                                </div>
+                            </div>
+                        )}
                         
+                        {/* ... 原本的中間搜尋與篩選器 JSX ... */}
                         {/* ...省略中間的搜尋與篩選器 JSX (保持原樣)... */}
                         
                         <div className="bg-amber-50 text-amber-800 text-xs py-2 px-4 text-center font-bold border-b border-amber-100 flex items-center justify-center gap-2 relative z-10"><Icon name="alert-circle" size={14}/> 系統人數更新可能有延遲，準確名額請以點擊「前往報名」後的表單為主</div>
@@ -2168,7 +2471,7 @@ useVisitorTracker(db, dbSource, viewMode);
                             <div className="mb-6 bg-white p-5 rounded-2xl border border-slate-100 shadow-sm"><div className="flex justify-between items-center mb-4"><h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Icon name="filter" size={18} className="text-blue-500"/> 活動篩選</h3>{hasActiveFilters && (<button onClick={clearFilters} className="text-xs text-red-500 hover:bg-red-50 px-2 py-1 rounded-lg transition-colors flex items-center gap-1"><Icon name="x" size={14}/> 重置條件</button>)}</div><div className="space-y-4"><div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4"><span className="text-xs font-bold text-slate-400 w-12 shrink-0 flex items-center gap-1"><Icon name="bar-chart-2" size={12}/> 等級</span><div className="flex flex-wrap gap-2">{(tagDefinitions.levels || []).map(t => { const isActive = publicFilters.level.includes(t); const isAvailable = availableOptions.levels.has(t); return ( <button key={t} onClick={() => toggleFilter('level', t)} disabled={!isAvailable && !isActive} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${ isActive ? 'bg-blue-600 text-white border-blue-600 shadow-md ring-2 ring-blue-100' : !isAvailable ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-blue-300' }`} > {t} </button> ); })}</div></div><div className="border-t border-slate-50 my-2"></div><div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4"><span className="text-xs font-bold text-slate-400 w-12 shrink-0 flex items-center gap-1"><Icon name="tag" size={12}/> 種類</span><div className="flex flex-wrap gap-2">{(tagDefinitions.types || []).map(t => { const isActive = publicFilters.type.includes(t); const isAvailable = availableOptions.types.has(t); return ( <button key={t} onClick={() => toggleFilter('type', t)} disabled={!isAvailable && !isActive} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${ isActive ? 'bg-emerald-600 text-white border-emerald-600 shadow-md ring-2 ring-emerald-100' : !isAvailable ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-emerald-300' }`} > {t} </button> ); })}</div></div><div className="border-t border-slate-50 my-2"></div><div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4"><span className="text-xs font-bold text-slate-400 w-12 shrink-0 flex items-center gap-1"><Icon name="map-pin" size={12}/> 地點</span><div className="flex flex-wrap gap-2">{(tagDefinitions.locations || []).map(t => { const isActive = publicFilters.location.includes(t); const isAvailable = availableOptions.locations.has(t); return ( <button key={t} onClick={() => toggleFilter('location', t)} disabled={!isAvailable && !isActive} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${ isActive ? 'bg-purple-600 text-white border-purple-600 shadow-md ring-2 ring-purple-100' : !isAvailable ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-purple-300' }`} > {t} </button> ); })}</div></div></div></div>
 
                             {/* 月曆搜尋結果提示 (保持原樣) */}
-                            {publicSearchTerm && matchingMonths.length > 0 && (<div className="mb-6 flex flex-wrap gap-2 animate-in fade-in slide-in-from-top-2"><span className="text-xs text-slate-400 py-1.5 flex items-center"><Icon name="search" size={12} className="mr-1"/> 搜尋結果分布於：</span>{matchingMonths.sort().map(m => { const isCurrentView = m === currentMonthStr; return (<button key={m} onClick={() => { const [y, mon] = m.split('-'); setCurrentDate(new Date(parseInt(y), parseInt(mon)-1, 1)); }} className={`text-xs px-3 py-1.5 rounded-full font-bold transition-all flex items-center gap-1 ${isCurrentView ? 'bg-slate-800 text-white shadow-md ring-2 ring-slate-200' : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'}`} >{m} {!isCurrentView && <Icon name="arrow-right" size={12}/>}</button>); })}</div>)}
+                            {(publicSearchTerm || hasActiveFilters) && matchingMonths.length > 0 && (<div className="mb-6 flex flex-wrap gap-2 animate-in fade-in slide-in-from-top-2"><span className="text-xs text-slate-400 py-1.5 flex items-center"><Icon name="search" size={12} className="mr-1"/> 符合條件的月份：</span>{matchingMonths.sort().map(m => { const isCurrentView = m === currentMonthStr; return (<button key={m} onClick={() => { const [y, mon] = m.split('-'); setCurrentDate(new Date(parseInt(y), parseInt(mon)-1, 1)); }} className={`text-xs px-3 py-1.5 rounded-full font-bold transition-all flex items-center gap-1 ${isCurrentView ? 'bg-slate-800 text-white shadow-md ring-2 ring-slate-200' : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'}`} >{m} {!isCurrentView && <Icon name="arrow-right" size={12}/>}</button>); })}</div>)}
                             
                             {/* [修改] 圖例說明：增加「額滿」 */}
                             {!publicSearchTerm && !hasActiveFilters && <div className="flex justify-center gap-4 mb-4 text-xs text-slate-400"><div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span> 有活動</div><div className="flex items-center gap-1"><span className="text-red-500 font-bold text-[10px]">額滿</span> 已額滿</div><div className="flex items-center gap-1"><span className="text-slate-300 font-bold">✕</span> 公休</div></div>}
@@ -2319,10 +2622,10 @@ useVisitorTracker(db, dbSource, viewMode);
                     </button>
                 )}
 
-                {/* 🐿️ 吉祥物組件 (保持在右下角) */}
-                <EventMascot eventName={displayName} />
+                {/* 🐿️ 吉祥物組件 (傳入設定檔) */}
+                <EventMascot eventName={displayName} db={db} dbSource={dbSource} dailyStats={dailyStats} config={mascotConfig} />
             </div>
-        </div>  // <--- 這裡是關鍵！補上這個遺失的結束標籤
+        </div>  
     );
 })) : (<div className="text-center py-12 bg-slate-50 rounded-3xl border border-dashed border-slate-200"><div className="text-4xl mb-2">📅</div><div className="text-slate-400 font-medium">{hasActiveFilters ? '此篩選條件下無活動' : '本日無活動'}</div><div className="text-slate-300 text-sm mt-1">請點選其他有藍點的日期</div></div>))}
                             </div>
@@ -2435,7 +2738,8 @@ useVisitorTracker(db, dbSource, viewMode);
                                     <select className="text-xs p-1 border rounded" onChange={e=>handleDbSourceChange(e.target.value)} value={dbSource}><option value="crm-system-v1">v1 (您的真實資料)</option><option value="default-app-id">Default (舊版測試)</option></select>
                                     <button onClick={()=>setShowGlobalRules(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 shadow-md whitespace-nowrap"><Icon name="settings" size={18}/> 預設狀態規則</button>
                                     <button onClick={()=>setShowTagSettings(true)} className="bg-emerald-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-emerald-700 shadow-md whitespace-nowrap"><Icon name="tag" size={18}/> 活動標籤設定</button>
-                                    
+                                    {/* 新增：吉祥物設定按鈕 */}
+                                    <button onClick={()=>setShowMascotSettings(true)} className="bg-pink-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-pink-700 shadow-md whitespace-nowrap"><Icon name="smile" size={18}/> 吉祥物設定</button>
                                     {/* 👇 新增這顆按鈕 👇 */}
                                     <button onClick={handleInitializeAnalytics} className="bg-orange-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-orange-600 shadow-md whitespace-nowrap"><Icon name="refresh-cw" size={18}/> 初始化流量數據</button>
                                 </div>
@@ -2510,8 +2814,76 @@ useVisitorTracker(db, dbSource, viewMode);
                                     </table>
                                 </div>
                             </div>
-                            
-                            <section>
+                            {/* [修改] 跑馬燈設定區塊 (包含速度與圖示) */}
+                            <section className="mb-8">
+                                <h2 className="text-2xl font-bold mb-4">📢 前台公告設定</h2>
+                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-4">
+                                    
+                                    {/* 第一列：文字輸入 */}
+                                    <div className="w-full">
+                                        <label className="block text-xs font-bold text-slate-500 mb-1">跑馬燈內容</label>
+                                        <input 
+                                            type="text" 
+                                            className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" 
+                                            placeholder="輸入要顯示在首頁上方的最新消息..." 
+                                            value={latestNews} 
+                                            onChange={e => setLatestNews(e.target.value)} 
+                                        />
+                                    </div>
+
+                                    {/* 第二列：進階設定 (速度 & 圖示 & 儲存按鈕) */}
+                                    <div className="flex flex-col md:flex-row gap-4 items-end">
+                                        
+                                        <div className="flex-1">
+                                            <label className="block text-xs font-bold text-slate-500 mb-1">跑馬燈圖示 (像素風)</label>
+                                            <select 
+                                                className="w-full p-3 border rounded-xl outline-none bg-white"
+                                                value={marqueeIcon}
+                                                onChange={e => setMarqueeIcon(e.target.value)}
+                                            >
+                                                <option value="">(無圖示)</option>
+                                                <option value="eating.gif">🍔 貪吃松鼠</option>
+                                                <option value="cleaning.gif">🧹 打掃松鼠</option>
+                                                <option value="climbing.gif">🧗 攀岩松鼠</option>
+                                                <option value="sliding.gif">🏄 滑行松鼠</option>
+                                                <option value="milking.gif">🥛 喝奶松鼠</option>
+                                            </select>
+                                        </div>
+
+                                        <div className="flex-1">
+                                            <label className="block text-xs font-bold text-slate-500 mb-1">滾動速度 (秒)</label>
+                                            <div className="flex items-center gap-2">
+                                                <input 
+                                                    type="range" 
+                                                    min="5" max="60" step="1"
+                                                    className="flex-1"
+                                                    value={marqueeSpeed} 
+                                                    onChange={e => setMarqueeSpeed(Number(e.target.value))} 
+                                                />
+                                                <span className="text-sm font-mono w-12 text-right">{marqueeSpeed}s</span>
+                                            </div>
+                                            <div className="text-[10px] text-slate-400">數值越小越快 (建議 15-30)</div>
+                                        </div>
+
+                                        <button 
+                                            onClick={async () => {
+                                                if(!user) return alert("請先登入");
+                                                await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), { 
+                                                    latestNews: latestNews,
+                                                    marqueeSpeed: marqueeSpeed,
+                                                    marqueeIcon: marqueeIcon
+                                                }, { merge: true });
+                                                alert("公告設定已更新！");
+                                            }}
+                                            className="bg-slate-800 text-white px-6 py-3 rounded-xl hover:bg-slate-700 shadow-md font-bold whitespace-nowrap w-full md:w-auto h-[50px]"
+                                        >
+                                            <Icon name="save" size={18} className="inline mr-2"/>
+                                            儲存設定
+                                        </button>
+                                    </div>
+                                </div>
+                            </section>
+				<section>
                                 <h2 className="text-2xl font-bold mb-6">新增報名資料</h2>
                                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4"><div><label className="block text-xs font-bold text-slate-500 mb-1">日期 *</label><input type="date" className="w-full p-2 border rounded-lg" value={newReg.date} onChange={e=>setNewReg({...newReg, date: e.target.value})} /></div><div><label className="block text-xs font-bold text-slate-500 mb-1">活動名稱 *</label><input type="text" className="w-full p-2 border rounded-lg" placeholder="例如: 登山團" value={newReg.eventName} onChange={e=>setNewReg({...newReg, eventName: e.target.value})} /></div><div><label className="block text-xs font-bold text-slate-500 mb-1">講師</label><input type="text" className="w-full p-2 border rounded-lg" placeholder="講師姓名" value={newReg.instructor} onChange={e=>setNewReg({...newReg, instructor: e.target.value})} /></div></div>
@@ -2581,6 +2953,9 @@ useVisitorTracker(db, dbSource, viewMode);
                     {showGlobalRules && <GlobalRulesModal currentRules={globalRules} onClose={()=>setShowGlobalRules(false)} onSave={async (newRules) => { await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), { globalRules: newRules }, { merge: true }); setShowGlobalRules(false); }} />}
                     
                     {showTagSettings && <TagSettingsModal currentDefs={tagDefinitions} onClose={()=>setShowTagSettings(false)} onSave={async (newDefs) => { await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), { tagDefinitions: newDefs }, { merge: true }); setShowTagSettings(false); }} />}
+                    
+                    {/* 新增：吉祥物設定 Modal */}
+                    {showMascotSettings && <MascotSettingsModal currentList={mascotConfig} onClose={()=>setShowMascotSettings(false)} onSave={async (newList) => { await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), { mascotConfig: newList }, { merge: true }); setShowMascotSettings(false); }} />}
                     
                     {editingRow && <EditRowModal rowData={editingRow} existingTransports={uniqueTransports} onClose={()=>setEditingRow(null)} onSave={handleUpdateRow} onDelete={(id) => { handleDeleteRow(id); setEditingRow(null); }} />}
                     {showLoginModal && <LoginModal onClose={()=>setShowLoginModal(false)} onLogin={handleVerifyLogin} />}
