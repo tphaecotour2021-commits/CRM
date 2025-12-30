@@ -307,11 +307,11 @@ const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContain
             if (capacity > 0 && count >= capacity) {
                 return { label: '🈵 已額滿', color: 'slate', colorObj: COLOR_OPTIONS.find(c => c.value === 'slate'), isFull: true };
             }
-            const rules = (config && config.statusRules && config.statusRules.length > 0) ? config.statusRules : (globalRules || DEFAULT_STATUS_RULES);
-            const matchedRule = rules.find(r => count >= parseInt(r.min) && count <= parseInt(r.max));
+            const rules = Array.isArray(config?.statusRules) && config.statusRules.length > 0 ? config.statusRules : (Array.isArray(globalRules) ? globalRules : DEFAULT_STATUS_RULES);
+const matchedRule = rules.find(r => r && count >= parseInt(r.min) && count <= parseInt(r.max));
             if (matchedRule) {
                 const colorObj = COLOR_OPTIONS.find(c => c.value === matchedRule.color) || COLOR_OPTIONS[0];
-                return { label: matchedRule.label, color: matchedRule.color, colorObj, isFull: false };
+return { label: matchedRule.label || '報名中', color: matchedRule.color || 'blue', colorObj: colorObj || COLOR_OPTIONS[0], isFull: false };
             }
             return { label: '報名中', color: 'blue', colorObj: COLOR_OPTIONS[0], isFull: false };
         };
@@ -819,7 +819,7 @@ const EventMascot = ({ eventName, db, dbSource, dailyStats, config }) => {
         }
     ];
 
-    const themes = (config && config.length > 0) ? config : defaultThemes;
+    const themes = Array.isArray(config) && config.length > 0 ? config : defaultThemes;
     const hasCounted = useRef(false);
 
     // 1. 根據 eventName 尋找匹配的主題
@@ -828,9 +828,9 @@ const EventMascot = ({ eventName, db, dbSource, dailyStats, config }) => {
         return themes.find(theme => {
             if (!theme.keywords) return false;
             // 將關鍵字字串切割成陣列 (支援逗號分隔)
-            const keywords = theme.keywords.split(/[,，、]/).map(k => k.trim()).filter(k => k);
-            // 檢查活動名稱是否包含任一關鍵字
-            return keywords.some(k => eventName.includes(k));
+            const keywords = String(theme.keywords || '').split(/[,，、]/).map(k => k.trim()).filter(k => k);
+// 檢查活動名稱是否包含任一關鍵字
+return keywords.some(k => String(eventName || '').includes(k));
         });
     }, [eventName, themes]);
 
@@ -839,19 +839,22 @@ const EventMascot = ({ eventName, db, dbSource, dailyStats, config }) => {
 
     // 2. 從匹配主題中，使用加權隨機決定顯示哪張圖
     const selectedItem = useMemo(() => {
-        const gifList = matchedTheme.gifs;
-        const totalWeight = gifList.reduce((acc, item) => acc + (item.weight || 0), 0);
+        const gifList = matchedTheme?.gifs || [];
+        if (gifList.length === 0) return null;
+        const totalWeight = gifList.reduce((acc, item) => acc + (Number(item.weight) || 0), 0);
+        if (totalWeight <= 0) return gifList[0];
         let random = Math.random() * totalWeight;
-        
         for (const item of gifList) {
-            if (random < item.weight) return item;
-            random -= item.weight;
+            if (random < (Number(item.weight) || 0)) return item;
+            random -= (Number(item.weight) || 0);
         }
         return gifList[0];
     }, [matchedTheme]);
 
-    const gifSrc = selectedItem.filename;
-    const actionName = selectedItem.action;
+    const gifSrc = selectedItem?.filename || '';
+    const actionName = selectedItem?.action || '';
+
+    if (!gifSrc) return null;
 
     // 3. 對資料庫該動作 +1
     useEffect(() => {
@@ -2559,24 +2562,24 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                             {/* ...下方活動列表保持原樣... */}
                             <div className="space-y-4 fade-in">
                                 {/* ...活動列表內容... */}
-                                <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2 border-l-4 border-blue-500 pl-3">{selectedPublicDate} 活動列表</h3>{companyRestDates.includes(selectedPublicDate) ? (<div className="text-center py-12 bg-red-50 rounded-3xl border border-red-100"><div className="text-4xl mb-2">😴</div><div className="text-red-400 font-bold">本日全公司公休</div><div className="text-red-300 text-sm mt-1">我們休息充電中，請改期再來喔！</div></div>) : (selectedDayEvents.length > 0 ? (selectedDayEvents.map((e, idx) => {
+                                <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2 border-l-4 border-blue-500 pl-3">{selectedPublicDate} 活動列表</h3>{companyRestDates.includes(selectedPublicDate) ? (<div className="text-center py-12 bg-red-50 rounded-3xl border border-red-100"><div className="text-4xl mb-2">😴</div><div className="text-red-400 font-bold">本日全公司公休</div><div className="text-red-300 text-sm mt-1">我們休息充電中，請改期再來喔！</div></div>) : (selectedDayEvents.length > 0 ? (selectedDayEvents.map((e) => {
     const cfg = eventConfigs[e.key] || {};
     const status = getEventStatus(e.count, cfg.capacity, cfg, e.date, globalRules);
     const displayName = cfg.displayName || e.eventName;
     
     // 樣式設定
     let cardClass = 'bg-white border-slate-100 shadow-sm hover:shadow-md border-l-4';
-    const borderColor = status.colorObj ? status.colorObj.border.replace('border-', 'border-l-') : 'border-l-blue-500';
+    const borderColor = (status.colorObj && status.colorObj.border) ? status.colorObj.border.replace('border-', 'border-l-') : 'border-l-blue-500';
     
     if (status.isFull) cardClass = 'bg-slate-50 border-slate-200 border-l-slate-400 opacity-70';
     else cardClass = `bg-white border-slate-100 shadow-sm hover:shadow-md border-l-4 ${borderColor.replace('border-l-100', 'border-l-500')}`;
     
-    const statusBadgeClass = status.isFull ? "bg-slate-600 text-white" : `${status.colorObj.bg} ${status.colorObj.text}`;
+    const statusBadgeClass = status.isFull ? "bg-slate-600 text-white" : `${status.colorObj?.bg || 'bg-blue-50'} ${status.colorObj?.text || 'text-blue-600'}`;
     const tags = cfg.tags || {};
 
     return (
         // [修改 1] 移除了 onClick 事件，移除了 cursor-pointer，讓卡片本身不能點擊
-        <div key={idx} className={`p-5 rounded-2xl border transition-all group relative ${cardClass}`}>
+        <div key={e.key} className={`p-5 rounded-2xl border transition-all group relative ${cardClass}`}>
             
             {/* 上半部：標題與狀態 (保持不變) */}
             <div className="flex justify-between items-start mb-3">
