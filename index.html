@@ -1021,6 +1021,7 @@ return keywords.some(k => String(eventName || '').includes(k));
             const [eventNote, setEventNote] = useState(config?.note || '');
             const [eventTime, setEventTime] = useState(config?.time || '');
             const [eventLink, setEventLink] = useState(config?.link || '');
+            const [backendColor, setBackendColor] = useState(config?.backendColor || '#eff6ff'); 
             const [displayName, setDisplayName] = useState(config?.displayName || '');
             const [activityCategory, setActivityCategory] = useState(config?.activityCategory || '');
             const [tasks, setTasks] = useState(config?.tasks || JSON.parse(JSON.stringify(DEFAULT_TASKS_TEMPLATE)));
@@ -1056,10 +1057,21 @@ return keywords.some(k => String(eventName || '').includes(k));
             const removeStatusRule = (idx) => { setStatusRules(statusRules.filter((_, i) => i !== idx)); };
 
             const handleSave = () => { 
-                const newInstructorStr = [...instructors].sort().join(' & ');
-                onSaveConfig({ capacity: parseInt(capacity), tasks, note: eventNote, time: eventTime, link: eventLink, statusRules, displayName, activityCategory, tags }, newInstructorStr); 
-                onClose(); 
-            };
+    const newInstructorStr = [...instructors].sort().join(' & ');
+    // 確保 backendColor 被包含在最外層的物件中儲存
+    onSaveConfig({ 
+    capacity: parseInt(capacity), 
+    tasks, 
+    note: eventNote, 
+    time: eventTime, 
+    link: eventLink, 
+    statusRules, 
+    displayName, 
+    activityCategory, 
+    tags, 
+    backendColor // 這裡一定要加，日曆才讀得到 cfg.backendColor
+}, newInstructorStr);    onClose(); 
+};
             const handleExportList = () => {
                 let csv = "\uFEFF姓名,手機,Email,身分證字號,生日,交通,備註,報到狀態\n";
                 sortedCustomers.forEach(c => { const status = c.isCheckedIn ? '已報到' : '未報到'; csv += `${c.customerName},${c.phone},${c.email},${c.idNo},${c.birthday},${c.transport},${toCSVField(c.notes)},${status}\n`; });
@@ -1123,7 +1135,11 @@ return keywords.some(k => String(eventName || '').includes(k));
                             <section>
                                 <h4 className="font-bold text-slate-700 mb-3 flex items-center"><Icon name="settings" size={18} className="mr-2"/> 活動設定</h4>
                                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
-                                    <div className="grid grid-cols-2 gap-4"><div><span className="text-slate-500 text-xs font-bold mb-1 block">活動時間</span><input type="time" value={eventTime} onChange={e=>setEventTime(e.target.value)} className="w-full px-2 py-1.5 text-center border border-slate-300 rounded-lg font-bold outline-none focus:ring-2 focus:ring-blue-500 bg-white"/></div><div><span className="text-slate-500 text-xs font-bold mb-1 block">人數上限</span><input type="number" value={capacity} onChange={e=>setCapacity(e.target.value)} className="w-full px-2 py-1.5 text-center border border-slate-300 rounded-lg font-bold outline-none focus:ring-2 focus:ring-blue-500 bg-white"/></div></div>
+                                    <div className="grid grid-cols-3 gap-3">
+    <div><span className="text-slate-500 text-xs font-bold mb-1 block">活動時間</span><input type="time" value={eventTime} onChange={e=>setEventTime(e.target.value)} className="w-full px-2 py-1.5 text-center border border-slate-300 rounded-lg font-bold outline-none focus:ring-2 focus:ring-blue-500 bg-white"/></div>
+    <div><span className="text-slate-500 text-xs font-bold mb-1 block">人數上限</span><input type="number" value={capacity} onChange={e=>setCapacity(e.target.value)} className="w-full px-2 py-1.5 text-center border border-slate-300 rounded-lg font-bold outline-none focus:ring-2 focus:ring-blue-500 bg-white"/></div>
+    <div><span className="text-slate-500 text-xs font-bold mb-1 block">後台顏色</span><input type="color" value={backendColor} onChange={e=>setBackendColor(e.target.value)} className="w-full h-[38px] p-1 border border-slate-300 rounded-lg cursor-pointer bg-white"/></div>
+</div>
                                     <div><label className="text-xs font-bold text-slate-500 mb-1 block">前台顯示名稱</label><input type="text" className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" placeholder="例如: 冬季夜訪蛙類" value={displayName} onChange={e=>setDisplayName(e.target.value)} /></div>
                                     
                                     <div>
@@ -1163,38 +1179,43 @@ return keywords.some(k => String(eventName || '').includes(k));
             );
         };
        
+        // --- 找到 CreateEventModal 並將其整個替換為以下內容 ---
+
         const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, onDeleteTemplate, availableInstructors, instructorSchedule, tagDefinitions, onAddTag }) => {
             const [mode, setMode] = useState('template'); 
             const [isCreatingTemplate, setIsCreatingTemplate] = useState(false); 
             const [calendarMonth, setCalendarMonth] = useState(new Date()); 
+            // [新增] 用來控制點擊日期後跳出的選單
+            const [actionDate, setActionDate] = useState(null); 
             
-            // [修改 1] formData 增加 capacity 預設值
-            const [formData, setFormData] = useState({ dates: [], eventName: '', instructors: [], time: '', link: '', displayName: '', activityCategory: '', capacity: 12, tags: { levels: '', types: '', locations: '' } }); 
-            const [tempInstructor, setTempInstructor] = useState(''); 
-            
-            // [修改 2] newTemplateData 增加 capacity 預設值
-            const [newTemplateData, setNewTemplateData] = useState({ id: null, name: '', eventName: '', instructor: '', time: '', link: '', displayName: '', activityCategory: '', capacity: 12, tags: { levels: '', types: '', locations: '' } });
+            // [新增] formData 加入 backendColor 預設值
+            const [formData, setFormData] = useState({ dates: [], eventName: '', instructors: [], time: '', link: '', displayName: '', activityCategory: '', capacity: 12, tags: { levels: '', types: '', locations: '' }, backendColor: '#eff6ff' }); 
+const [tempInstructor, setTempInstructor] = useState(''); 
+
+// [新增] 模板資料專用 state
+const [newTemplateData, setNewTemplateData] = useState({ id: null, name: '', eventName: '', instructor: '', time: '', link: '', displayName: '', activityCategory: '', capacity: 12, tags: { levels: '', types: '', locations: '' }, backendColor: '#eff6ff' });
             
             const unavailableInstructors = useMemo(() => { const unavailable = new Set(); formData.dates.forEach(date => { const resting = instructorSchedule[date] || []; resting.forEach(name => unavailable.add(name)); }); return unavailable; }, [formData.dates, instructorSchedule]);
             
-            // [修改 3] 套用模板時，同時套用 capacity
+            // [修改] 套用模板時，同步套用顏色
             const handleTemplateSelect = (tpl) => { 
-                let tplInstructors = []; 
-                if (tpl.instructor) tplInstructors = tpl.instructor.split(/[&,]/).map(s => s.trim()); 
-                setFormData({ 
-                    ...formData, 
-                    eventName: tpl.eventName, 
-                    instructors: tplInstructors, 
-                    time: tpl.time || '', 
-                    link: tpl.link || '', 
-                    displayName: tpl.displayName || '',
-                    activityCategory: tpl.activityCategory || '',
-                    capacity: tpl.capacity || 12, // 套用模板人數
-                    tags: tpl.tags || { levels: '', types: '', locations: '' }
-                }); 
-            };
+    let tplInstructors = []; 
+    if (tpl.instructor) tplInstructors = tpl.instructor.split(/[&,]/).map(s => s.trim()); 
+    setFormData({ 
+        ...formData, 
+        eventName: tpl.eventName, 
+        instructors: tplInstructors, 
+        time: tpl.time || '', 
+        link: tpl.link || '', 
+        displayName: tpl.displayName || '',
+        activityCategory: tpl.activityCategory || '',
+        capacity: tpl.capacity || 12, 
+        tags: tpl.tags || { levels: '', types: '', locations: '' },
+        backendColor: tpl.backendColor || '#eff6ff'
+    }); 
+};
             
-            // [修改 4] 編輯模板時，讀取 capacity
+            // [修改] 編輯模板時，讀取顏色
             const handleEditTemplate = (e, tpl) => { 
                 e.stopPropagation(); 
                 setNewTemplateData({ 
@@ -1206,48 +1227,119 @@ return keywords.some(k => String(eventName || '').includes(k));
                     link: tpl.link || '', 
                     displayName: tpl.displayName || '',
                     activityCategory: tpl.activityCategory || '',
-                    capacity: tpl.capacity || 12, // 讀取模板人數
-                    tags: tpl.tags || { levels: '', types: '', locations: '' }
+                    capacity: tpl.capacity || 12, 
+                    tags: tpl.tags || { levels: '', types: '', locations: '' },
+                    backendColor: tpl.backendColor || '#eff6ff'
                 }); 
                 setIsCreatingTemplate(true); 
             };
             
-            const toggleDate = (year, month, day) => { const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`; let newDates = formData.dates.includes(dateStr) ? formData.dates.filter(d => d !== dateStr) : [...formData.dates, dateStr].sort(); setFormData({ ...formData, dates: newDates }); };
+            const toggleDate = (dateStr) => { let newDates = formData.dates.includes(dateStr) ? formData.dates.filter(d => d !== dateStr) : [...formData.dates, dateStr].sort(); setFormData({ ...formData, dates: newDates }); };
+            
+            // [新增] 點擊日期選單中的「套用模板」功能
+            const applyTemplateToDate = (dateStr, tpl) => {
+                handleTemplateSelect(tpl);
+                setFormData(prev => ({ ...prev, dates: [dateStr] })); // 只選中該日期
+                setMode('template');
+                setActionDate(null); // 關閉選單
+            };
+
+            // [新增] 點擊日期選單中的「建立自訂活動」
+            const startCustomForDate = (dateStr) => {
+                setFormData({ dates: [dateStr], eventName: '', instructors: [], time: '', link: '', displayName: '', activityCategory: '', capacity: 12, tags: { levels: '', types: '', locations: '' }, backendColor: '#eff6ff' });
+                setMode('custom');
+                setActionDate(null);
+            };
+
             const addInstructor = (name) => { const clean = name.trim(); const isResting = formData.dates.some(d => instructorSchedule[d] && instructorSchedule[d].includes(clean)); if (isResting) { if(!confirm(`${clean} 在部分選定的日期已排休，確定要排入嗎？`)) return; } if (clean && !formData.instructors.includes(clean)) setFormData({ ...formData, instructors: [...formData.instructors, clean] }); setTempInstructor(''); };
             const removeInstructor = (name) => { setFormData({ ...formData, instructors: formData.instructors.filter(i => i !== name) }); };
             const handleSubmitEvent = () => { if (formData.dates.length === 0) { alert("請至少選擇一個日期"); return; } onSave(formData); };
             
-            // [修改 5] 重置時也要重置 capacity
             const handleSaveNewTemplate = () => { 
                 if (!newTemplateData.name) { alert("請輸入模板名稱"); return; } 
                 onSaveTemplate(newTemplateData); 
                 setIsCreatingTemplate(false); 
-                setNewTemplateData({ id: null, name: '', eventName: '', instructor: '', time: '', link: '', displayName: '', activityCategory: '', capacity: 12, tags: { levels: '', types: '', locations: '' } }); 
+                setNewTemplateData({ id: null, name: '', eventName: '', instructor: '', time: '', link: '', displayName: '', activityCategory: '', capacity: 12, tags: { levels: '', types: '', locations: '' }, backendColor: '#eff6ff' }); 
             };
             
-            const renderCalendar = () => { const year = calendarMonth.getFullYear(); const month = calendarMonth.getMonth(); const daysInMonth = getDaysInMonth(year, month); const firstDay = getFirstDayOfMonth(year, month); const days = Array(firstDay).fill(null).concat([...Array(daysInMonth).keys()].map(i => i + 1)); return ( <div className="bg-slate-50 p-4 rounded-xl border border-slate-200"> <div className="flex justify-between items-center mb-4"> <button onClick={() => setCalendarMonth(new Date(year, month - 1))}><Icon name="chevron-left" size={20}/></button> <span className="font-bold text-slate-700">{year}年 {month + 1}月</span> <button onClick={() => setCalendarMonth(new Date(year, month + 1))}><Icon name="chevron-right" size={20}/></button> </div> <div className="grid grid-cols-7 text-center mb-2 text-xs font-bold text-slate-400">{['日','一','二','三','四','五','六'].map(d=><div key={d}>{d}</div>)}</div> <div className="grid grid-cols-7 gap-1"> {days.map((day, i) => ( <div key={i} className="aspect-square flex items-center justify-center"> {day && (<button onClick={() => toggleDate(year, month, day)} className={`w-8 h-8 rounded-full text-sm transition-all ${formData.dates.includes(`${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`) ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-blue-100 text-slate-600'}`}>{day}</button>)} </div> ))} </div> </div> ); };
+            // [修改] 月曆渲染：點擊日期觸發 setActionDate
+            const renderCalendar = () => { const year = calendarMonth.getFullYear(); const month = calendarMonth.getMonth(); const daysInMonth = getDaysInMonth(year, month); const firstDay = getFirstDayOfMonth(year, month); const days = Array(firstDay).fill(null).concat([...Array(daysInMonth).keys()].map(i => i + 1)); return ( <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 relative"> <div className="flex justify-between items-center mb-4"> <button onClick={() => setCalendarMonth(new Date(year, month - 1))}><Icon name="chevron-left" size={20}/></button> <span className="font-bold text-slate-700">{year}年 {month + 1}月</span> <button onClick={() => setCalendarMonth(new Date(year, month + 1))}><Icon name="chevron-right" size={20}/></button> </div> <div className="grid grid-cols-7 text-center mb-2 text-xs font-bold text-slate-400">{['日','一','二','三','四','五','六'].map(d=><div key={d}>{d}</div>)}</div> <div className="grid grid-cols-7 gap-1"> {days.map((day, i) => {
+                const dateStr = day ? `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` : '';
+                return ( <div key={i} className="aspect-square flex items-center justify-center"> {day && (<button onClick={() => setActionDate(dateStr)} className={`w-8 h-8 rounded-full text-sm transition-all ${formData.dates.includes(dateStr) ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-blue-100 text-slate-600'}`}>{day}</button>)} </div> ); 
+            })} </div> </div> ); };
             
             return ( <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 fade-in backdrop-blur-sm"> 
-                <div className="bg-white rounded-2xl w-full max-w-lg flex flex-col max-h-[90vh] shadow-2xl m-auto"> 
+                <div className="bg-white rounded-2xl w-full max-w-lg flex flex-col max-h-[90vh] shadow-2xl m-auto relative"> 
+                    
+                    {/* [新增] 日期操作選單 (Overlay) */}
+                    {actionDate && (
+    <div className="absolute inset-0 z-[60] bg-white/95 backdrop-blur rounded-2xl p-6 flex flex-col animate-in fade-in zoom-in-95">
+        <div className="flex justify-between items-center mb-4 border-b pb-2">
+            <h4 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Icon name="calendar" size={20}/> 設定 {actionDate}</h4>
+            <button onClick={() => setActionDate(null)} className="bg-slate-100 p-1 rounded-full"><Icon name="x" className="text-slate-500"/></button>
+        </div>
+        <div className="space-y-3 overflow-y-auto flex-1 custom-scrollbar pb-4">
+            <button onClick={() => { toggleDate(actionDate); setActionDate(null); }} className={`w-full p-3 rounded-xl border-2 font-bold text-left flex items-center gap-3 transition-all ${formData.dates.includes(actionDate) ? 'bg-red-50 border-red-200 text-red-600' : 'bg-blue-50 border-blue-200 text-blue-600'}`}>
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center border-2 ${formData.dates.includes(actionDate) ? 'border-red-500 bg-red-500 text-white' : 'border-blue-500'}`}>
+                    {formData.dates.includes(actionDate) && <Icon name="check" size={14}/>}
+                </div>
+                <span>{formData.dates.includes(actionDate) ? "從批次列表中移除" : "加入批次列表 (多選)"}</span>
+            </button>
+            
+            <div className="text-xs font-bold text-slate-400 mt-2 uppercase tracking-wider">直接建立活動</div>
+            
+            <button onClick={() => { setFormData({...formData, dates: [actionDate], eventName: '', instructors: [], time: '', link: '', displayName: '', activityCategory: '', backendColor: '#eff6ff'}); setMode('custom'); setActionDate(null); }} className="w-full p-3 bg-white border border-slate-200 hover:border-slate-400 hover:shadow-md rounded-xl text-left font-bold transition-all group flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center group-hover:bg-slate-200"><Icon name="edit-3" size={16} className="text-slate-600"/></div>
+                <span>建立空白自訂活動</span>
+            </button>
+
+            {customTemplates.map(tpl => (
+                <button key={tpl.id} onClick={() => { handleTemplateSelect(tpl); setFormData(prev => ({...prev, dates: [actionDate]})); setMode('template'); setActionDate(null); }} className="w-full p-3 bg-white border border-slate-200 hover:border-blue-400 hover:ring-1 hover:ring-blue-400 rounded-xl text-left transition-all shadow-sm group flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center border" style={{backgroundColor: tpl.backendColor || '#eff6ff', borderColor: tpl.backendColor || '#eff6ff'}}>
+                        <Icon name="copy" size={14} className="text-slate-700 opacity-50"/>
+                    </div>
+                    <div>
+                        <div className="font-bold text-slate-700">{tpl.name}</div>
+                        <div className="text-xs text-slate-400">{tpl.instructor} {tpl.time && `• ${tpl.time}`}</div>
+                    </div>
+                </button>
+            ))}
+        </div>
+    </div>
+)}
                     <div className="p-6 border-b border-slate-100 flex justify-between items-center"><h3 className="text-xl font-bold flex items-center gap-2"><Icon name="zap" className="text-yellow-500"/> 快速開團</h3><button onClick={onClose}><Icon name="x" className="text-slate-400"/></button></div> 
                     <div className="p-6 overflow-y-auto space-y-6"> 
                         {!isCreatingTemplate ? ( 
                         <> 
                             <div className="flex bg-slate-100 p-1 rounded-lg"><button onClick={()=>setMode('template')} className={`flex-1 py-1.5 text-sm rounded-md transition-all ${mode==='template'?'bg-white shadow text-blue-600':'text-slate-500'}`}>使用模板</button><button onClick={()=>setMode('custom')} className={`flex-1 py-1.5 text-sm rounded-md transition-all ${mode==='custom'?'bg-white shadow text-blue-600':'text-slate-500'}`}>完全自訂</button></div> 
                             {mode === 'template' && ( 
-                                <div className="grid grid-cols-3 gap-3"> {customTemplates.length === 0 && <div className="col-span-3 text-center text-slate-400 text-sm py-4">尚無模板，請點擊下方新增</div>} {[...customTemplates].map((tpl, i) => ( <div key={i} onClick={()=>handleTemplateSelect(tpl)} className={`relative border rounded-xl p-3 cursor-pointer text-center hover:bg-blue-50 transition-all group ${formData.eventName===tpl.eventName?'border-blue-500 ring-1 ring-blue-500 bg-blue-50':'border-slate-200'}`}> <div className="font-bold text-slate-700 text-sm mb-1">{tpl.name}</div><div className="text-xs text-slate-500">{tpl.instructor}</div><div className="text-[10px] text-slate-400 mt-1">{tpl.time ? `⏰ ${tpl.time}` : ''}</div> <button onClick={(e)=>handleEditTemplate(e, tpl)} className="absolute top-1 right-1 p-1 bg-white rounded-full shadow-sm text-slate-300 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition"><Icon name="edit-2" size={12}/></button> </div> ))} <button onClick={()=>setIsCreatingTemplate(true)} className="border border-dashed border-slate-300 rounded-xl p-3 flex flex-col items-center justify-center text-slate-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 transition-all"><Icon name="plus-circle" className="mb-1"/><span className="text-xs">新增模板</span></button> </div> 
-                            )} 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100"> 
-                                <div><label className="block text-sm font-medium text-slate-700 mb-2">1. 選擇日期 (多選)</label>{renderCalendar()}</div> 
+    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2"> 
+        {customTemplates.length === 0 && <div className="col-span-full text-center text-slate-400 text-xs py-2">無模板</div>} 
+        {[...customTemplates].map((tpl, i) => ( 
+            <div key={i} onClick={()=>handleTemplateSelect(tpl)} className={`relative border rounded-lg p-1.5 cursor-pointer text-center hover:shadow-sm transition-all ${formData.eventName===tpl.eventName?'border-blue-500 ring-2 ring-blue-100 bg-blue-50':'border-slate-200 bg-white'}`} style={formData.eventName===tpl.eventName ? {borderColor: tpl.backendColor} : {}}> 
+                <div className="font-bold text-slate-700 text-[11px] truncate mb-0.5">{tpl.name}</div>
+                <div className="text-[9px] text-slate-400 truncate">{tpl.instructor}</div>
+                <button onClick={(e)=>{e.stopPropagation(); handleEditTemplate(e, tpl)}} className="absolute -top-1 -right-1 p-0.5 bg-slate-100 rounded-full text-slate-400 hover:text-blue-500 border border-white"><Icon name="edit-2" size={8}/></button> 
+            </div> 
+        ))} 
+        <button onClick={()=>setIsCreatingTemplate(true)} className="border border-dashed border-slate-300 rounded-lg p-1.5 flex flex-col items-center justify-center text-slate-400 hover:border-blue-400 hover:bg-blue-50 transition-all">
+            <Icon name="plus" size={12}/><span className="text-[10px]">新增模板</span>
+        </button> 
+    </div> 
+)}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-slate-100"> 
+                                <div><label className="block text-sm font-medium text-slate-700 mb-2">1. 選擇日期 (點擊開啟選單)</label>{renderCalendar()}</div> 
                                 <div className="space-y-4"> 
                                     <div><label className="block text-sm font-medium text-slate-700 mb-1">2. 活動名稱</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" value={formData.eventName} onChange={e=>setFormData({...formData, eventName: e.target.value})} placeholder="輸入名稱..."/></div> 
                                     <div> <label className="block text-sm font-medium text-slate-700 mb-1">3. 帶團講師</label> <div className="flex flex-wrap gap-2 mb-2 min-h-[38px] p-2 bg-white border border-slate-200 rounded-lg">{formData.instructors.map(ins=><div key={ins} className="flex items-center bg-blue-50 text-blue-700 px-2 py-1 rounded text-sm"><span className="mr-1">{ins}</span><button onClick={()=>setFormData({...formData, instructors: formData.instructors.filter(i=>i!==ins)})}><Icon name="x" size={14}/></button></div>)}</div> <div className="flex gap-2"><input type="text" className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" value={tempInstructor} onChange={e=>setTempInstructor(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addInstructor(tempInstructor)} placeholder="輸入名字..."/><button onClick={()=>addInstructor(tempInstructor)} className="px-3 bg-slate-100 rounded-lg hover:bg-slate-200"><Icon name="plus" size={18}/></button></div> <div className="flex flex-wrap gap-2 mt-2">{availableInstructors.slice(0,6).map(i=><button key={i} onClick={()=>addInstructor(i)} className={`text-xs px-2 py-1 border rounded-full transition ${unavailableInstructors.has(i)?'bg-slate-100 text-slate-400 border-slate-200':'bg-slate-50 hover:bg-blue-50 text-slate-600'}`}>+ {i}</button>)}</div> </div> 
-                                    {/* [修改 6] 在建立活動表單中顯示/編輯 capacity */}
                                     <div className="grid grid-cols-2 gap-3">
                                         <div><label className="block text-sm font-medium text-slate-700 mb-1">4. 活動時間</label><input type="time" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" value={formData.time} onChange={e=>setFormData({...formData, time: e.target.value})}/></div> 
                                         <div><label className="block text-sm font-medium text-slate-700 mb-1">人數上限</label><input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" value={formData.capacity} onChange={e=>setFormData({...formData, capacity: e.target.value})}/></div> 
                                     </div>
-                                    <div><label className="block text-sm font-medium text-slate-700 mb-1">5. 活動網址 (選填)</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" placeholder="https://..." value={formData.link} onChange={e=>setFormData({...formData, link: e.target.value})}/></div> 
+                                    <div className="grid grid-cols-3 gap-3">
+    <div className="col-span-2"><label className="block text-sm font-medium text-slate-700 mb-1">5. 活動網址</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" placeholder="https://..." value={formData.link} onChange={e=>setFormData({...formData, link: e.target.value})}/></div> 
+    <div><label className="block text-sm font-medium text-slate-700 mb-1">後台顏色</label><input type="color" className="w-full h-[40px] p-1 border border-slate-300 rounded-lg cursor-pointer" value={formData.backendColor} onChange={e=>setFormData({...formData, backendColor: e.target.value})} title="此顏色僅在後台可見"/></div>
+</div>
                                     <div><label className="block text-sm font-medium text-slate-700 mb-1">6. 前台顯示名稱 (選填)</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" placeholder="例如: 冬季夜訪蛙類" value={formData.displayName} onChange={e=>setFormData({...formData, displayName: e.target.value})}/></div>
                                     <div><label className="block text-sm font-medium text-indigo-600 mb-1">7. 活動性質名稱 (選填)</label><input type="text" className="w-full px-3 py-2 border border-indigo-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 bg-indigo-50/20" placeholder="例如: 象山夜間導覽" value={formData.activityCategory} onChange={e=>setFormData({...formData, activityCategory: e.target.value})}/></div>
                                     
@@ -1260,7 +1352,7 @@ return keywords.some(k => String(eventName || '').includes(k));
                         </> 
                         ) : ( 
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3"> 
-                            <div className="flex justify-between"><h4 className="font-bold">{newTemplateData.id ? '編輯模板' : '建立新模板'}</h4><button onClick={()=>{setIsCreatingTemplate(false);setNewTemplateData({id:null,name:'',eventName:'',instructor:'',time:'',link:'',displayName:'', activityCategory: '', capacity: 12, tags: { levels: '', types: '', locations: '' }})}} className="text-sm text-slate-500">取消</button></div> 
+                            <div className="flex justify-between"><h4 className="font-bold">{newTemplateData.id ? '編輯模板' : '建立新模板'}</h4><button onClick={()=>{setIsCreatingTemplate(false);setNewTemplateData({id:null,name:'',eventName:'',instructor:'',time:'',link:'',displayName:'', activityCategory: '', capacity: 12, tags: { levels: '', types: '', locations: '' }, backendColor: '#eff6ff'})}} className="text-sm text-slate-500">取消</button></div> 
                             <input type="text" className="w-full px-3 py-2 text-sm border rounded-lg" placeholder="模板名稱 (如: 豪華團)" value={newTemplateData.name} onChange={e=>setNewTemplateData({...newTemplateData, name: e.target.value})}/> 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"> 
                                 <input type="text" className="w-full px-3 py-2 text-sm border rounded-lg" placeholder="預設活動名稱" value={newTemplateData.eventName} onChange={e=>setNewTemplateData({...newTemplateData, eventName: e.target.value})}/> 
@@ -1268,11 +1360,12 @@ return keywords.some(k => String(eventName || '').includes(k));
                             </div> 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div><label className="block text-xs font-bold text-slate-500 mb-1">預設時間</label><input type="time" className="w-full px-3 py-2 text-sm border rounded-lg" value={newTemplateData.time} onChange={e=>setNewTemplateData({...newTemplateData, time: e.target.value})}/></div>
-                                {/* [修改 7] 在建立模板表單中顯示/編輯 capacity */}
                                 <div><label className="block text-xs font-bold text-slate-500 mb-1">預設人數</label><input type="number" className="w-full px-3 py-2 text-sm border rounded-lg" value={newTemplateData.capacity} onChange={e=>setNewTemplateData({...newTemplateData, capacity: e.target.value})}/></div>
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 <div className="col-span-2"><label className="block text-xs font-bold text-slate-500 mb-1">預設網址</label><input type="text" className="w-full px-3 py-2 text-sm border rounded-lg" placeholder="https://..." value={newTemplateData.link} onChange={e=>setNewTemplateData({...newTemplateData, link: e.target.value})}/></div>
+                                {/* [新增] 模板編輯時的顏色設定 */}
+                                <div><label className="block text-xs font-bold text-slate-500 mb-1">後台顏色</label><input type="color" className="w-full h-[36px] p-1 border rounded-lg cursor-pointer" value={newTemplateData.backendColor} onChange={e=>setNewTemplateData({...newTemplateData, backendColor: e.target.value})}/></div>
                             </div>
                             <div><label className="block text-xs font-bold text-slate-500 mb-1">預設前台名稱</label><input type="text" className="w-full px-3 py-2 text-sm border rounded-lg" placeholder="例如: 冬季夜訪蛙類" value={newTemplateData.displayName} onChange={e=>setNewTemplateData({...newTemplateData, displayName: e.target.value})}/></div>
                             <div><label className="block text-xs font-bold text-indigo-600 mb-1">預設性質名稱</label><input type="text" className="w-full px-3 py-2 text-sm border rounded-lg border-indigo-200 bg-indigo-50/20" placeholder="例如: 象山夜間導覽" value={newTemplateData.activityCategory} onChange={e=>setNewTemplateData({...newTemplateData, activityCategory: e.target.value})}/></div>
@@ -1281,7 +1374,7 @@ return keywords.some(k => String(eventName || '').includes(k));
                                 <label className="text-xs font-bold text-slate-500 mb-2 block">預設活動標籤</label>
                                 <TagSelector definitions={tagDefinitions} value={newTemplateData.tags} onChange={(type, val) => setNewTemplateData({...newTemplateData, tags: {...newTemplateData.tags, [type]: val}})} onAddTag={onAddTag} />
                             </div>
-                            <div className="flex gap-2">{newTemplateData.id && <button onClick={()=>{if(confirm("確定刪除?")){onDeleteTemplate(newTemplateData.id);setIsCreatingTemplate(false);setNewTemplateData({id:null,name:'',eventName:'',instructor:'',time:'',link:'',displayName:'', activityCategory: '', capacity: 12, tags: { levels: '', types: '', locations: '' }})}}} className="flex-1 py-2 bg-red-100 text-red-600 rounded-lg text-sm">刪除</button>}<button onClick={handleSaveNewTemplate} className="flex-[2] py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">儲存模板</button></div> 
+                            <div className="flex gap-2">{newTemplateData.id && <button onClick={()=>{if(confirm("確定刪除?")){onDeleteTemplate(newTemplateData.id);setIsCreatingTemplate(false);setNewTemplateData({id:null,name:'',eventName:'',instructor:'',time:'',link:'',displayName:'', activityCategory: '', capacity: 12, tags: { levels: '', types: '', locations: '' }, backendColor: '#eff6ff'})}}} className="flex-1 py-2 bg-red-100 text-red-600 rounded-lg text-sm">刪除</button>}<button onClick={handleSaveNewTemplate} className="flex-[2] py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">儲存模板</button></div> 
                         </div> 
                         )} 
                     </div> 
@@ -2347,7 +2440,7 @@ if (data.marqueeIconSize) setMarqueeIconSize(data.marqueeIconSize);
             const handleBulkImport = async (newRows) => { const currentRows = [...parsedData]; const formattedNewRows = newRows.map(r => ({ date: r.date || '', eventName: r.eventName || '', instructor: r.instructor || '', customerName: r.customerName || '', price: r.price || 0, transport: '', idNo: r.idNo || '', birthday: r.birthday || '', email: r.email || '', source: r.source || '', socialName: r.socialName || '', notes: r.notes || '', orderDate: new Date().toISOString().split('T')[0], phone: r.phone || '' })); const finalData = [...currentRows, ...formattedNewRows]; await handleSaveCSV(arrayToCSV(finalData)); };
             const handleAddManualReg = async () => { if(!newReg.date || !newReg.eventName || !newReg.customerName) { return; } setAddRegStatus('saving'); let currentData = csvInput.trim(); if (!currentData || !currentData.startsWith("日期")) { currentData = CSV_HEADER + "\n" + currentData; } const newRow = `\n${newReg.date},${newReg.eventName},${newReg.instructor},${newReg.customerName},${newReg.price},${newReg.transport},${newReg.idNo},${newReg.birthday},${newReg.email},${newReg.source},,${newReg.orderDate},${newReg.phone},0`; const updatedCSV = currentData + newRow; await handleSaveCSV(updatedCSV); setNewReg({ date: '', eventName: '', instructor: '', customerName: '', price: '', transport: '', idNo: '', birthday: '', email: '', source: '', orderDate: new Date().toISOString().split('T')[0], phone: '' }); setAddRegStatus('success'); setTimeout(() => setAddRegStatus('idle'), 2000); };
             const handleAddDirectReg = async (eventInfo, customerData) => { let currentData = csvInput.trim(); if (!currentData || !currentData.startsWith("日期")) { currentData = CSV_HEADER + "\n" + currentData; } const newRow = `\n${eventInfo.date},${eventInfo.eventName},${eventInfo.instructor},${customerData.customerName},${customerData.price},${customerData.transport},${customerData.idNo},${customerData.birthday},${customerData.email},${customerData.source},,${toCSVField(customerData.notes)},${customerData.orderDate},${customerData.phone},0`; const updatedCSV = currentData + newRow; await handleSaveCSV(updatedCSV); };
-            const handleCreateEvent = async ({ dates, eventName, instructors, time, link, displayName, activityCategory, tags, capacity }) => { 
+            const handleCreateEvent = async ({ dates, eventName, instructors, time, link, displayName, activityCategory, tags, capacity, backendColor }) => { 
                 let rows = ''; 
                 const instr = [...instructors].sort().join(' & ');
                 dates.forEach(d => rows += `\n${d},${eventName},${instr},開放報名中,0,,,,,,,,,0`); 
@@ -2361,8 +2454,10 @@ if (data.marqueeIconSize) setMarqueeIconSize(data.marqueeIconSize);
                         link: link || '', 
                         displayName: displayName || '', 
                         activityCategory: activityCategory || '', 
-                        capacity: parseInt(capacity) || 12, // 儲存人數上限
-                        tags: tags || { levels: '', types: '', locations: '' } 
+                        capacity: parseInt(capacity) || 12, 
+                        tags: tags || { levels: '', types: '', locations: '' },
+                        // [重點] 這裡將顏色寫入資料庫
+                        backendColor: backendColor || '#eff6ff'
                     }, { merge: true }); 
                 }); 
                 await batch.commit(); 
@@ -2611,8 +2706,8 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                 {/* [修改] 按鈕邏輯：即使額滿/結束也顯示，改為灰色不可點擊 */}
                 {cfg.link && (
                     <button
-                        // 如果額滿或結束，設為 disabled
-                        disabled={status.isFull}
+    /* 如果額滿或結束，設為 disabled */
+    disabled={status.isFull}
                         onClick={(evt) => {
                             evt.stopPropagation();
                             // 只有未額滿且未結束時，才開啟連結
@@ -2653,9 +2748,72 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                         <div className="md:hidden mb-6 flex justify-between items-center sticky top-0 z-30 bg-slate-50/90 backdrop-blur-sm py-2"><Logo className="h-6 w-auto" /><button onClick={() => setMobileMenuOpen(true)} className="p-2 bg-white rounded-lg shadow-sm text-slate-600 border border-slate-200"><Icon name="menu" /></button></div>
                         {activeTab === 'tasks' && <div className="max-w-6xl mx-auto fade-in pb-20"><header className="mb-8 flex justify-between items-end"><div><h2 className="text-2xl font-bold text-slate-800 mb-1">任務指揮中心</h2><p className="text-slate-500 text-sm">智慧追蹤系統，根據活動日期自動排序</p></div><div className="bg-white px-4 py-2 rounded-full border text-sm font-medium whitespace-nowrap">待處理: <span className="text-blue-600 font-bold ml-1">{tasks.length}</span></div></header>{Object.keys(groupedTasks).length === 0 ? (<div className="text-center py-20"><div className="text-6xl mb-4">🎉</div><h3 className="text-xl font-bold text-slate-700">太棒了！任務已清空</h3></div>) : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{(() => { const fixedOrder = ['辦理保險', '寄送行前信', '寄送花絮信']; const allTaskNames = [...new Set([...fixedOrder, ...Object.keys(groupedTasks)])]; allTaskNames.sort((a, b) => { const idxA = fixedOrder.indexOf(a); const idxB = fixedOrder.indexOf(b); if (idxA !== -1 && idxB !== -1) return idxA - idxB; if (idxA !== -1) return -1; if (idxB !== -1) return 1; return a.localeCompare(b); }); return allTaskNames.map((taskName, index) => { const taskList = groupedTasks[taskName] || []; if (taskList.length === 0 && !fixedOrder.includes(taskName)) return null; const color = TASK_GROUP_COLORS[index % TASK_GROUP_COLORS.length]; return (<div key={taskName} className={`rounded-2xl border ${color.border} ${color.bg} p-4 h-fit`}><h3 className={`font-bold text-lg mb-4 ${color.text} flex items-center gap-2`}><Icon name="layers" className={color.icon} size={20}/>{taskName}<span className="text-sm opacity-75 font-normal ml-auto bg-white/50 px-2 py-0.5 rounded-full">{taskList.length}</span></h3><div className="space-y-3 min-h-[50px]">{taskList.length > 0 ? taskList.map((t, i) => (<div key={`${t.cfgKey}-${t.taskIdx}`} onClick={() => setActiveTaskDetail(t)} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden"><div className={`absolute top-0 left-0 w-1 h-full ${t.style.bg.replace('bg-', 'bg-') === 'bg-white' ? 'bg-slate-200' : t.style.bg.replace('bg', 'bg').replace('50', '400')}`}></div><div className="flex justify-between mb-2 pl-2"><span className="bg-slate-100 text-slate-600 text-xs font-mono px-2 py-0.5 rounded">{t.evtDate}</span>{t.style.label && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${t.style.color} ${t.style.border} ${t.style.bg}`}>{t.style.label}</span>}</div><div className="pl-2"><div className="text-sm font-bold text-slate-800 mb-1 truncate">{t.evtName}</div><button onClick={(e) => { e.stopPropagation(); toggleTask(t.cfgKey, t.taskIdx) }} className="w-full mt-3 py-2 rounded-lg bg-slate-50 text-slate-400 hover:bg-green-500 hover:text-white transition-all flex justify-center gap-2 text-xs font-bold"><Icon name="check-circle-2" size={14} /> 標示完成</button></div></div>)) : <div className="text-center text-xs text-slate-400 py-8 border-2 border-dashed border-slate-200 rounded-xl">目前無待辦事項</div>}</div></div>); }); })()}</div>)}</div>}
                         {activeTab === 'promises' && <div className="max-w-6xl mx-auto fade-in pb-20"><header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4"><div><h2 className="text-2xl font-bold text-slate-800 mb-1">團隊承諾牆</h2><p className="text-slate-500 text-sm">紀錄那些非正式但重要的約定</p></div><div className="flex gap-3 w-full md:w-auto"><div className="relative flex-1 md:w-64"><Icon name="search" className="absolute left-3 top-2.5 text-slate-400" size={18}/><input type="text" placeholder="搜尋承諾..." className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 transition-all" value={promiseSearch} onChange={e => setPromiseSearch(e.target.value)} /></div><button onClick={()=>setShowAddPromise(true)} className="bg-purple-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 shadow-md hover:bg-purple-700 whitespace-nowrap"><Icon name="plus" size={18}/> <span className="hidden md:inline">新增</span></button></div></header><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{promises.filter(p => !promiseSearch || (p.content && p.content.toLowerCase().includes(promiseSearch.toLowerCase())) || (p.who && p.who.toLowerCase().includes(promiseSearch.toLowerCase()))).map(p => { const st = getPromiseStatus(p.date, p.time); const isDone = p.status === 'done'; return (<div key={p.id} className={`bg-white p-5 rounded-2xl border shadow-sm relative transition-all ${isDone ? 'opacity-50 border-slate-100' : 'border-slate-200 hover:shadow-md'}`}><button onClick={()=>handleDeletePromise(p.id)} className="absolute top-3 right-3 text-slate-300 hover:text-red-400 opacity-0 hover:opacity-100 transition"><Icon name="trash-2" size={16}/></button><div className="flex items-center gap-2 mb-3"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isDone ? 'text-slate-400 border-slate-200 bg-slate-50' : `${st.color} ${st.border} ${st.bg}`}`}>{isDone ? '已完成' : st.label}</span><span className="text-xs text-slate-400 flex items-center gap-1"><Icon name="clock" size={12}/> {p.date} {p.time}</span></div><h4 className={`font-bold text-lg mb-2 ${isDone ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{p.content}</h4>{p.who && <div className="text-sm text-slate-500 mb-4 flex items-center gap-1"><Icon name="user" size={14}/> {p.who}</div>}<button onClick={()=>handleTogglePromise(p.id, p.status)} className={`w-full py-2 rounded-xl border font-bold text-sm flex items-center justify-center gap-2 transition-all ${isDone ? 'bg-slate-50 text-slate-400 border-slate-200' : 'bg-white text-purple-600 border-purple-200 hover:bg-purple-50'}`}>{isDone ? '重啟任務' : '標示完成'}</button></div>);})}</div></div>}
-                        {activeTab === 'events' && <div className="fade-in max-w-6xl mx-auto pb-20"><header className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold">活動場次</h2><div className="flex gap-3"><button onClick={()=>setShowCreateEvent(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-md"><Icon name="plus" size={18}/> 快速開團</button><div className="bg-white p-1 rounded-lg border flex"><button onClick={()=>setEventsViewMode('list')} className={`p-2 rounded-md ${eventsViewMode==='list'?'bg-slate-100':''}`}><Icon name="list" size={18}/></button><button onClick={()=>setEventsViewMode('calendar')} className={`p-2 rounded-md ${eventsViewMode==='calendar'?'bg-slate-100':''}`}><Icon name="calendar" size={18}/></button></div></div></header>{eventsViewMode === 'list' && (<div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden table-container"><table className="w-full text-left min-w-[600px]"><thead className="bg-slate-50 border-b border-slate-100 text-slate-500 text-sm"><tr><th className="px-6 py-4 whitespace-nowrap">日期</th><th className="px-6 py-4 whitespace-nowrap">活動</th><th className="px-6 py-4 whitespace-nowrap">報名</th><th className="px-6 py-4 whitespace-nowrap">操作</th></tr></thead><tbody className="divide-y divide-slate-100">{Object.values(stats.events).map((e, i) => { const cfg = eventConfigs[e.key] || {}; const cap = cfg.capacity || 12; const isFull = e.count >= cap; const carpool = e.customers ? e.customers.filter(c=>c.transport==='共乘').length : 0; return (<tr key={i} className="hover:bg-slate-50/80"><td className="px-6 py-4 text-slate-600 whitespace-nowrap">{e.date}</td><td className="px-6 py-4"><div className="font-bold text-slate-800">{e.eventName}</div><div className="text-xs text-slate-400 mt-0.5">{e.instructor}</div></td><td className="px-6 py-4"><div className="flex items-center gap-2"><span className={`font-bold ${isFull?'text-red-500':'text-slate-700'}`}>{e.count}</span><span className="text-xs text-slate-400">/ {cap}</span><div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full ${isFull?'bg-red-500':'bg-green-500'}`} style={{width:`${Math.min((e.count/cap)*100,100)}%`}}></div></div></div>{carpool > 0 && <div className="text-[10px] text-orange-500 mt-1 flex items-center"><Icon name="car" size={10} className="mr-1"/> 共乘 {carpool} 人</div>}</td><td className="px-6 py-4"><button onClick={()=>setEditingEvent(e)} className="text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded flex items-center gap-1 text-sm whitespace-nowrap"><Icon name="settings" size={14}/> 管理</button></td></tr>);})}</tbody></table></div>)}{eventsViewMode === 'calendar' && (<div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-200 table-container"><div className="flex justify-between items-center mb-6 sticky left-0"><div className="flex items-center gap-2"><button onClick={prevMonth} className="p-2 hover:bg-slate-100 rounded-full"><Icon name="chevron-left"/></button><h3 className="text-xl font-bold text-slate-800 whitespace-nowrap">{currentDate.getFullYear()}年 {currentDate.getMonth()+1}月</h3><button onClick={nextMonth} className="p-2 hover:bg-slate-100 rounded-full"><Icon name="chevron-right"/></button></div></div><div className="min-w-[600px]"><div className="grid grid-cols-7 mb-2 text-center text-sm font-bold text-slate-400">{['日','一','二','三','四','五','六'].map(d=><div key={d}>{d}</div>)}</div><div className="grid grid-cols-7 auto-rows-[160px] border-t border-l border-slate-200">{calendarDays.map((day, i) => { const dateStr = day ? `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}` : ''; const dayEvents = day ? Object.values(stats.events).filter(e => e.date === dateStr) : []; return (<div key={i} className={`border-b border-r border-slate-200 p-1 md:p-2 relative ${day ? 'hover:bg-slate-50' : 'bg-slate-50/50'}`}>{day && (<><div className="flex justify-between items-start"><div className="text-sm font-medium mb-1">{day}</div><button onClick={(e)=>{e.stopPropagation();setShowScheduleModal(true);setScheduleDate(dateStr)}} className="text-slate-300 hover:text-blue-600"><Icon name="calendar-days" size={14}/></button></div>
-                        {companyRestDates.includes(dateStr) ? (<div className="flex items-center justify-center h-[100px] text-slate-300 font-bold text-2xl select-none bg-slate-50/50 rounded-lg">✕</div>) : (<div className="space-y-1 overflow-y-auto max-h-[120px] no-scrollbar">{dayEvents.map((e, idx) => { const cfg = eventConfigs[e.key] || {}; const capacity = cfg.capacity || 12; const isHot = e.count >= (cfg.hotThreshold || 10); const isFull = capacity > 0 && e.count >= capacity; let cardClass = 'bg-blue-50 border-blue-100'; if (isFull) cardClass = 'bg-slate-100 border-slate-200 opacity-80'; else if (isHot) { const color = COLOR_OPTIONS.find(c => c.value === cfg.hotColor) || COLOR_OPTIONS[0]; cardClass = `${color.bg} ${color.border}`; } return (<div key={idx} onClick={(evt)=>{ evt.stopPropagation(); setEditingEvent(e); }} className={`mb-1 p-1.5 rounded-lg border cursor-pointer transition-all group hover:shadow-md ${cardClass}`}><div className="flex justify-between items-start mb-0.5"><div className="font-bold text-xs text-slate-800 truncate flex-1 flex items-center">{e.eventName}{isFull && <span className="ml-1 text-[9px] bg-slate-600 text-white px-1 rounded">已滿</span>}</div>{cfg.time && <div className="text-[10px] text-slate-500 bg-white/50 px-1 rounded ml-1 whitespace-nowrap">{cfg.time}</div>}</div><div className="flex justify-between items-center"><div className="text-[10px] text-slate-600 flex items-center truncate max-w-[60%]"><Icon name="user" size={10} className="mr-0.5 flex-shrink-0"/><span className="truncate">{e.instructor || '未定'}</span></div><div className={`text-[10px] font-bold bg-white/80 px-1 rounded-md shadow-sm ${isFull ? 'text-slate-500' : 'text-blue-600'}`}>{e.count}人</div></div></div>); })}</div>)}
-                        {instructorSchedule[dateStr] && instructorSchedule[dateStr].length > 0 && !companyRestDates.includes(dateStr) && (<div className="text-[10px] text-red-400 flex flex-wrap gap-1 mt-1">{instructorSchedule[dateStr].map(name => <span key={name} className="bg-red-50 px-1 rounded">{name}休</span>)}</div>)}</>)}</div>);})}</div></div></div>)}</div>}
+                        {activeTab === 'events' && <div className="fade-in max-w-6xl mx-auto pb-20"><header className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold">活動場次</h2><div className="flex gap-3"><button onClick={()=>setShowCreateEvent(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-md"><Icon name="plus" size={18}/> 快速開團</button><div className="bg-white p-1 rounded-lg border flex"><button onClick={()=>setEventsViewMode('list')} className={`p-2 rounded-md ${eventsViewMode==='list'?'bg-slate-100':''}`}><Icon name="list" size={18}/></button><button onClick={()=>setEventsViewMode('calendar')} className={`p-2 rounded-md ${eventsViewMode==='calendar'?'bg-slate-100':''}`}><Icon name="calendar" size={18}/></button></div></div></header>{eventsViewMode === 'list' && (<div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden table-container"><table className="w-full text-left min-w-[600px]"><thead className="bg-slate-50 border-b border-slate-100 text-slate-500 text-sm"><tr><th className="px-6 py-4 whitespace-nowrap">日期</th><th className="px-6 py-4 whitespace-nowrap">活動</th><th className="px-6 py-4 whitespace-nowrap">報名</th><th className="px-6 py-4 whitespace-nowrap">操作</th></tr></thead><tbody className="divide-y divide-slate-100">{Object.values(stats.events).map((e, i) => { const cfg = eventConfigs[e.key] || {}; const cap = cfg.capacity || 12; const isFull = e.count >= cap; const carpool = e.customers ? e.customers.filter(c=>c.transport==='共乘').length : 0; return (<tr key={i} className="hover:bg-slate-50/80"><td className="px-6 py-4 text-slate-600 whitespace-nowrap">{e.date}</td><td className="px-6 py-4"><div className="font-bold text-slate-800">{e.eventName}</div><div className="text-xs text-slate-400 mt-0.5">{e.instructor}</div></td><td className="px-6 py-4"><div className="flex items-center gap-2"><span className={`font-bold ${isFull?'text-red-500':'text-slate-700'}`}>{e.count}</span><span className="text-xs text-slate-400">/ {cap}</span><div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full ${isFull?'bg-red-500':'bg-green-500'}`} style={{width:`${Math.min((e.count/cap)*100,100)}%`}}></div></div></div>{carpool > 0 && <div className="text-[10px] text-orange-500 mt-1 flex items-center"><Icon name="car" size={10} className="mr-1"/> 共乘 {carpool} 人</div>}</td><td className="px-6 py-4"><button onClick={()=>setEditingEvent(e)} className="text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded flex items-center gap-1 text-sm whitespace-nowrap"><Icon name="settings" size={14}/> 管理</button></td></tr>);})}</tbody></table></div>)}{eventsViewMode === 'calendar' && (<div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-200 table-container"><div className="flex justify-between items-center mb-6 sticky left-0"><div className="flex items-center gap-2"><button onClick={prevMonth} className="p-2 hover:bg-slate-100 rounded-full"><Icon name="chevron-left"/></button><h3 className="text-xl font-bold text-slate-800 whitespace-nowrap">{currentDate.getFullYear()}年 {currentDate.getMonth()+1}月</h3><button onClick={nextMonth} className="p-2 hover:bg-slate-100 rounded-full"><Icon name="chevron-right"/></button></div></div><div className="min-w-[600px]"><div className="grid grid-cols-7 mb-2 text-center text-sm font-bold text-slate-400">{['日','一','二','三','四','五','六'].map(d=><div key={d}>{d}</div>)}</div><div className="grid grid-cols-7 auto-rows-[160px] border-t border-l border-slate-200">{calendarDays.map((day, i) => { const dateStr = day ? `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}` : ''; const dayEvents = day ? Object.values(stats.events).filter(e => e.date === dateStr) : []; return (<div key={i} 
+    onClick={() => { if(day) { setScheduleDate(dateStr); setShowCreateEvent(true); } }} 
+    className={`border-b border-r border-slate-200 p-1 md:p-2 relative group ${day ? 'hover:bg-blue-50 cursor-pointer' : 'bg-slate-50/50'}`}
+>
+    {day && (
+        <>
+            <div className="flex justify-between items-start">
+                <div className="text-sm font-medium mb-1 group-hover:text-blue-600 transition-colors">{day}</div>
+                <button onClick={(e)=>{e.stopPropagation(); setShowScheduleModal(true); setScheduleDate(dateStr)}} className="text-slate-300 hover:text-blue-600 p-1 rounded-full hover:bg-white shadow-sm transition-all"><Icon name="calendar-days" size={14}/></button>
+            </div>
+            
+            {companyRestDates.includes(dateStr) ? (
+                <div className="flex items-center justify-center h-[100px] text-slate-300 font-bold text-2xl select-none bg-slate-50/50 rounded-lg">✕</div>
+            ) : (
+                <div className="space-y-1 overflow-y-auto max-h-[120px] no-scrollbar">
+                    {dayEvents.map((e, idx) => { 
+                        const cfg = eventConfigs[e.key] || {}; 
+                        const capacity = cfg.capacity || 12; 
+                        const isFull = capacity > 0 && e.count >= capacity; 
+                        let cardStyle = { };
+let cardClass = 'mb-1 p-1.5 rounded-lg border cursor-pointer transition-all group hover:shadow-md ';
+
+// 1. 先處理顏色基礎
+const baseColor = cfg.backendColor || '#3b82f6'; // 若無顏色則預設藍色
+
+if (cfg.backendColor) {
+    const bgColor = cfg.backendColor.startsWith('#') ? cfg.backendColor + '33' : cfg.backendColor;
+    cardStyle = { backgroundColor: bgColor, borderColor: cfg.backendColor, borderWidth: '1.5px' };
+    cardClass += 'border';
+} else {
+    cardClass += 'bg-blue-50 border-blue-100';
+}
+
+// 2. 如果滿團，透過 CSS 濾鏡調低飽和度並增加透明度，不覆蓋背景色
+if (isFull) {
+    cardClass += ' opacity-50 contrast-75'; // 調低對比與透明度
+}
+                        return (
+                            <div key={idx} onClick={(evt)=>{ evt.stopPropagation(); setEditingEvent(e); }} className={cardClass} style={cardStyle}>
+                                <div className="flex justify-between items-start mb-0.5">
+                                    <div className="font-bold text-xs text-slate-800 truncate flex-1 flex items-center">
+                                        {e.eventName}
+                                        {isFull && <span className="ml-1 text-[9px] bg-slate-600 text-white px-1 rounded">已滿</span>}
+                                    </div>
+                                    {cfg.time && <div className="text-[10px] text-slate-500 bg-white/50 px-1 rounded ml-1 whitespace-nowrap">{cfg.time}</div>}
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <div className="text-[10px] text-slate-600 flex items-center truncate max-w-[60%]">
+                                        <Icon name="user" size={10} className="mr-0.5 flex-shrink-0"/>
+                                        <span className="truncate">{e.instructor || '未定'}</span>
+                                    </div>
+                                    <div className="text-[10px] font-bold text-blue-600">{e.count}人</div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+            {instructorSchedule[dateStr] && instructorSchedule[dateStr].length > 0 && !companyRestDates.includes(dateStr) && (
+                <div className="text-[10px] text-red-400 flex flex-wrap gap-1 mt-1">
+                    {instructorSchedule[dateStr].map(name => <span key={name} className="bg-red-50 px-1 rounded">{name}休</span>)}
+                </div>
+            )}
+        </>
+    )}
+</div>);})}</div></div></div>)}</div>}
                         
                         {activeTab === 'projects' && (
                             <div className="fade-in max-w-6xl mx-auto pb-20">
