@@ -2437,13 +2437,27 @@ if (data.marqueeIconSize) setMarqueeIconSize(data.marqueeIconSize);
                     if (affectedRows.length > 0) { 
                         const evt = affectedRows[0]; 
                         const newKey = `${evt.date}_${evt.eventName}_${newInstructorStr}`.replace(/[\/\\#\?]/g, '-'); 
+                        
                         if (newKey !== oldEventKey) { 
-                            await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', newKey), newConfig, { merge: true }); 
+                            // [重點修正] 判斷目標活動(newKey)是否已經有設定檔？
+                            const targetConfigExists = eventConfigs[newKey];
+
+                            if (targetConfigExists) {
+                                // 情況 A：目標活動已存在 (合併發生)
+                                // 策略：完全不覆寫設定，保留目標活動原本的顏色、連結與備註
+                                console.log("合併至既有活動，保留既有設定");
+                            } else {
+                                // 情況 B：目標活動不存在 (新分組產生)
+                                // 策略：繼承目前的設定過去
+                                await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', newKey), newConfig, { merge: true }); 
+                            }
                         } else { 
+                            // 情況 C：Key 沒變 (單純修改設定)
                             await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', oldEventKey), newConfig, { merge: true }); 
                         } 
                     } 
                 } else { 
+                    // 情況 D：沒有改講師 (單純修改設定)
                     await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', oldEventKey), newConfig, { merge: true }); 
                 } 
             };
