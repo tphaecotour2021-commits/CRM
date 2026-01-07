@@ -17,8 +17,9 @@
     
     <!-- 4. 載入 Lucide 圖標 -->
     <script src="https://unpkg.com/lucide@latest"></script>
-	<!-- [新增這段] 5. 載入 Recharts 圖表庫 -->
-    <script src="https://unpkg.com/recharts@2.12.0/umd/Recharts.min.js"></script>
+	<!-- 5. 載入 Recharts 圖表庫 (改用 Cloudflare CDN，最穩定) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.12.7/Recharts.min.js"></script>
 
     <!-- 5. 載入 Firebase Compat 版本 -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -2094,7 +2095,7 @@ const getLocalDateStr = () => {
     return localISOTime;
 };
 
-// ✅ 修正版：訪客追蹤 Hook (修正 Firestore 路徑層級問題)
+// ✅ 修正版：訪客追蹤 Hook (支援讀取 data-analytics-event 屬性)
 const useVisitorTracker = (db, dbSource, viewMode) => {
     useEffect(() => {
         if (viewMode === 'admin' || !db) return;
@@ -2107,8 +2108,6 @@ const useVisitorTracker = (db, dbSource, viewMode) => {
         const initSession = async () => {
             const batch = writeBatch(db);
             const basePath = `artifacts/${dbSource}/analytics`;
-
-            // ✅ 修正點 1：路徑插入 'traffic'，使其變成 6 層 (偶數)
             const sessionRef = doc(db, basePath, 'traffic', 'sessions', sessionId);
             if (!sessionRef) return;
 
@@ -2123,21 +2122,13 @@ const useVisitorTracker = (db, dbSource, viewMode) => {
                 page: '首頁'
             });
 
+            // 寫入總計與日計
             const totalRef = doc(db, basePath, 'stats', 'overview', 'total');
-            if (totalRef) {
-                batch.set(totalRef, { count: firebase.firestore.FieldValue.increment(1) }, { merge: true });
-            }
-
+            batch.set(totalRef, { count: firebase.firestore.FieldValue.increment(1) }, { merge: true });
             const dailyRef = doc(db, basePath, 'stats', 'daily', todayStr);
-            if (dailyRef) {
-                batch.set(dailyRef, { count: firebase.firestore.FieldValue.increment(1) }, { merge: true });
-            }
+            batch.set(dailyRef, { count: firebase.firestore.FieldValue.increment(1) }, { merge: true });
 
-            try {
-                await batch.commit();
-            } catch (e) {
-                console.warn("Tracker init warning:", e);
-            }
+            try { await batch.commit(); } catch (e) { console.warn(e); }
         };
 
         initSession();
@@ -2146,16 +2137,21 @@ const useVisitorTracker = (db, dbSource, viewMode) => {
         
         const handleInteraction = (e) => {
             const now = Date.now();
+            
+            // [新增邏輯] 優先尋找帶有 data-analytics-event 的父元素
             if (e.type === 'click' && e.target) {
-                const text = e.target.innerText || e.target.tagName;
-                lastClickText = text.substring(0, 20);
+                const eventTarget = e.target.closest('[data-analytics-event]');
+                if (eventTarget) {
+                    lastClickText = `查看: ${eventTarget.getAttribute('data-analytics-event')}`;
+                } else {
+                    const text = e.target.innerText || e.target.tagName;
+                    lastClickText = text.substring(0, 20);
+                }
             }
 
             if (now - lastUpdate > 5000) {
                 const duration = Math.floor((now - startTime) / 1000);
-                // ✅ 修正點 2：路徑插入 'traffic'
                 const sessionRef = doc(db, `artifacts/${dbSource}/analytics`, 'traffic', 'sessions', sessionId);
-                
                 if (sessionRef) {
                     updateDoc(sessionRef, {
                         lastActive: new Date().toISOString(),
@@ -2163,14 +2159,12 @@ const useVisitorTracker = (db, dbSource, viewMode) => {
                         lastAction: lastClickText
                     }).catch(() => {});
                 }
-                
                 lastUpdate = now;
             }
         };
 
         window.addEventListener('click', handleInteraction);
         window.addEventListener('scroll', handleInteraction);
-
         return () => {
             window.removeEventListener('click', handleInteraction);
             window.removeEventListener('scroll', handleInteraction);
@@ -2178,62 +2172,152 @@ const useVisitorTracker = (db, dbSource, viewMode) => {
     }, [db, dbSource, viewMode]);
 };
 
-// ✅ 修正版：流量分析儀表板 (路徑修正)
+// ✅ 最終修正版：流量分析儀表板 (加入圖表庫自動偵測載入)
 const AnalyticsDashboard = ({ db, dbSource }) => {
     const [stats, setStats] = useState({ total: 0, today: 0 });
     const [sessions, setSessions] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [trendMode, setTrendMode] = useState('daily');
+    
+    // [新增] 追蹤圖表庫是否已經準備好
+    const [isChartLibReady, setIsChartLibReady] = useState(!!window.Recharts);
 
+    // [新增] 狀態：追蹤載入錯誤
+    const [chartLoadError, setChartLoadError] = useState(false);
+
+    // [修改] 自動偵測 Recharts 是否載入完成
     useEffect(() => {
-        if (!db) {
-            setLoading(false);
+        if (isChartLibReady) return;
+        
+        // 立即檢查一次
+        if (window.Recharts) {
+            setIsChartLibReady(true);
             return;
         }
+
+        const checkInterval = setInterval(() => {
+            if (window.Recharts) {
+                setIsChartLibReady(true);
+                clearInterval(checkInterval);
+            }
+        }, 500); // 改為 0.5 秒檢查一次
+
+        // 5秒後若還沒載入，顯示錯誤訊息
+        const timeout = setTimeout(() => {
+            clearInterval(checkInterval);
+            if (!window.Recharts) {
+                setChartLoadError(true);
+            }
+        }, 5000);
+
+        return () => {
+            clearInterval(checkInterval);
+            clearTimeout(timeout);
+        };
+    }, [isChartLibReady]);
+
+    // 嘗試從 window 物件取得 Recharts 元件
+    const { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip: RechartsTooltip, ResponsiveContainer } = window.Recharts || {};
+
+    useEffect(() => {
+        if (!db) { setLoading(false); return; }
         const basePath = `artifacts/${dbSource}/analytics`;
         const todayStr = getLocalDateStr();
 
         const unsubTotal = onSnapshot(doc(db, basePath, 'stats', 'overview', 'total'), s => {
-            const totalCount = (s && s.exists() && s.data().count) ? s.data().count : 0;
-            setStats(prev => ({ ...prev, total: totalCount }));
+            setStats(prev => ({ ...prev, total: (s && s.exists()) ? s.data().count : 0 }));
         });
-
         const unsubDaily = onSnapshot(doc(db, basePath, 'stats', 'daily', todayStr), s => {
-            const todayCount = (s && s.exists() && s.data().count) ? s.data().count : 0;
-            setStats(prev => ({ ...prev, today: todayCount }));
+            setStats(prev => ({ ...prev, today: (s && s.exists()) ? s.data().count : 0 }));
         });
 
-        // ✅ 修正點 3：路徑插入 'traffic'
-        const q = collection(db, basePath, 'traffic', 'sessions'); 
+        const q = collection(db, basePath, 'traffic', 'sessions');
         const unsubSessions = onSnapshot(q, (snapshot) => {
             const list = [];
-            if (snapshot) {
-                snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
-            }
+            if (snapshot) snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
             list.sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
-            setSessions(list.slice(0, 50));
+            setSessions(list);
             setLoading(false);
         });
 
-        return () => { 
-            if(unsubTotal) unsubTotal(); 
-            if(unsubDaily) unsubDaily();
-            if(unsubSessions) unsubSessions(); 
-        };
+        return () => { if(unsubTotal) unsubTotal(); if(unsubDaily) unsubDaily(); if(unsubSessions) unsubSessions(); };
     }, [db, dbSource]);
 
-    if (!db) return <div className="p-8 text-center text-red-400">資料庫未連線</div>;
-    if (loading) return <div className="p-8 text-center text-slate-400 flex items-center justify-center gap-2"><Icon name="loader-2" className="animate-spin"/> 載入流量數據中...</div>;
+    // --- 資料處理邏輯 ---
+    const processHourlyData = useMemo(() => {
+        const hours = Array(24).fill(0).map((_, i) => ({ hour: `${i}時`, count: 0 }));
+        sessions.forEach(s => {
+            if (!s.startTime) return;
+            const h = new Date(s.startTime).getHours();
+            if (hours[h]) hours[h].count++;
+        });
+        return hours;
+    }, [sessions]);
 
-    const avgDuration = sessions.length > 0 
-        ? Math.round(sessions.reduce((a, b) => a + (b.durationSeconds || 0), 0) / sessions.length) 
-        : 0;
+    const processTrendData = useMemo(() => {
+        const map = {};
+        sessions.forEach(s => {
+            if (!s.startTime) return;
+            const d = new Date(s.startTime);
+            let key = '';
+            
+            if (trendMode === 'daily') {
+                key = s.date || d.toISOString().split('T')[0];
+            } else if (trendMode === 'weekly') {
+                const startOfYear = new Date(d.getFullYear(), 0, 1);
+                const days = Math.floor((d - startOfYear) / (24 * 60 * 60 * 1000));
+                const week = Math.ceil((days + 1) / 7);
+                key = `${d.getFullYear()} W${week}`;
+            } else if (trendMode === 'monthly') {
+                key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+            }
+            map[key] = (map[key] || 0) + 1;
+        });
+
+        return Object.entries(map)
+            .map(([date, count]) => ({ date, count }))
+            .sort((a, b) => a.date.localeCompare(b.date))
+            .slice(-30);
+    }, [sessions, trendMode]);
+
+    if (!db) return <div className="p-8 text-center text-red-400">資料庫未連線</div>;
+    
+    // 如果圖表庫還沒準備好，顯示載入動畫
+    if (!isChartLibReady) {
+        if (chartLoadError) {
+            return (
+                <div className="p-12 text-center border-2 border-dashed border-red-200 rounded-xl m-4 bg-red-50">
+                    <Icon name="alert-triangle" className="mb-2 mx-auto text-red-500" size={32}/>
+                    <h3 className="font-bold text-red-600">圖表引擎載入失敗</h3>
+                    <p className="text-xs text-red-400 mt-2 mb-4">可能是網路連線問題或 CDN 阻擋</p>
+                    <button onClick={() => window.location.reload()} className="bg-red-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-600 transition">重新整理頁面</button>
+                </div>
+            );
+        }
+
+        return (
+            <div className="p-12 text-center border-2 border-dashed border-slate-200 rounded-xl m-4 bg-slate-50">
+                <Icon name="loader-2" className="animate-spin mb-2 mx-auto text-blue-500" size={32}/>
+                <h3 className="font-bold text-slate-600">正在啟動圖表引擎...</h3>
+                <p className="text-xs text-slate-400 mt-2">首次載入可能需要幾秒鐘</p>
+            </div>
+        );
+    }
+
+    if (loading) return <div className="p-8 text-center text-slate-400"><Icon name="loader-2" className="animate-spin inline mr-2"/>讀取數據中...</div>;
+
+    const avgDuration = sessions.length > 0 ? Math.round(sessions.reduce((a, b) => a + (b.durationSeconds || 0), 0) / sessions.length) : 0;
 
     return (
         <div className="fade-in max-w-6xl mx-auto pb-20 space-y-6">
-            <header>
-                <h2 className="text-2xl font-bold text-slate-800">流量數據中心</h2>
-                <p className="text-sm text-slate-500">掌握訪客動向與留存時間 ({getLocalDateStr()})</p>
+            <header className="flex justify-between items-end">
+                <div>
+                    <h2 className="text-2xl font-bold text-slate-800">流量數據中心</h2>
+                    <p className="text-sm text-slate-500">掌握訪客動向與時段分析</p>
+                </div>
+                <div className="text-xs text-slate-400">統計樣本: 最近 {sessions.length} 筆</div>
             </header>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-blue-100">
                     <div className="text-sm font-bold text-blue-500 mb-1">總累積訪客數</div>
@@ -2244,13 +2328,73 @@ const AnalyticsDashboard = ({ db, dbSource }) => {
                     <div className="text-4xl font-bold text-slate-800">{(stats.today || 0).toLocaleString()}</div>
                 </div>
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-orange-100">
-                    <div className="text-sm font-bold text-orange-500 mb-1">平均停留時間 (最近50筆)</div>
+                    <div className="text-sm font-bold text-orange-500 mb-1">平均停留時間</div>
                     <div className="text-4xl font-bold text-slate-800">{avgDuration} <span className="text-base text-slate-400 font-normal">秒</span></div>
                 </div>
             </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-bold text-slate-700 flex items-center gap-2"><Icon name="trending-up" size={18}/> 流量趨勢</h3>
+                        <div className="flex bg-slate-100 rounded-lg p-1">
+                            {['daily','weekly','monthly'].map(m => (
+                                <button key={m} onClick={()=>setTrendMode(m)} className={`px-3 py-1 text-xs rounded-md transition-all ${trendMode===m ? 'bg-white shadow text-blue-600 font-bold' : 'text-slate-500'}`}>
+                                    {m==='daily'?'日':m==='weekly'?'週':'月'}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="h-[250px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={processTrendData}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0"/>
+                                <XAxis dataKey="date" tick={{fontSize:10}} stroke="#94a3b8"/>
+                                <YAxis tick={{fontSize:10}} stroke="#94a3b8"/>
+                                <RechartsTooltip contentStyle={{borderRadius:'8px', border:'none', boxShadow:'0 4px 6px -1px rgb(0 0 0 / 0.1)'}}/>
+                                <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={3} dot={{r:3}} activeDot={{r:6}} name="訪客數"/>
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-bold text-slate-700 flex items-center gap-2"><Icon name="clock" size={18}/> 單日熱門時段 (0-23時)</h3>
+                    </div>
+                    <div className="h-[250px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={processHourlyData}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0"/>
+                                <XAxis dataKey="hour" tick={{fontSize:10}} stroke="#94a3b8"/>
+                                <YAxis tick={{fontSize:10}} stroke="#94a3b8"/>
+                                <RechartsTooltip cursor={{fill: '#f1f5f9'}} contentStyle={{borderRadius:'8px', border:'none', boxShadow:'0 4px 6px -1px rgb(0 0 0 / 0.1)'}}/>
+                                <Bar dataKey="count" fill="#8b5cf6" radius={[4, 4, 0, 0]} name="活躍次數"/>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+            </div>
+
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="p-4 border-b border-slate-100 font-bold text-slate-700 bg-slate-50/50">🕵️ 最近 50 筆訪客紀錄</div>
-                <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-slate-500"><tr><th className="p-4">進入時間</th><th className="p-4">裝置</th><th className="p-4">停留時間</th><th className="p-4">最後互動</th></tr></thead><tbody className="divide-y divide-slate-100">{sessions.map(s => (<tr key={s.id} className="hover:bg-slate-50 transition-colors"><td className="p-4 text-slate-600"><div className="font-bold">{s.date}</div><div className="text-xs text-slate-400">{s.startTime ? new Date(s.startTime).toLocaleTimeString() : '-'}</div></td><td className="p-4"><span className={`px-2 py-1 rounded text-xs font-bold ${s.device === 'Mobile' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-600'}`}>{s.device || 'Desktop'}</span></td><td className="p-4 font-mono font-bold text-blue-600">{(s.durationSeconds || 0) < 60 ? `${s.durationSeconds || 0}s` : `${Math.floor((s.durationSeconds || 0)/60)}m ${(s.durationSeconds || 0)%60}s`}</td><td className="p-4"><div className="max-w-[200px] truncate text-slate-700 font-medium" title={s.lastAction}>{s.lastAction || '-'}</div><div className="text-[10px] text-slate-400">更新於: {s.lastActive ? new Date(s.lastActive).toLocaleTimeString() : '-'}</div></td></tr>))}{sessions.length === 0 && (<tr><td colSpan="4" className="p-8 text-center text-slate-400">目前尚無訪客紀錄</td></tr>)}</tbody></table></div>
+                <div className="p-4 border-b border-slate-100 font-bold text-slate-700 bg-slate-50/50">🕵️ 最近訪客紀錄 (最近 50 筆)</div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-slate-50 text-slate-500"><tr><th className="p-4">時間</th><th className="p-4">裝置</th><th className="p-4">停留</th><th className="p-4">最後互動 (活動追蹤)</th></tr></thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {sessions.slice(0, 50).map(s => (
+                                <tr key={s.id} className="hover:bg-slate-50 transition-colors">
+                                    <td className="p-4 text-slate-600"><div className="font-bold">{s.date}</div><div className="text-xs text-slate-400">{s.startTime ? new Date(s.startTime).toLocaleTimeString() : '-'}</div></td>
+                                    <td className="p-4"><span className={`px-2 py-1 rounded text-xs font-bold ${s.device === 'Mobile' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-600'}`}>{s.device || 'Desktop'}</span></td>
+                                    <td className="p-4 font-mono font-bold text-blue-600">{(s.durationSeconds||0)<60 ? `${s.durationSeconds||0}s` : `${Math.floor((s.durationSeconds||0)/60)}m`}</td>
+                                    <td className="p-4">
+                                        <div className="max-w-[240px] truncate text-slate-700 font-medium" title={s.lastAction}>{s.lastAction || '-'}</div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     );
@@ -2317,7 +2461,11 @@ const [marqueeIconSize, setMarqueeIconSize] = useState(24);
             const [dailyStats, setDailyStats] = useState({}); // [修改] 改為儲存每日完整統計資料(含吉祥物數據)
             const [mascotConfig, setMascotConfig] = useState([]); // [新增] 吉祥物設定檔
             const [showMascotSettings, setShowMascotSettings] = useState(false); // [新增] 控制 Modal 顯示
-            const handleDbSourceChange = (newSource) => { setDbSource(newSource); localStorage.setItem('crm_db_source', newSource); };
+
+// ✅ [修正] 啟用訪客追蹤 Hook，讓它開始運作
+useVisitorTracker(db, dbSource, viewMode);
+
+const handleDbSourceChange = (newSource) => { setDbSource(newSource); localStorage.setItem('crm_db_source', newSource); };
             const uniqueTransports = useMemo(() => { const defaults = ['共乘', '自行前往']; const existing = new Set(parsedData.map(r => r.transport).filter(Boolean)); return Array.from(new Set([...defaults, ...existing])); }, [parsedData]);
 
 
@@ -2673,6 +2821,14 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
     const status = getEventStatus(e.count, cfg.capacity, cfg, e.date, globalRules);
     const displayName = cfg.displayName || e.eventName;
     
+    // --- [新增 1] 計算星期幾 ---
+    const dayIndex = new Date(e.date).getDay();
+    const weekDays = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+    const weekDayStr = weekDays[dayIndex] || '';
+    
+    // --- [新增 2] 組合要追蹤的字串 (例如: 2023-10-10 (週二) 登山團) ---
+    const analyticsLabel = `${e.date} (${weekDayStr}) ${displayName}`;
+
     // 樣式設定
     let cardClass = 'bg-white border-slate-100 shadow-sm hover:shadow-md border-l-4';
     const borderColor = (status.colorObj && status.colorObj.border) ? status.colorObj.border.replace('border-', 'border-l-') : 'border-l-blue-500';
@@ -2684,10 +2840,15 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
     const tags = cfg.tags || {};
 
     return (
-        // [修改 1] 移除了 onClick 事件，移除了 cursor-pointer，讓卡片本身不能點擊
-        <div key={e.key} className={`p-5 rounded-2xl border transition-all group relative ${cardClass}`}>
+        // --- [新增 3] 加入 data-analytics-event 屬性 ---
+        <div 
+            key={e.key} 
+            data-analytics-event={analyticsLabel}
+            className={`p-5 rounded-2xl border transition-all group relative ${cardClass}`}
+        >
             
             {/* 上半部：標題與狀態 (保持不變) */}
+          
             <div className="flex justify-between items-start mb-3">
                 <div className="font-bold text-lg text-slate-800">{displayName}</div>
                 <div className="flex flex-col items-end gap-1">
