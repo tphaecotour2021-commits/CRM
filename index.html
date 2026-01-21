@@ -5,6 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>TPHA 台北城市狩獵活動行程表</title>
     
+    <!-- 0. 白屏救星：全域錯誤捕捉 -->
+    <script>
+        window.onerror = function(msg, url, line, col, error) {
+            // 忽略 ResizeObserver 錯誤，這是瀏覽器常見的良性錯誤
+            if (msg.includes("ResizeObserver loop")) return false;
+            
+            document.body.innerHTML = `
+                <div style="padding:20px; color:white; background:#ef4444; font-family:sans-serif; height:100vh; overflow:auto;">
+                    <h2 style="margin-top:0;">⚠️ 系統發生錯誤 (白屏偵錯)</h2>
+                    <p><strong>錯誤訊息:</strong> ${msg}</p>
+                    <p><strong>位置:</strong> Line ${line}:${col}</p>
+                    <pre style="background:rgba(0,0,0,0.2); padding:10px; border-radius:8px; overflow:auto; white-space:pre-wrap;">${error ? error.stack : 'No stack trace'}</pre>
+                    <button onclick="location.reload()" style="background:white; color:#ef4444; border:none; padding:10px 20px; border-radius:5px; cursor:pointer; font-weight:bold; margin-top:10px;">重新整理頁面</button>
+                    <button onclick="localStorage.clear();location.reload()" style="background:transparent; border:1px solid white; color:white; padding:10px 20px; border-radius:5px; cursor:pointer; margin-top:10px; margin-left:10px;">清除快取並重整</button>
+                </div>
+            `;
+            return false;
+        };
+    </script>
+
     <!-- 1. 載入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -17,17 +37,18 @@
     
     <!-- 4. 載入 Lucide 圖標 -->
     <script src="https://unpkg.com/lucide@latest"></script>
-	<!-- 5. 載入 Recharts 圖表庫 (改用 Cloudflare CDN，最穩定) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.12.7/Recharts.min.js"></script>
+    
+    <!-- 5. 載入 Recharts 圖表庫 (更換為穩定 CDN) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-is/18.2.0/umd/react-is.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.10.3/Recharts.min.js"></script>
 
-    <!-- 5. 載入 Firebase Compat 版本 -->
+    <!-- 6. 載入 Firebase Compat 版本 -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
     <style>
-
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; -webkit-tap-highlight-color: transparent; }
         .fade-in { animation: fadeIn 0.3s ease-in-out; }
@@ -36,9 +57,9 @@
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .glass-nav { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(226, 232, 240, 0.8); }
         .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-        /* 隱藏 select 的預設箭頭，使用自定義樣式 */
         .custom-select { -webkit-appearance: none; -moz-appearance: none; appearance: none; }
-/* --- [新增] 跑馬燈動畫 --- */
+        
+        /* 跑馬燈動畫 */
         @keyframes marquee {
             0% { transform: translateX(100%); }
             100% { transform: translateX(-100%); }
@@ -48,10 +69,10 @@
             white-space: nowrap;
             animation: marquee 20s linear infinite;
         }
-        /* 當滑鼠移過去時暫停動畫，讓使用者看清楚 */
         .marquee-container:hover .animate-marquee {
             animation-play-state: paused;
         }
+        
         /* 遊戲化樣式 */
         .xp-bar-fill { transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); }
         .quest-card { transition: all 0.2s ease; }
@@ -59,7 +80,10 @@
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; border: 2px solid transparent; background-clip: content-box; }
-	    </style>
+        
+        /* 像素風圖片修正 */
+        .pixel-art { image-rendering: pixelated; }
+    </style>
 </head>
 <body>
     <div id="root"></div>
@@ -67,8 +91,7 @@
     <script type="text/babel">
         // --- 1. 安全啟動 React ---
         const { useState, useMemo, useEffect, useRef } = React;
-// [修正] 使用 window.Recharts 並給予預設空物件，防止因 CDN 載入失敗導致全域白屏
-const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } = window.Recharts || {};
+
         // --- 2. Firebase 設定 ---
         const firebaseConfig = {
             apiKey: "AIzaSyBtfR8N9Dw9kG3jQSfJSs0p0MLvlQaOR74",
@@ -83,21 +106,26 @@ const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContain
         // 安全初始化 Firebase
         let app, auth, db;
         try {
-            if (!firebase.apps.length) {
-                app = firebase.initializeApp(firebaseConfig);
+            if (typeof firebase !== 'undefined' && firebase.apps) {
+                if (!firebase.apps.length) {
+                    app = firebase.initializeApp(firebaseConfig);
+                } else {
+                    app = firebase.app();
+                }
+                auth = firebase.auth();
+                db = firebase.firestore();
+
+                try {
+                    db.settings({ experimentalForceLongPolling: true });
+                } catch (error) {
+                    console.warn("Firebase settings failed (safe to ignore):", error);
+                }
+                console.log("Firebase initialized successfully");
             } else {
-                app = firebase.app();
+                console.error("Firebase SDK not loaded.");
             }
-            auth = firebase.auth();
-            db = firebase.firestore();
-
-            // [修正] 強制使用 Long Polling 以解決 Backend didn't respond 錯誤
-            db.settings({ experimentalForceLongPolling: true });
-
-            console.log("Firebase initialized successfully");
         } catch (e) {
             console.error("Firebase initialization failed:", e);
-            alert("資料庫連線失敗，請檢查網路或 Config。");
         }
 
         // --- 3. Firebase 語法相容層 (Adapter) ---
@@ -133,7 +161,14 @@ const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContain
         const defaultAppId = 'default-app-id';
         const CSV_HEADER = "日期,活動名稱,講師,客戶姓名,金額,交通方式,身分證字號,生日,Email,報名管道,社群暱稱,備註,訂購日,手機,報到狀態";
        
-        // --- UI Components ---
+        // --- Utils & Constants ---
+        const getLocalDateStr = () => {
+            const d = new Date();
+            const offset = d.getTimezoneOffset() * 60000;
+            const localISOTime = (new Date(d - offset)).toISOString().slice(0, 10);
+            return localISOTime;
+        };
+
         const Logo = ({ className }) => {
             return (
                 <div className={`flex items-center justify-center ${className}`}>
@@ -201,7 +236,6 @@ const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContain
                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                     {renderGroup('活動等級', 'levels', definitions.levels || [], 'border-blue-200', 'bg-blue-600 text-white border-blue-600 shadow-sm')}
                     {renderGroup('活動種類', 'types', definitions.types || [], 'border-emerald-200', 'bg-emerald-600 text-white border-emerald-600 shadow-sm')}
-                    {/* 下面這一行是修正重點：補上了 definitions.locations || [] */}
                     {renderGroup('活動地點', 'locations', definitions.locations || [], 'border-purple-200', 'bg-purple-600 text-white border-purple-600 shadow-sm')}
                 </div>
             );
@@ -211,7 +245,7 @@ const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContain
             <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
                 <div className="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full">
                     <h3 className="font-bold text-lg mb-2">系統狀態</h3>
-                    <div className="bg-slate-100 p-3 rounded text-xs font-mono text-slate-600 mb-4">Status: Online (Safe Mode)<br/>Version: 3.8.5 (Performance KPI)<br/>Firebase: Compat</div>
+                    <div className="bg-slate-100 p-3 rounded text-xs font-mono text-slate-600 mb-4">Status: Online (Safe Mode)<br/>Version: 3.8.6 (BugFix)<br/>Firebase: Compat</div>
                     <button onClick={onClose} className="w-full bg-slate-800 text-white py-2 rounded-lg text-sm">關閉</button>
                 </div>
             </div>
@@ -309,10 +343,10 @@ const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContain
                 return { label: '🈵 已額滿', color: 'slate', colorObj: COLOR_OPTIONS.find(c => c.value === 'slate'), isFull: true };
             }
             const rules = Array.isArray(config?.statusRules) && config.statusRules.length > 0 ? config.statusRules : (Array.isArray(globalRules) ? globalRules : DEFAULT_STATUS_RULES);
-const matchedRule = rules.find(r => r && count >= parseInt(r.min) && count <= parseInt(r.max));
+            const matchedRule = rules.find(r => r && count >= parseInt(r.min) && count <= parseInt(r.max));
             if (matchedRule) {
                 const colorObj = COLOR_OPTIONS.find(c => c.value === matchedRule.color) || COLOR_OPTIONS[0];
-return { label: matchedRule.label || '報名中', color: matchedRule.color || 'blue', colorObj: colorObj || COLOR_OPTIONS[0], isFull: false };
+                return { label: matchedRule.label || '報名中', color: matchedRule.color || 'blue', colorObj: colorObj || COLOR_OPTIONS[0], isFull: false };
             }
             return { label: '報名中', color: 'blue', colorObj: COLOR_OPTIONS[0], isFull: false };
         };
@@ -372,7 +406,6 @@ return { label: matchedRule.label || '報名中', color: matchedRule.color || 'b
             return (<div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-4 fade-in backdrop-blur-sm"><div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl"><div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><Icon name="message-square" className="text-purple-500"/> 新增承諾</h3><button onClick={onClose}><Icon name="x" className="text-slate-400 hover:text-slate-600"/></button></div><div className="space-y-4"><div><label className="block text-xs font-bold text-slate-500 mb-1">內容</label><textarea className="w-full p-3 border rounded-xl resize-none h-24" value={form.content} onChange={e=>setForm({...form, content: e.target.value})}></textarea></div><div><label className="block text-xs font-bold text-slate-500 mb-1">對象</label><input type="text" className="w-full p-3 border rounded-xl" value={form.who} onChange={e=>setForm({...form, who: e.target.value})} /></div><div className="grid grid-cols-2 gap-3"><input type="date" className="w-full p-3 border rounded-xl" value={form.date} onChange={e=>setForm({...form, date: e.target.value })} /><input type="time" className="w-full p-3 border rounded-xl" value={form.time} onChange={e=>setForm({...form, time: e.target.value })} /></div><button onClick={()=>{if(!form.content)return;onSave(form)}} className="w-full py-3 bg-purple-600 text-white rounded-xl font-bold shadow-lg shadow-purple-200 mt-2">建立</button></div></div></div>);
         };
 
-        // --- NEW COMPONENT: ProjectTaskEditModal ---
         const ProjectTaskEditModal = ({ task, phaseId, onClose, onSave }) => {
             const [form, setForm] = useState({
                 title: task.title,
@@ -623,9 +656,7 @@ return { label: matchedRule.label || '報名中', color: matchedRule.color || 'b
             );
         };
 
-        // [補上遺失的元件] 吉祥物設定 Modal (支援多主題管理)
         const MascotSettingsModal = ({ currentList, onClose, onSave }) => {
-            // 預設主題資料結構
             const defaultThemes = [
                 { 
                     id: 'theme_squirrel', 
@@ -641,21 +672,17 @@ return { label: matchedRule.label || '報名中', color: matchedRule.color || 'b
                 }
             ];
 
-            // 如果舊資料是陣列且沒有 id (舊版格式 compatibility)，則包裝成預設主題，否則使用新格式
             const initData = (currentList && Array.isArray(currentList)) 
                 ? (currentList[0] && currentList[0].id ? currentList : defaultThemes) 
                 : defaultThemes;
 
             const [themes, setThemes] = useState(initData);
             const [selectedThemeId, setSelectedThemeId] = useState(initData[0]?.id || 'theme_squirrel');
-            
-            // GIF 編輯狀態
             const [newGif, setNewGif] = useState({ filename: '', action: '', weight: 10 });
             const [editGifIndex, setEditGifIndex] = useState(null);
 
             const activeTheme = themes.find(t => t.id === selectedThemeId) || themes[0];
 
-            // --- 主題管理 ---
             const addTheme = () => {
                 const name = prompt("請輸入新主題名稱 (例如: 蛙類系列)");
                 if (!name) return;
@@ -678,12 +705,10 @@ return { label: matchedRule.label || '報名中', color: matchedRule.color || 'b
                 setThemes(themes.map(t => t.id === selectedThemeId ? { ...t, [key]: value } : t));
             };
 
-            // --- GIF 管理 ---
             const handleAddOrUpdateGif = () => {
                 if (!newGif.filename || !newGif.action) return alert("請輸入完整資訊");
                 const gifData = { ...newGif, weight: parseInt(newGif.weight) || 10 };
                 
-                // 確保 activeTheme.gifs 存在
                 const currentGifs = activeTheme.gifs || [];
                 const updatedGifs = [...currentGifs];
                 
@@ -712,12 +737,11 @@ return { label: matchedRule.label || '報名中', color: matchedRule.color || 'b
                 }
             };
 
-            if (!activeTheme) return null; // 安全檢查
+            if (!activeTheme) return null;
 
             return (
                 <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 fade-in backdrop-blur-sm">
                     <div className="bg-white rounded-2xl w-full max-w-4xl p-0 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
-                        {/* Header */}
                         <div className="p-4 border-b flex justify-between items-center bg-slate-50">
                             <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                                 <Icon name="settings" className="text-pink-500"/> 吉祥物全域設定
@@ -726,7 +750,6 @@ return { label: matchedRule.label || '報名中', color: matchedRule.color || 'b
                         </div>
 
                         <div className="flex flex-1 overflow-hidden">
-                            {/* 左側：主題列表 */}
                             <div className="w-1/3 border-r bg-slate-50 p-4 flex flex-col gap-2 overflow-y-auto">
                                 <div className="text-xs font-bold text-slate-400 mb-2 uppercase">主題列表</div>
                                 {themes.map(t => (
@@ -741,7 +764,6 @@ return { label: matchedRule.label || '報名中', color: matchedRule.color || 'b
                                 </button>
                             </div>
 
-                            {/* 右側：詳細設定 */}
                             <div className="w-2/3 p-6 overflow-y-auto bg-white">
                                 <div className="space-y-4 mb-6">
                                     <div>
@@ -793,7 +815,6 @@ return { label: matchedRule.label || '報名中', color: matchedRule.color || 'b
                             </div>
                         </div>
 
-                        {/* Footer */}
                         <div className="p-4 border-t bg-slate-50 flex justify-end gap-2">
                             <button onClick={onClose} className="px-4 py-2 text-slate-500 hover:bg-slate-200 rounded-lg text-sm">取消</button>
                             <button onClick={() => onSave(themes)} className="px-6 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 text-sm shadow-md font-bold">儲存所有設定</button>
@@ -803,94 +824,85 @@ return { label: matchedRule.label || '報名中', color: matchedRule.color || 'b
             );
         };
 
-        // ✅ 修改後的 EventMascot：支援多主題關鍵字匹配
-const EventMascot = ({ eventName, db, dbSource, dailyStats, config }) => {
-    // 預設主題 (當後台未設定時的備案)
-    const defaultThemes = [
-        { 
-            id: 'default',
-            keywords: '飛鼠,滑翔', // 舊版邏輯的預設關鍵字
-            gifs: [
-                { filename: 'eating.gif', action: '吃東西', weight: 20 },
-                { filename: 'cleaning.gif', action: '打掃', weight: 35 },
-                { filename: 'climbing.gif', action: '攀岩', weight: 35 },
-                { filename: 'sliding.gif', action: '滑行', weight: 8 },
-                { filename: 'milking.gif', action: '喝奶', weight: 2 }
-            ]
-        }
-    ];
+        const EventMascot = ({ eventName, db, dbSource, dailyStats, config }) => {
+            const defaultThemes = [
+                { 
+                    id: 'default',
+                    keywords: '飛鼠,滑翔', 
+                    gifs: [
+                        { filename: 'eating.gif', action: '吃東西', weight: 20 },
+                        { filename: 'cleaning.gif', action: '打掃', weight: 35 },
+                        { filename: 'climbing.gif', action: '攀岩', weight: 35 },
+                        { filename: 'sliding.gif', action: '滑行', weight: 8 },
+                        { filename: 'milking.gif', action: '喝奶', weight: 2 }
+                    ]
+                }
+            ];
 
-    const themes = Array.isArray(config) && config.length > 0 ? config : defaultThemes;
-    const hasCounted = useRef(false);
+            const themes = Array.isArray(config) && config.length > 0 ? config : defaultThemes;
+            const hasCounted = useRef(false);
 
-    // 1. 根據 eventName 尋找匹配的主題
-    const matchedTheme = useMemo(() => {
-        if (!eventName) return null;
-        return themes.find(theme => {
-            if (!theme.keywords) return false;
-            // 將關鍵字字串切割成陣列 (支援逗號分隔)
-            const keywords = String(theme.keywords || '').split(/[,，、]/).map(k => k.trim()).filter(k => k);
-// 檢查活動名稱是否包含任一關鍵字
-return keywords.some(k => String(eventName || '').includes(k));
-        });
-    }, [eventName, themes]);
+            const matchedTheme = useMemo(() => {
+                if (!eventName) return null;
+                return themes.find(theme => {
+                    if (!theme.keywords) return false;
+                    const keywords = String(theme.keywords || '').split(/[,，、]/).map(k => k.trim()).filter(k => k);
+                    return keywords.some(k => String(eventName || '').includes(k));
+                });
+            }, [eventName, themes]);
 
-    // 如果沒有匹配到任何主題，就不顯示
-    if (!matchedTheme || !matchedTheme.gifs || matchedTheme.gifs.length === 0) return null;
+            const selectedItem = useMemo(() => {
+                if (!matchedTheme) return null;
+                const gifList = matchedTheme.gifs || [];
+                if (gifList.length === 0) return null;
+                const totalWeight = gifList.reduce((acc, item) => acc + (Number(item.weight) || 0), 0);
+                if (totalWeight <= 0) return gifList[0];
+                let random = Math.random() * totalWeight;
+                for (const item of gifList) {
+                    if (random < (Number(item.weight) || 0)) return item;
+                    random -= (Number(item.weight) || 0);
+                }
+                return gifList[0];
+            }, [matchedTheme]);
 
-    // 2. 從匹配主題中，使用加權隨機決定顯示哪張圖
-    const selectedItem = useMemo(() => {
-        const gifList = matchedTheme?.gifs || [];
-        if (gifList.length === 0) return null;
-        const totalWeight = gifList.reduce((acc, item) => acc + (Number(item.weight) || 0), 0);
-        if (totalWeight <= 0) return gifList[0];
-        let random = Math.random() * totalWeight;
-        for (const item of gifList) {
-            if (random < (Number(item.weight) || 0)) return item;
-            random -= (Number(item.weight) || 0);
-        }
-        return gifList[0];
-    }, [matchedTheme]);
+            const gifSrc = selectedItem?.filename || '';
+            const actionName = selectedItem?.action || '';
 
-    const gifSrc = selectedItem?.filename || '';
-    const actionName = selectedItem?.action || '';
+            useEffect(() => {
+                if (!db || !dbSource || hasCounted.current || !gifSrc) return;
+                hasCounted.current = true; 
 
-    if (!gifSrc) return null;
+                const todayStr = getLocalDateStr();
+                const docRef = doc(db, `artifacts/${dbSource}/analytics`, 'stats', 'daily', todayStr);
+                const safeKey = gifSrc.replace(/\./g, '_');
+                
+                // Safety check for Firestore increment
+                if (firebase && firebase.firestore && firebase.firestore.FieldValue) {
+                    setDoc(docRef, {
+                        mascots: {
+                            [safeKey]: firebase.firestore.FieldValue.increment(1)
+                        }
+                    }, { merge: true }).catch(console.error);
+                }
+            }, [db, dbSource, gifSrc]);
 
-    // 3. 對資料庫該動作 +1
-    useEffect(() => {
-        if (!db || !dbSource || hasCounted.current) return;
-        hasCounted.current = true; 
+            if (!gifSrc) return null;
 
-        const todayStr = getLocalDateStr();
-        const docRef = doc(db, `artifacts/${dbSource}/analytics`, 'stats', 'daily', todayStr);
-        // 將 .gif 轉為 _gif
-        const safeKey = gifSrc.replace(/\./g, '_');
+            const safeKey = gifSrc.replace(/\./g, '_');
+            const luckyNumber = (dailyStats && dailyStats.mascots && dailyStats.mascots[safeKey]) ? dailyStats.mascots[safeKey] : 1;
+
+            return (
+                <div className="absolute bottom-0 right-0 z-10 pointer-events-none flex flex-row items-end">
+                    <div className="mb-12 mr-[-10px] bg-white/95 border border-slate-200 shadow-lg rounded-2xl rounded-br-none px-3 py-2 text-[10px] leading-tight text-slate-600 animate-in fade-in slide-in-from-bottom-2 duration-700 relative z-20 max-w-[140px]">
+                        你是今天第 <span className="text-orange-500 font-bold text-sm">{luckyNumber}</span> 位<br/>
+                        看到<span className="text-slate-800 font-bold">{matchedTheme.name?.replace('系列','') || '吉祥物'}</span> <span className="text-blue-600 font-bold">{actionName}</span>！<br/>
+                        <span className="text-yellow-500 font-bold">✨ 好幸運 ✨</span>
+                    </div>
+                    <img src={gifSrc} alt="Mascot" className="w-36 h-36 object-contain relative z-10" />
+                </div>
+            );
+        };
         
-        setDoc(docRef, {
-            mascots: {
-                [safeKey]: firebase.firestore.FieldValue.increment(1)
-            }
-        }, { merge: true }).catch(console.error);
-
-    }, [db, dbSource, gifSrc]);
-
-    // 4. 讀取數字
-    const safeKey = gifSrc.replace(/\./g, '_');
-    const luckyNumber = (dailyStats && dailyStats.mascots && dailyStats.mascots[safeKey]) ? dailyStats.mascots[safeKey] : 1;
-
-    return (
-        <div className="absolute bottom-0 right-0 z-10 pointer-events-none flex flex-row items-end">
-            <div className="mb-12 mr-[-10px] bg-white/95 border border-slate-200 shadow-lg rounded-2xl rounded-br-none px-3 py-2 text-[10px] leading-tight text-slate-600 animate-in fade-in slide-in-from-bottom-2 duration-700 relative z-20 max-w-[140px]">
-                你是今天第 <span className="text-orange-500 font-bold text-sm">{luckyNumber}</span> 位<br/>
-                看到<span className="text-slate-800 font-bold">{matchedTheme.name?.replace('系列','') || '吉祥物'}</span> <span className="text-blue-600 font-bold">{actionName}</span>！<br/>
-                <span className="text-yellow-500 font-bold">✨ 好幸運 ✨</span>
-            </div>
-            <img src={gifSrc} alt="Mascot" className="w-36 h-36 object-contain relative z-10" />
-        </div>
-    );
-};
-
         const AddEventCustomerModal = ({ eventData, historicalData, onClose, onSave }) => {
             const [form, setForm] = useState({
                 customerName: '',
@@ -972,10 +984,9 @@ return keywords.some(k => String(eventName || '').includes(k));
                                         autoFocus
                                     />
                                     <datalist id="customer-suggestions">
-                                        {/* 修改：只有當有輸入文字時才篩選顯示，避免預設跳出全部 */}
                                         {form.customerName && uniqueCustomers
                                             .filter(name => name.toLowerCase().includes(form.customerName.toLowerCase()))
-                                            .slice(0, 10) // 限制顯示前 10 筆，避免太長
+                                            .slice(0, 10)
                                             .map(name => <option key={name} value={name} />)
                                         }
                                     </datalist>
@@ -1063,21 +1074,21 @@ return keywords.some(k => String(eventName || '').includes(k));
             const removeStatusRule = (idx) => { setStatusRules(statusRules.filter((_, i) => i !== idx)); };
 
             const handleSave = () => { 
-    const newInstructorStr = [...instructors].sort().join(' & ');
-    // 確保 backendColor 被包含在最外層的物件中儲存
-    onSaveConfig({ 
-    capacity: parseInt(capacity), 
-    tasks, 
-    note: eventNote, 
-    time: eventTime, 
-    link: eventLink, 
-    statusRules, 
-    displayName, 
-    activityCategory, 
-    tags, 
-    backendColor // 這裡一定要加，日曆才讀得到 cfg.backendColor
-}, newInstructorStr);    onClose(); 
-};
+                const newInstructorStr = [...instructors].sort().join(' & ');
+                onSaveConfig({ 
+                    capacity: parseInt(capacity), 
+                    tasks, 
+                    note: eventNote, 
+                    time: eventTime, 
+                    link: eventLink, 
+                    statusRules, 
+                    displayName, 
+                    activityCategory, 
+                    tags, 
+                    backendColor
+                }, newInstructorStr);    
+                onClose(); 
+            };
             const handleExportList = () => {
                 let csv = "\uFEFF姓名,手機,Email,身分證字號,生日,交通,備註,報到狀態\n";
                 sortedCustomers.forEach(c => { const status = c.isCheckedIn ? '已報到' : '未報到'; csv += `${c.customerName},${c.phone},${c.email},${c.idNo},${c.birthday},${c.transport},${toCSVField(c.notes)},${status}\n`; });
@@ -1141,11 +1152,32 @@ return keywords.some(k => String(eventName || '').includes(k));
                             <section>
                                 <h4 className="font-bold text-slate-700 mb-3 flex items-center"><Icon name="settings" size={18} className="mr-2"/> 活動設定</h4>
                                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
-                                    <div className="grid grid-cols-3 gap-3">
-    <div><span className="text-slate-500 text-xs font-bold mb-1 block">活動時間</span><input type="time" value={eventTime} onChange={e=>setEventTime(e.target.value)} className="w-full px-2 py-1.5 text-center border border-slate-300 rounded-lg font-bold outline-none focus:ring-2 focus:ring-blue-500 bg-white"/></div>
-    <div><span className="text-slate-500 text-xs font-bold mb-1 block">人數上限</span><input type="number" value={capacity} onChange={e=>setCapacity(e.target.value)} className="w-full px-2 py-1.5 text-center border border-slate-300 rounded-lg font-bold outline-none focus:ring-2 focus:ring-blue-500 bg-white"/></div>
-    <div><span className="text-slate-500 text-xs font-bold mb-1 block">後台顏色</span><input type="color" value={backendColor} onChange={e=>setBackendColor(e.target.value)} className="w-full h-[38px] p-1 border border-slate-300 rounded-lg cursor-pointer bg-white"/></div>
-</div>
+                                    <div className="grid grid-cols-2 gap-3 bg-white p-3 rounded-lg border border-slate-200">
+                                        <div className="col-span-2 text-xs font-bold text-slate-500 border-b pb-1 mb-1">📅 時間與時程設定</div>
+                                        
+                                        <div><span className="text-slate-500 text-xs font-bold mb-1 block">活動時間</span><input type="time" value={eventTime} onChange={e=>setEventTime(e.target.value)} className="w-full px-2 py-1.5 text-center border border-slate-300 rounded-lg font-bold outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"/></div>
+                                        <div><span className="text-slate-500 text-xs font-bold mb-1 block">人數上限</span><input type="number" value={capacity} onChange={e=>setCapacity(e.target.value)} className="w-full px-2 py-1.5 text-center border border-slate-300 rounded-lg font-bold outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"/></div>
+                                        
+                                        <div>
+                                            <span className="text-slate-500 text-xs font-bold mb-1 block flex items-center gap-1" title="活動實際舉辦的天數"><Icon name="calendar" size={12}/> 持續天數</span>
+                                            <input type="number" min="1" value={config?.duration || 1} onChange={e=>onSaveConfig({...config, duration: parseInt(e.target.value)||1})} className="w-full px-2 py-1.5 text-center border border-blue-200 rounded-lg font-bold outline-none focus:ring-2 focus:ring-blue-500 bg-blue-50/50 text-blue-700"/>
+                                        </div>
+                                        <div className="flex gap-1">
+            <div className="flex-1">
+                <span className="text-amber-600 text-xs font-bold mb-1 block flex items-center gap-1" title="活動前需要佔用的準備天數"><Icon name="clock" size={12}/> 前置(天)</span>
+                <input type="number" min="0" value={config?.prepDays || 0} onChange={e=>onSaveConfig({...config, prepDays: parseInt(e.target.value)||0})} className="w-full px-1 py-1.5 text-center border border-amber-200 rounded-lg font-bold outline-none focus:ring-2 focus:ring-amber-500 bg-amber-50/50 text-amber-700 text-xs"/>
+            </div>
+            <div className="flex-1">
+                <span className="text-amber-600 text-xs font-bold mb-1 block">前置時間</span>
+                <input type="time" value={config?.prepTime || ''} onChange={e=>onSaveConfig({...config, prepTime: e.target.value})} className="w-full px-1 py-1.5 text-center border border-amber-200 rounded-lg font-bold outline-none focus:ring-2 focus:ring-amber-500 bg-amber-50/50 text-amber-700 text-xs"/>
+            </div>
+        </div>
+
+                                        <div className="col-span-2 mt-1">
+                                            <span className="text-slate-500 text-xs font-bold mb-1 block">後台識別顏色</span>
+                                            <input type="color" value={backendColor} onChange={e=>setBackendColor(e.target.value)} className="w-full h-[30px] p-0.5 border border-slate-300 rounded-lg cursor-pointer bg-white"/>
+                                        </div>
+                                    </div>
                                     <div><label className="text-xs font-bold text-slate-500 mb-1 block">前台顯示名稱</label><input type="text" className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" placeholder="例如: 冬季夜訪蛙類" value={displayName} onChange={e=>setDisplayName(e.target.value)} /></div>
                                     
                                     <div>
@@ -1184,15 +1216,12 @@ return keywords.some(k => String(eventName || '').includes(k));
                 </div>
             );
         };
-       
-        // --- 找到 CreateEventModal 並將其整個替換為以下內容 ---
 
         const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, onDeleteTemplate, availableInstructors, instructorSchedule, tagDefinitions, onAddTag, initialDate }) => {
             const [mode, setMode] = useState('template'); 
             const [isCreatingTemplate, setIsCreatingTemplate] = useState(false); 
             const [calendarMonth, setCalendarMonth] = useState(initialDate ? new Date(initialDate) : new Date()); 
             
-            // [修正] 初始化時如果有 initialDate，直接帶入 dates 陣列
             const [formData, setFormData] = useState({ dates: initialDate ? [initialDate] : [], eventName: '', instructors: [], time: '', link: '', displayName: '', activityCategory: '', capacity: 12, tags: { levels: '', types: '', locations: '' }, backendColor: '#eff6ff' }); 
             const [tempInstructor, setTempInstructor] = useState(''); 
             const [newTemplateData, setNewTemplateData] = useState({ id: null, name: '', eventName: '', instructor: '', time: '', link: '', displayName: '', activityCategory: '', capacity: 12, tags: { levels: '', types: '', locations: '' }, backendColor: '#eff6ff' });
@@ -1247,7 +1276,6 @@ return keywords.some(k => String(eventName || '').includes(k));
                 setNewTemplateData({ id: null, name: '', eventName: '', instructor: '', time: '', link: '', displayName: '', activityCategory: '', capacity: 12, tags: { levels: '', types: '', locations: '' }, backendColor: '#eff6ff' }); 
             };
             
-            // [修正] renderCalendar：點擊日期改為直接 toggleDate，不再跳出選單
             const renderCalendar = () => { const year = calendarMonth.getFullYear(); const month = calendarMonth.getMonth(); const daysInMonth = getDaysInMonth(year, month); const firstDay = getFirstDayOfMonth(year, month); const days = Array(firstDay).fill(null).concat([...Array(daysInMonth).keys()].map(i => i + 1)); return ( <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 relative"> <div className="flex justify-between items-center mb-4"> <button onClick={() => setCalendarMonth(new Date(year, month - 1))}><Icon name="chevron-left" size={20}/></button> <span className="font-bold text-slate-700">{year}年 {month + 1}月</span> <button onClick={() => setCalendarMonth(new Date(year, month + 1))}><Icon name="chevron-right" size={20}/></button> </div> <div className="grid grid-cols-7 text-center mb-2 text-xs font-bold text-slate-400">{['日','一','二','三','四','五','六'].map(d=><div key={d}>{d}</div>)}</div> <div className="grid grid-cols-7 gap-1"> {days.map((day, i) => {
                 const dateStr = day ? `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` : '';
                 return ( <div key={i} className="aspect-square flex items-center justify-center"> {day && (<button onClick={() => toggleDate(dateStr)} className={`w-8 h-8 rounded-full text-sm transition-all ${formData.dates.includes(dateStr) ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-blue-100 text-slate-600'}`}>{day}</button>)} </div> ); 
@@ -1340,12 +1368,11 @@ return keywords.some(k => String(eventName || '').includes(k));
             });
             
             if (!activities[c.eventName]) { activities[c.eventName] = { count: 0, revenue: 0, dates: new Set() }; } activities[c.eventName].count += 1; activities[c.eventName].revenue += c.price; if (c.date) activities[c.eventName].dates.add(c.date + c.instructor); }); return { rev, pax, sources, activities }; }, [data]); return ( <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-4 transition-all"> <div className="p-4 flex justify-between items-center cursor-pointer hover:bg-slate-50" onClick={()=>setExpanded(!expanded)}> <div className="flex items-center gap-4"> <div className="text-lg font-bold text-slate-700">{month}</div> <div className="text-sm text-slate-500 bg-slate-100 px-2 py-0.5 rounded">總收 ${stats.rev.toLocaleString()}</div> <div className="text-sm text-slate-500">({stats.pax} 人)</div> </div> <Icon name={expanded ? 'chevron-up' : 'chevron-down'} className="text-slate-400"/> </div> {expanded && ( <div className="p-4 border-t border-slate-100 bg-slate-50/50 animate-in fade-in space-y-6"> <div> <h5 className="text-xs font-bold text-slate-500 mb-3 uppercase flex items-center"><Icon name="activity" size={14} className="mr-1"/> 各項活動表現</h5> <div className="bg-white border border-slate-200 rounded-xl overflow-hidden"> <table className="w-full text-left text-sm"> <thead className="bg-slate-50 border-b border-slate-100 text-slate-500"><tr><th className="px-4 py-2">活動名稱</th><th className="px-4 py-2">場次</th><th className="px-4 py-2">人數</th><th className="px-4 py-2">平均人數</th><th className="px-4 py-2 text-right">營收</th></tr></thead> <tbody className="divide-y divide-slate-100"> {Object.entries(stats.activities).map(([name, s], i) => { const sessionCount = s.dates.size || 1; return (<tr key={i} className="hover:bg-slate-50"><td className="px-4 py-2 font-medium text-slate-700">{name}</td><td className="px-4 py-2 text-slate-500">{sessionCount}</td><td className="px-4 py-2 text-slate-500">{s.count}</td><td className="px-4 py-2 text-slate-500">{(s.count / sessionCount).toFixed(1)}</td><td className="px-4 py-2 text-right font-mono text-slate-600">${s.revenue.toLocaleString()}</td></tr>); })} </tbody> </table> </div> </div> <div> <h5 className="text-xs font-bold text-slate-500 mb-2 uppercase flex items-center"><Icon name="share-2" size={14} className="mr-1"/> 報名管道分析</h5> <div className="flex flex-wrap gap-2">{Object.entries(stats.sources).map(([src, count]) => (<div key={src} className="text-xs px-3 py-1.5 bg-white border rounded-lg shadow-sm flex gap-2"><span className="text-slate-600">{src}</span><span className="font-bold text-blue-600">{count}</span><span className="text-slate-400">({Math.round(count/stats.pax*100)}%)</span></div>))}</div> </div> <div className="flex justify-end pt-2"><button onClick={(e)=>{e.stopPropagation(); downloadCSV(data.map(d=>Object.values(d).join(',')).join('\n'), `${month}_report.csv`)}} className="text-xs text-blue-600 hover:underline flex items-center bg-blue-50 px-3 py-1.5 rounded border border-blue-100"><Icon name="download" size={12} className="mr-1"/> 下載此月詳細報表</button></div> </div> )} </div> ); };
-       // --- FIXED COMPONENT: 連動式時間分析模組 (保持原版面) ---
+        
         const TimeAnalysisModal = ({ title, data, onClose }) => {
             const [selectedYear, setSelectedYear] = useState(null);
-            const [selectedMonth, setSelectedMonth] = useState(null); // 0-11
+            const [selectedMonth, setSelectedMonth] = useState(null); 
 
-            // 處理點擊年份
             const handleYearClick = (year) => {
                 if (selectedYear === year) {
                     setSelectedYear(null); 
@@ -1356,7 +1383,6 @@ return keywords.some(k => String(eventName || '').includes(k));
                 }
             };
 
-            // 處理點擊月份
             const handleMonthClick = (idx) => {
                 if (selectedMonth === idx) {
                     setSelectedMonth(null);
@@ -1365,13 +1391,11 @@ return keywords.some(k => String(eventName || '').includes(k));
                 }
             };
 
-            // 重置所有篩選
             const resetFilters = () => {
                 setSelectedYear(null);
                 setSelectedMonth(null);
             };
 
-            // --- 數據計算邏輯 ---
             const yearStats = useMemo(() => {
                 const stats = {};
                 let max = 0;
@@ -1465,7 +1489,6 @@ return keywords.some(k => String(eventName || '').includes(k));
             return (
                 <div className="fixed inset-0 bg-black/50 z-[90] flex items-center justify-center p-4 fade-in backdrop-blur-sm" onClick={onClose}>
                     <div className="bg-white rounded-2xl w-full max-w-5xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                        
                         <div className="flex justify-between items-center mb-6 pb-4 border-b">
                             <div>
                                 <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
@@ -1491,7 +1514,6 @@ return keywords.some(k => String(eventName || '').includes(k));
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            
                             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col h-full">
                                 <h4 className="font-bold text-slate-700 mb-4 flex items-center gap-2 pb-2 border-b border-slate-100">
                                     <div className="bg-blue-100 p-1.5 rounded text-blue-600"><Icon name="calendar" size={16}/></div> 
@@ -1570,10 +1592,8 @@ return keywords.some(k => String(eventName || '').includes(k));
         };
         const ActivityPerformance = ({ parsedData, eventConfigs }) => {
             const [dimension, setDimension] = useState('category');
-            // 新增：控制時間分析模組的狀態
-            const [analysisData, setAnalysisData] = useState(null); // { title: string, data: [] }
+            const [analysisData, setAnalysisData] = useState(null); 
 
-            // [新增這段] 客戶黏著度指標計算
     const loyaltyMetrics = useMemo(() => {
         if (!parsedData || parsedData.length === 0) return { rate: "0.0", heavyRate: "0.0", total: 0 };
         const counts = {};
@@ -1600,7 +1620,7 @@ return keywords.some(k => String(eventName || '').includes(k));
                     if (row.customerName === '開放報名中') return;
                     
                     const sortedInstr = row.instructor ? row.instructor.split(/[&,]/).map(s=>s.trim()).sort().join(' & ') : '';
-const rowKey = `${row.date}_${row.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-');
+                    const rowKey = `${row.date}_${row.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-');
                     const config = eventConfigs[rowKey] || {};
                     const tags = config.tags || {};
                     
@@ -1622,7 +1642,7 @@ const rowKey = `${row.date}_${row.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/
                     stats[groupName].revenue += (row.price || 0);
                     stats[groupName].pax += 1;
                     stats[groupName].sessions.add(row.date + row.instructor);
-                    stats[groupName].rawRows.push(row); // 儲存原始資料供分析用
+                    stats[groupName].rawRows.push(row); 
                 });
 
                 return Object.entries(stats).map(([name, data]) => ({
@@ -1645,7 +1665,6 @@ const rowKey = `${row.date}_${row.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/
                 location: '依活動地點 (標籤)'
             };
 
-            // 開啟總體分析
             const handleGlobalAnalysis = () => {
                 const validRows = parsedData.filter(row => row.customerName !== '開放報名中');
                 setAnalysisData({
@@ -1654,7 +1673,6 @@ const rowKey = `${row.date}_${row.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/
                 });
             };
 
-            // 開啟個別分析
             const handleItemAnalysis = (item) => {
                 setAnalysisData({
                     title: `分析項目: ${item.name}`,
@@ -1670,21 +1688,10 @@ const rowKey = `${row.date}_${row.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/
                             <p className="text-sm text-slate-500">深入了解各項活動的市場表現與轉換率</p>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
-                            {/* 新增總體分析按鈕 */}
-                            <button 
-                                onClick={handleGlobalAnalysis}
-                                className="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-slate-700 shadow-sm"
-                            >
-                                <Icon name="pie-chart" size={14}/> 總體時間分析
-                            </button>
-
-                            <div className="flex items-center gap-2 bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
+                             <button onClick={handleGlobalAnalysis} className="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-slate-700 shadow-sm"><Icon name="pie-chart" size={14}/> 總體時間分析</button>
+                             <div className="flex items-center gap-2 bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
                                 <span className="text-xs font-bold text-slate-500 px-2">分析維度:</span>
-                                <select 
-                                    className="text-sm bg-slate-50 border-none rounded-md py-1.5 pl-2 pr-8 focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700 cursor-pointer"
-                                    value={dimension}
-                                    onChange={e => setDimension(e.target.value)}
-                                >
+                                <select className="text-sm bg-slate-50 border-none rounded-md py-1.5 pl-2 pr-8 focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700 cursor-pointer" value={dimension} onChange={e => setDimension(e.target.value)}>
                                     <option value="category">依活動性質 (推薦)</option>
                                     <option value="name">依後台名稱</option>
                                     <option value="type">依種類標籤 (如: 蛇類、夜間)</option>
@@ -1703,44 +1710,30 @@ const rowKey = `${row.date}_${row.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/
                         </div>
                         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                             <div className="text-xs text-slate-400 font-bold uppercase mb-1">平均每場營收</div>
-                            <div className="text-2xl font-bold text-slate-800">
-                                ${Math.round(activityStats.reduce((a,c)=>a+c.avgRev,0)/Math.max(1, activityStats.length)).toLocaleString()}
-                            </div>
+                            <div className="text-2xl font-bold text-slate-800">${Math.round(activityStats.reduce((a,c)=>a+c.avgRev,0)/Math.max(1, activityStats.length)).toLocaleString()}</div>
                         </div>
                         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                             <div className="text-xs text-slate-400 font-bold uppercase mb-1">平均每場人數</div>
-                            <div className="text-2xl font-bold text-slate-800">
-                                {(activityStats.reduce((a,c)=>a+parseFloat(c.avgPax),0)/Math.max(1, activityStats.length)).toFixed(1)} <span className="text-sm font-normal text-slate-400">人</span>
-                            </div>
+                            <div className="text-2xl font-bold text-slate-800">{(activityStats.reduce((a,c)=>a+parseFloat(c.avgPax),0)/Math.max(1, activityStats.length)).toFixed(1)} <span className="text-sm font-normal text-slate-400">人</span></div>
                         </div>
                         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                             <div className="text-xs text-slate-400 font-bold uppercase mb-1">平均客單價 (ARPU)</div>
-                            <div className="text-2xl font-bold text-emerald-600">
-                                ${Math.round(activityStats.reduce((a,c)=>a+c.arpu,0)/Math.max(1, activityStats.length)).toLocaleString()}
+                            <div className="text-2xl font-bold text-emerald-600">${Math.round(activityStats.reduce((a,c)=>a+c.arpu,0)/Math.max(1, activityStats.length)).toLocaleString()}</div>
+                        </div>
+                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow border-l-4 border-l-purple-500 relative group">
+                            <div className="text-xs text-slate-400 font-bold uppercase mb-1 flex justify-between items-center">
+                                <span>客戶黏著度</span>
+                                <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium" title="消費3次以上的高頻客比例">鐵粉: {loyaltyMetrics.heavyRate}%</span>
+                            </div>
+                            <div className="flex items-baseline gap-2 mt-1">
+                                <div className="text-2xl font-bold text-purple-600">{loyaltyMetrics.rate}%</div>
+                                <div className="text-xs text-slate-400 font-medium">(基數: {loyaltyMetrics.total}人)</div>
                             </div>
                         </div>
-                        {/* [新增這段] 第5個卡片：客戶黏著度 */}
-                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow border-l-4 border-l-purple-500 relative group">
-                    <div className="text-xs text-slate-400 font-bold uppercase mb-1 flex justify-between items-center">
-                        <span>客戶黏著度</span>
-                        <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium" title="消費3次以上的高頻客比例">
-                            鐵粉: {loyaltyMetrics.heavyRate}%
-                        </span>
-                    </div>
-                    <div className="flex items-baseline gap-2 mt-1">
-                        <div className="text-2xl font-bold text-purple-600">
-                            {loyaltyMetrics.rate}%
-                        </div>
-                        <div className="text-xs text-slate-400 font-medium">
-                            (基數: {loyaltyMetrics.total}人)
-                        </div>
-                    </div>
-                </div>
-            </div>
-                
+                    </div> 
 
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden table-container">
-                        <div className="p-4 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
+                         <div className="p-4 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
                             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{dimensionLabels[dimension]}</span>
                             <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">{activityStats.length} 項</span>
                         </div>
@@ -1758,36 +1751,23 @@ const rowKey = `${row.date}_${row.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/
                             <tbody className="divide-y divide-slate-100">
                                 {activityStats.map((stat, idx) => (
                                     <tr key={idx} className="hover:bg-slate-50 transition-colors group">
-                                        <td className="px-6 py-4 font-bold text-slate-700 flex items-center gap-2">
-                                            <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs shrink-0">{idx + 1}</span>
-                                            {stat.name}
-                                        </td>
+                                        <td className="px-6 py-4 font-bold text-slate-700 flex items-center gap-2"><span className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs shrink-0">{idx + 1}</span>{stat.name}</td>
                                         <td className="px-6 py-4 text-right text-slate-600">{stat.sessions}</td>
                                         <td className="px-6 py-4 text-right text-slate-600">{stat.pax}</td>
-                                        <td className="px-6 py-4 text-right">
-                                            <span className={`px-2 py-1 rounded text-xs font-bold ${stat.avgPax >= 15 ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
-                                                {stat.avgPax}
-                                            </span>
-                                        </td>
+                                        <td className="px-6 py-4 text-right"><span className={`px-2 py-1 rounded text-xs font-bold ${stat.avgPax >= 15 ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>{stat.avgPax}</span></td>
                                         <td className="px-6 py-4 text-right font-mono font-bold text-blue-600 bg-blue-50/30 group-hover:bg-blue-50/50">${stat.revenue.toLocaleString()}</td>
                                         <td className="px-6 py-4 text-right">
-                                            <button 
-                                                onClick={() => handleItemAnalysis(stat)}
-                                                className="text-xs bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-300 px-3 py-1 rounded-lg shadow-sm transition-all flex items-center gap-1 ml-auto"
-                                            >
+                                            <button onClick={() => handleItemAnalysis(stat)} className="text-xs bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-300 px-3 py-1 rounded-lg shadow-sm transition-all flex items-center gap-1 ml-auto">
                                                 <Icon name="bar-chart-2" size={14}/> 時間分析
                                             </button>
                                         </td>
                                     </tr>
                                 ))}
-                                {activityStats.length === 0 && (
-                                    <tr><td colSpan="7" className="p-8 text-center text-slate-400">目前無數據</td></tr>
-                                )}
+                                {activityStats.length === 0 && (<tr><td colSpan="7" className="p-8 text-center text-slate-400">目前無數據</td></tr>)}
                             </tbody>
                         </table>
                     </div>
 
-                    {/* 顯示時間分析 Modal */}
                     {analysisData && (
                         <TimeAnalysisModal 
                             title={analysisData.title}
@@ -1798,155 +1778,140 @@ const rowKey = `${row.date}_${row.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/
                 </div>
             );
         };
-// --- NEW COMPONENT: 報名監控中心 ---
-const EnrollmentMonitor = ({ stats, eventConfigs, tagDefinitions }) => {
-    const [filters, setFilters] = useState({ level: '', type: '', location: '' });
-    const [sortBy, setSortBy] = useState('date'); // date | rate
+        const EnrollmentMonitor = ({ stats, eventConfigs, tagDefinitions }) => {
+            const [filters, setFilters] = useState({ level: '', type: '', location: '' });
+            const [sortBy, setSortBy] = useState('date');
 
-    // 計算並過濾資料
-    const processedEvents = useMemo(() => {
-        const today = new Date().toISOString().split('T')[0];
-        
-        return Object.values(stats.events)
-            .map(e => {
-                const cfg = eventConfigs[e.key] || {};
-                const capacity = parseInt(cfg.capacity) || 12;
-                const rate = Math.min((e.count / capacity) * 100, 100);
-                const tags = cfg.tags || { levels: '', types: '', locations: '' };
-                const isFull = e.count >= capacity;
+            const processedEvents = useMemo(() => {
+                const today = new Date().toISOString().split('T')[0];
                 
-                return { ...e, capacity, rate, tags, isFull, cfg };
-            })
-            .filter(e => {
-                // 過濾掉已結束的活動 (選擇性)
-                if (e.date < today) return false;
-                
-                // 標籤篩選
-                if (filters.level && e.tags.levels !== filters.level) return false;
-                if (filters.type && e.tags.types !== filters.type) return false;
-                if (filters.location && e.tags.locations !== filters.location) return false;
-                return true;
-            })
-            .sort((a, b) => {
-                if (sortBy === 'rate') return b.rate - a.rate; // 報名率由高到低
-                return new Date(a.date) - new Date(b.date); // 日期由近到遠
-            });
-    }, [stats, eventConfigs, filters, sortBy]);
+                return Object.values(stats.events)
+                    .map(e => {
+                        const cfg = eventConfigs[e.key] || {};
+                        const capacity = parseInt(cfg.capacity) || 12;
+                        const rate = Math.min((e.count / capacity) * 100, 100);
+                        const tags = cfg.tags || { levels: '', types: '', locations: '' };
+                        const isFull = e.count >= capacity;
+                        
+                        return { ...e, capacity, rate, tags, isFull, cfg };
+                    })
+                    .filter(e => {
+                        if (e.date < today) return false;
+                        if (filters.level && e.tags.levels !== filters.level) return false;
+                        if (filters.type && e.tags.types !== filters.type) return false;
+                        if (filters.location && e.tags.locations !== filters.location) return false;
+                        return true;
+                    })
+                    .sort((a, b) => {
+                        if (sortBy === 'rate') return b.rate - a.rate;
+                        return new Date(a.date) - new Date(b.date);
+                    });
+            }, [stats, eventConfigs, filters, sortBy]);
 
-    // 取得進度條顏色
-    const getProgressColor = (rate, isFull) => {
-        if (isFull || rate >= 100) return 'bg-red-500';
-        if (rate >= 80) return 'bg-orange-500';
-        if (rate >= 50) return 'bg-blue-500';
-        return 'bg-emerald-500';
-    };
+            const getProgressColor = (rate, isFull) => {
+                if (isFull || rate >= 100) return 'bg-red-500';
+                if (rate >= 80) return 'bg-orange-500';
+                if (rate >= 50) return 'bg-blue-500';
+                return 'bg-emerald-500';
+            };
 
-    return (
-        <div className="fade-in max-w-6xl mx-auto space-y-6 pb-20">
-            <header className="flex flex-col md:flex-row justify-between items-center gap-4">
-                <div>
-                    <h2 className="text-2xl font-bold text-slate-800">報名監控中心</h2>
-                    <p className="text-sm text-slate-500">即時掌握各場次報名率與剩餘名額</p>
-                </div>
-                <div className="flex bg-slate-100 p-1 rounded-lg">
-                    <button onClick={() => setSortBy('date')} className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${sortBy === 'date' ? 'bg-white shadow text-slate-800' : 'text-slate-500'}`}>依日期排序</button>
-                    <button onClick={() => setSortBy('rate')} className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${sortBy === 'rate' ? 'bg-white shadow text-slate-800' : 'text-slate-500'}`}>依熱門度排序</button>
-                </div>
-            </header>
+            return (
+                <div className="fade-in max-w-6xl mx-auto space-y-6 pb-20">
+                    <header className="flex flex-col md:flex-row justify-between items-center gap-4">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-800">報名監控中心</h2>
+                            <p className="text-sm text-slate-500">即時掌握各場次報名率與剩餘名額</p>
+                        </div>
+                        <div className="flex bg-slate-100 p-1 rounded-lg">
+                            <button onClick={() => setSortBy('date')} className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${sortBy === 'date' ? 'bg-white shadow text-slate-800' : 'text-slate-500'}`}>依日期排序</button>
+                            <button onClick={() => setSortBy('rate')} className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${sortBy === 'rate' ? 'bg-white shadow text-slate-800' : 'text-slate-500'}`}>依熱門度排序</button>
+                        </div>
+                    </header>
 
-            {/* 篩選控制器 */}
-            <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
-                <div className="flex items-center gap-2 mb-3">
-                    <Icon name="filter" size={18} className="text-blue-600"/>
-                    <span className="font-bold text-slate-700">標籤篩選</span>
-                    {(filters.level || filters.type || filters.location) && (
-                        <button onClick={() => setFilters({ level: '', type: '', location: '' })} className="text-xs text-red-500 hover:bg-red-50 px-2 py-1 rounded ml-auto flex items-center gap-1">
-                            <Icon name="x" size={12}/> 清除篩選
-                        </button>
+                    <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                        <div className="flex items-center gap-2 mb-3">
+                            <Icon name="filter" size={18} className="text-blue-600"/>
+                            <span className="font-bold text-slate-700">標籤篩選</span>
+                            {(filters.level || filters.type || filters.location) && (
+                                <button onClick={() => setFilters({ level: '', type: '', location: '' })} className="text-xs text-red-500 hover:bg-red-50 px-2 py-1 rounded ml-auto flex items-center gap-1">
+                                    <Icon name="x" size={12}/> 清除篩選
+                                </button>
+                            )}
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label className="text-xs font-bold text-slate-400 mb-1 block">活動等級</label>
+                                <select className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500" value={filters.level} onChange={e => setFilters({...filters, level: e.target.value})}>
+                                    <option value="">全部等級</option>
+                                    {(tagDefinitions.levels || []).map(t => <option key={t} value={t}>{t}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-400 mb-1 block">活動種類</label>
+                                <select className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-emerald-500" value={filters.type} onChange={e => setFilters({...filters, type: e.target.value})}>
+                                    <option value="">全部種類</option>
+                                    {(tagDefinitions.types || []).map(t => <option key={t} value={t}>{t}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-400 mb-1 block">活動地點</label>
+                                <select className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-purple-500" value={filters.location} onChange={e => setFilters({...filters, location: e.target.value})}>
+                                    <option value="">全部地點</option>
+                                    {(tagDefinitions.locations || []).map(t => <option key={t} value={t}>{t}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        {processedEvents.map((e, idx) => (
+                            <div key={idx} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all p-4 relative overflow-hidden group">
+                                <div className="flex justify-between items-start mb-2">
+                                    <span className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{e.date}</span>
+                                    <div className="flex gap-1">
+                                        {e.isFull && <span className="text-[10px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded">額滿</span>}
+                                        {e.tags.locations && <span className="text-[10px] font-bold bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded border border-purple-100">{e.tags.locations}</span>}
+                                    </div>
+                                </div>
+
+                                <h3 className="font-bold text-slate-800 mb-1 truncate" title={e.eventName}>{e.cfg.displayName || e.eventName}</h3>
+                                <div className="text-xs text-slate-500 mb-4 flex items-center gap-1">
+                                    <Icon name="user" size={12}/> {e.instructor || '未定'}
+                                </div>
+
+                                <div className="mb-2">
+                                    <div className="flex justify-between text-xs mb-1">
+                                        <span className={`font-bold ${e.isFull ? 'text-red-600' : 'text-slate-700'}`}>
+                                            {e.count} <span className="text-slate-400 font-normal">/ {e.capacity}</span>
+                                        </span>
+                                        <span className="font-bold text-slate-600">{Math.round(e.rate)}%</span>
+                                    </div>
+                                    <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                                        <div 
+                                            className={`h-full rounded-full transition-all duration-500 ${getProgressColor(e.rate, e.isFull)}`} 
+                                            style={{ width: `${e.rate}%` }}
+                                        ></div>
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-wrap gap-1 mt-3 pt-3 border-t border-slate-50">
+                                    {e.tags.levels && <span className="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{e.tags.levels}</span>}
+                                    {e.tags.types && <span className="text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">{e.tags.types}</span>}
+                                    {!e.tags.levels && !e.tags.types && <span className="text-[10px] text-slate-300 italic">無標籤</span>}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {processedEvents.length === 0 && (
+                        <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200">
+                            <div className="text-4xl mb-2">🔍</div>
+                            <p className="text-slate-500">沒有符合篩選條件的未來活動</p>
+                        </div>
                     )}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {/* 等級篩選 */}
-                    <div>
-                        <label className="text-xs font-bold text-slate-400 mb-1 block">活動等級</label>
-                        <select className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500" value={filters.level} onChange={e => setFilters({...filters, level: e.target.value})}>
-                            <option value="">全部等級</option>
-                            {(tagDefinitions.levels || []).map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                    </div>
-                    {/* 種類篩選 */}
-                    <div>
-                        <label className="text-xs font-bold text-slate-400 mb-1 block">活動種類</label>
-                        <select className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-emerald-500" value={filters.type} onChange={e => setFilters({...filters, type: e.target.value})}>
-                            <option value="">全部種類</option>
-                            {(tagDefinitions.types || []).map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                    </div>
-                    {/* 地點篩選 */}
-                    <div>
-                        <label className="text-xs font-bold text-slate-400 mb-1 block">活動地點</label>
-                        <select className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-purple-500" value={filters.location} onChange={e => setFilters({...filters, location: e.target.value})}>
-                            <option value="">全部地點</option>
-                            {(tagDefinitions.locations || []).map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                    </div>
-                </div>
-            </div>
-
-            {/* 卡片列表 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {processedEvents.map((e, idx) => (
-                    <div key={idx} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all p-4 relative overflow-hidden group">
-                        {/* 頂部標籤與日期 */}
-                        <div className="flex justify-between items-start mb-2">
-                            <span className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{e.date}</span>
-                            <div className="flex gap-1">
-                                {e.isFull && <span className="text-[10px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded">額滿</span>}
-                                {e.tags.locations && <span className="text-[10px] font-bold bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded border border-purple-100">{e.tags.locations}</span>}
-                            </div>
-                        </div>
-
-                        {/* 活動名稱 */}
-                        <h3 className="font-bold text-slate-800 mb-1 truncate" title={e.eventName}>{e.cfg.displayName || e.eventName}</h3>
-                        <div className="text-xs text-slate-500 mb-4 flex items-center gap-1">
-                            <Icon name="user" size={12}/> {e.instructor || '未定'}
-                        </div>
-
-                        {/* 進度條區域 */}
-                        <div className="mb-2">
-                            <div className="flex justify-between text-xs mb-1">
-                                <span className={`font-bold ${e.isFull ? 'text-red-600' : 'text-slate-700'}`}>
-                                    {e.count} <span className="text-slate-400 font-normal">/ {e.capacity}</span>
-                                </span>
-                                <span className="font-bold text-slate-600">{Math.round(e.rate)}%</span>
-                            </div>
-                            <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                                <div 
-                                    className={`h-full rounded-full transition-all duration-500 ${getProgressColor(e.rate, e.isFull)}`} 
-                                    style={{ width: `${e.rate}%` }}
-                                ></div>
-                            </div>
-                        </div>
-
-                        {/* 底部標籤區 */}
-                        <div className="flex flex-wrap gap-1 mt-3 pt-3 border-t border-slate-50">
-                            {e.tags.levels && <span className="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{e.tags.levels}</span>}
-                            {e.tags.types && <span className="text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">{e.tags.types}</span>}
-                            {!e.tags.levels && !e.tags.types && <span className="text-[10px] text-slate-300 italic">無標籤</span>}
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {processedEvents.length === 0 && (
-                <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200">
-                    <div className="text-4xl mb-2">🔍</div>
-                    <p className="text-slate-500">沒有符合篩選條件的未來活動</p>
-                </div>
-            )}
-        </div>
-    );
-};
+            );
+        };
         const EditRowModal = ({ rowData, onClose, onSave, onDelete, existingTransports }) => { 
             const [form, setForm] = useState({ ...rowData }); 
             const toggleTransport = () => {
@@ -2087,318 +2052,303 @@ const EnrollmentMonitor = ({ stats, eventConfigs, tagDefinitions }) => {
             );
         };
 	
-// ✅ 新增/修正：取得當地時間的 YYYY-MM-DD 格式
-const getLocalDateStr = () => {
-    const d = new Date();
-    const offset = d.getTimezoneOffset() * 60000;
-    const localISOTime = (new Date(d - offset)).toISOString().slice(0, 10);
-    return localISOTime;
-};
+        const useVisitorTracker = (db, dbSource, viewMode) => {
+            useEffect(() => {
+                if (viewMode === 'admin' || !db) return;
 
-// ✅ 修正版：訪客追蹤 Hook (支援讀取 data-analytics-event 屬性)
-const useVisitorTracker = (db, dbSource, viewMode) => {
-    useEffect(() => {
-        if (viewMode === 'admin' || !db) return;
+                const sessionId = `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                const todayStr = getLocalDateStr();
+                const startTime = Date.now();
+                let lastClickText = '進入網站';
 
-        const sessionId = `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const todayStr = getLocalDateStr();
-        const startTime = Date.now();
-        let lastClickText = '進入網站';
+                const initSession = async () => {
+                    const batch = writeBatch(db);
+                    const basePath = `artifacts/${dbSource}/analytics`;
+                    const sessionRef = doc(db, basePath, 'traffic', 'sessions', sessionId);
+                    if (!sessionRef) return;
 
-        const initSession = async () => {
-            const batch = writeBatch(db);
-            const basePath = `artifacts/${dbSource}/analytics`;
-            const sessionRef = doc(db, basePath, 'traffic', 'sessions', sessionId);
-            if (!sessionRef) return;
-
-            batch.set(sessionRef, {
-                startTime: new Date().toISOString(),
-                date: todayStr,
-                userAgent: navigator.userAgent,
-                device: /Mobi|Android/i.test(navigator.userAgent) ? 'Mobile' : 'Desktop',
-                lastActive: new Date().toISOString(),
-                durationSeconds: 0,
-                lastAction: '進入網站',
-                page: '首頁'
-            });
-
-            // 寫入總計與日計
-            const totalRef = doc(db, basePath, 'stats', 'overview', 'total');
-            batch.set(totalRef, { count: firebase.firestore.FieldValue.increment(1) }, { merge: true });
-            const dailyRef = doc(db, basePath, 'stats', 'daily', todayStr);
-            batch.set(dailyRef, { count: firebase.firestore.FieldValue.increment(1) }, { merge: true });
-
-            try { await batch.commit(); } catch (e) { console.warn(e); }
-        };
-
-        initSession();
-
-        let lastUpdate = Date.now();
-        
-        const handleInteraction = (e) => {
-            const now = Date.now();
-            
-            // [新增邏輯] 優先尋找帶有 data-analytics-event 的父元素
-            if (e.type === 'click' && e.target) {
-                const eventTarget = e.target.closest('[data-analytics-event]');
-                if (eventTarget) {
-                    lastClickText = `查看: ${eventTarget.getAttribute('data-analytics-event')}`;
-                } else {
-                    const text = e.target.innerText || e.target.tagName;
-                    lastClickText = text.substring(0, 20);
-                }
-            }
-
-            if (now - lastUpdate > 5000) {
-                const duration = Math.floor((now - startTime) / 1000);
-                const sessionRef = doc(db, `artifacts/${dbSource}/analytics`, 'traffic', 'sessions', sessionId);
-                if (sessionRef) {
-                    updateDoc(sessionRef, {
+                    batch.set(sessionRef, {
+                        startTime: new Date().toISOString(),
+                        date: todayStr,
+                        userAgent: navigator.userAgent,
+                        device: /Mobi|Android/i.test(navigator.userAgent) ? 'Mobile' : 'Desktop',
                         lastActive: new Date().toISOString(),
-                        durationSeconds: duration,
-                        lastAction: lastClickText
-                    }).catch(() => {});
-                }
-                lastUpdate = now;
-            }
+                        durationSeconds: 0,
+                        lastAction: '進入網站',
+                        page: '首頁'
+                    });
+
+                    // 寫入總計與日計
+                    const totalRef = doc(db, basePath, 'stats', 'overview', 'total');
+                    batch.set(totalRef, { count: firebase.firestore.FieldValue.increment(1) }, { merge: true });
+                    const dailyRef = doc(db, basePath, 'stats', 'daily', todayStr);
+                    batch.set(dailyRef, { count: firebase.firestore.FieldValue.increment(1) }, { merge: true });
+
+                    try { await batch.commit(); } catch (e) { console.warn(e); }
+                };
+
+                initSession();
+
+                let lastUpdate = Date.now();
+                
+                const handleInteraction = (e) => {
+                    const now = Date.now();
+                    
+                    if (e.type === 'click' && e.target) {
+                        const eventTarget = e.target.closest('[data-analytics-event]');
+                        if (eventTarget) {
+                            lastClickText = `查看: ${eventTarget.getAttribute('data-analytics-event')}`;
+                        } else {
+                            const text = e.target.innerText || e.target.tagName;
+                            lastClickText = text.substring(0, 20);
+                        }
+                    }
+
+                    if (now - lastUpdate > 5000) {
+                        const duration = Math.floor((now - startTime) / 1000);
+                        const sessionRef = doc(db, `artifacts/${dbSource}/analytics`, 'traffic', 'sessions', sessionId);
+                        if (sessionRef) {
+                            updateDoc(sessionRef, {
+                                lastActive: new Date().toISOString(),
+                                durationSeconds: duration,
+                                lastAction: lastClickText
+                            }).catch(() => {});
+                        }
+                        lastUpdate = now;
+                    }
+                };
+
+                window.addEventListener('click', handleInteraction);
+                window.addEventListener('scroll', handleInteraction);
+                return () => {
+                    window.removeEventListener('click', handleInteraction);
+                    window.removeEventListener('scroll', handleInteraction);
+                };
+            }, [db, dbSource, viewMode]);
         };
 
-        window.addEventListener('click', handleInteraction);
-        window.addEventListener('scroll', handleInteraction);
-        return () => {
-            window.removeEventListener('click', handleInteraction);
-            window.removeEventListener('scroll', handleInteraction);
-        };
-    }, [db, dbSource, viewMode]);
-};
-
-// ✅ 最終修正版：流量分析儀表板 (加入圖表庫自動偵測載入)
-const AnalyticsDashboard = ({ db, dbSource }) => {
-    const [stats, setStats] = useState({ total: 0, today: 0 });
-    const [sessions, setSessions] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [trendMode, setTrendMode] = useState('daily');
-    
-    // [新增] 追蹤圖表庫是否已經準備好
-    const [isChartLibReady, setIsChartLibReady] = useState(!!window.Recharts);
-
-    // [新增] 狀態：追蹤載入錯誤
-    const [chartLoadError, setChartLoadError] = useState(false);
-
-    // [修改] 自動偵測 Recharts 是否載入完成
-    useEffect(() => {
-        if (isChartLibReady) return;
-        
-        // 立即檢查一次
-        if (window.Recharts) {
-            setIsChartLibReady(true);
-            return;
-        }
-
-        const checkInterval = setInterval(() => {
-            if (window.Recharts) {
-                setIsChartLibReady(true);
-                clearInterval(checkInterval);
-            }
-        }, 500); // 改為 0.5 秒檢查一次
-
-        // 5秒後若還沒載入，顯示錯誤訊息
-        const timeout = setTimeout(() => {
-            clearInterval(checkInterval);
-            if (!window.Recharts) {
-                setChartLoadError(true);
-            }
-        }, 5000);
-
-        return () => {
-            clearInterval(checkInterval);
-            clearTimeout(timeout);
-        };
-    }, [isChartLibReady]);
-
-    // 嘗試從 window 物件取得 Recharts 元件
-    const { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip: RechartsTooltip, ResponsiveContainer } = window.Recharts || {};
-
-    useEffect(() => {
-        if (!db) { setLoading(false); return; }
-        const basePath = `artifacts/${dbSource}/analytics`;
-        const todayStr = getLocalDateStr();
-
-        const unsubTotal = onSnapshot(doc(db, basePath, 'stats', 'overview', 'total'), s => {
-            setStats(prev => ({ ...prev, total: (s && s.exists()) ? s.data().count : 0 }));
-        });
-        const unsubDaily = onSnapshot(doc(db, basePath, 'stats', 'daily', todayStr), s => {
-            setStats(prev => ({ ...prev, today: (s && s.exists()) ? s.data().count : 0 }));
-        });
-
-        const q = collection(db, basePath, 'traffic', 'sessions');
-        const unsubSessions = onSnapshot(q, (snapshot) => {
-            const list = [];
-            if (snapshot) snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
-            list.sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
-            setSessions(list);
-            setLoading(false);
-        });
-
-        return () => { if(unsubTotal) unsubTotal(); if(unsubDaily) unsubDaily(); if(unsubSessions) unsubSessions(); };
-    }, [db, dbSource]);
-
-    // --- 資料處理邏輯 ---
-    const processHourlyData = useMemo(() => {
-        const hours = Array(24).fill(0).map((_, i) => ({ hour: `${i}時`, count: 0 }));
-        sessions.forEach(s => {
-            if (!s.startTime) return;
-            const h = new Date(s.startTime).getHours();
-            if (hours[h]) hours[h].count++;
-        });
-        return hours;
-    }, [sessions]);
-
-    const processTrendData = useMemo(() => {
-        const map = {};
-        sessions.forEach(s => {
-            if (!s.startTime) return;
-            const d = new Date(s.startTime);
-            let key = '';
+        const AnalyticsDashboard = ({ db, dbSource }) => {
+            const [stats, setStats] = useState({ total: 0, today: 0 });
+            const [sessions, setSessions] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [trendMode, setTrendMode] = useState('daily');
             
-            if (trendMode === 'daily') {
-                key = s.date || d.toISOString().split('T')[0];
-            } else if (trendMode === 'weekly') {
-                const startOfYear = new Date(d.getFullYear(), 0, 1);
-                const days = Math.floor((d - startOfYear) / (24 * 60 * 60 * 1000));
-                const week = Math.ceil((days + 1) / 7);
-                key = `${d.getFullYear()} W${week}`;
-            } else if (trendMode === 'monthly') {
-                key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+            // 安全載入 Recharts
+            const [isChartLibReady, setIsChartLibReady] = useState(!!(window.Recharts && window.Recharts.BarChart));
+            const [chartLoadError, setChartLoadError] = useState(false);
+
+            useEffect(() => {
+                if (isChartLibReady) return;
+                
+                const checkInterval = setInterval(() => {
+                    if (window.Recharts && window.Recharts.BarChart) {
+                        setIsChartLibReady(true);
+                        clearInterval(checkInterval);
+                    }
+                }, 500);
+
+                const timeout = setTimeout(() => {
+                    clearInterval(checkInterval);
+                    if (!window.Recharts) {
+                        setChartLoadError(true);
+                    }
+                }, 5000);
+
+                return () => {
+                    clearInterval(checkInterval);
+                    clearTimeout(timeout);
+                };
+            }, [isChartLibReady]);
+
+            // 在組件內部安全解構
+            const Recharts = window.Recharts || {};
+            const { 
+                BarChart, Bar, LineChart, Line, XAxis, YAxis, 
+                CartesianGrid, Tooltip: RechartsTooltip, ResponsiveContainer 
+            } = Recharts;
+
+            useEffect(() => {
+                if (!db) { setLoading(false); return; }
+                const basePath = `artifacts/${dbSource}/analytics`;
+                const todayStr = getLocalDateStr();
+
+                const unsubTotal = onSnapshot(doc(db, basePath, 'stats', 'overview', 'total'), s => {
+                    setStats(prev => ({ ...prev, total: (s && s.exists()) ? s.data().count : 0 }));
+                });
+                const unsubDaily = onSnapshot(doc(db, basePath, 'stats', 'daily', todayStr), s => {
+                    setStats(prev => ({ ...prev, today: (s && s.exists()) ? s.data().count : 0 }));
+                });
+
+                const q = collection(db, basePath, 'traffic', 'sessions');
+                const unsubSessions = onSnapshot(q, (snapshot) => {
+                    const list = [];
+                    if (snapshot) snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+                    list.sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
+                    setSessions(list);
+                    setLoading(false);
+                });
+
+                return () => { if(unsubTotal) unsubTotal(); if(unsubDaily) unsubDaily(); if(unsubSessions) unsubSessions(); };
+            }, [db, dbSource]);
+
+            const processHourlyData = useMemo(() => {
+                const hours = Array(24).fill(0).map((_, i) => ({ hour: `${i}時`, count: 0 }));
+                sessions.forEach(s => {
+                    if (!s.startTime) return;
+                    const h = new Date(s.startTime).getHours();
+                    if (hours[h]) hours[h].count++;
+                });
+                return hours;
+            }, [sessions]);
+
+            const processTrendData = useMemo(() => {
+                const map = {};
+                sessions.forEach(s => {
+                    if (!s.startTime) return;
+                    const d = new Date(s.startTime);
+                    let key = '';
+                    
+                    if (trendMode === 'daily') {
+                        key = s.date || d.toISOString().split('T')[0];
+                    } else if (trendMode === 'weekly') {
+                        const startOfYear = new Date(d.getFullYear(), 0, 1);
+                        const days = Math.floor((d - startOfYear) / (24 * 60 * 60 * 1000));
+                        const week = Math.ceil((days + 1) / 7);
+                        key = `${d.getFullYear()} W${week}`;
+                    } else if (trendMode === 'monthly') {
+                        key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+                    }
+                    map[key] = (map[key] || 0) + 1;
+                });
+
+                return Object.entries(map)
+                    .map(([date, count]) => ({ date, count }))
+                    .sort((a, b) => a.date.localeCompare(b.date))
+                    .slice(-30);
+            }, [sessions, trendMode]);
+
+            if (!db) return <div className="p-8 text-center text-red-400">資料庫未連線</div>;
+            
+            if (!isChartLibReady) {
+                if (chartLoadError) {
+                    return (
+                        <div className="p-12 text-center border-2 border-dashed border-red-200 rounded-xl m-4 bg-red-50">
+                            <Icon name="alert-triangle" className="mb-2 mx-auto text-red-500" size={32}/>
+                            <h3 className="font-bold text-red-600">圖表引擎載入失敗</h3>
+                            <p className="text-xs text-red-400 mt-2 mb-4">可能是網路連線問題或 CDN 阻擋</p>
+                            <button onClick={() => window.location.reload()} className="bg-red-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-600 transition">重新整理頁面</button>
+                        </div>
+                    );
+                }
+
+                return (
+                    <div className="p-12 text-center border-2 border-dashed border-slate-200 rounded-xl m-4 bg-slate-50">
+                        <Icon name="loader-2" className="animate-spin mb-2 mx-auto text-blue-500" size={32}/>
+                        <h3 className="font-bold text-slate-600">正在啟動圖表引擎...</h3>
+                        <p className="text-xs text-slate-400 mt-2">首次載入可能需要幾秒鐘</p>
+                    </div>
+                );
             }
-            map[key] = (map[key] || 0) + 1;
-        });
 
-        return Object.entries(map)
-            .map(([date, count]) => ({ date, count }))
-            .sort((a, b) => a.date.localeCompare(b.date))
-            .slice(-30);
-    }, [sessions, trendMode]);
+            if (loading) return <div className="p-8 text-center text-slate-400"><Icon name="loader-2" className="animate-spin inline mr-2"/>讀取數據中...</div>;
 
-    if (!db) return <div className="p-8 text-center text-red-400">資料庫未連線</div>;
-    
-    // 如果圖表庫還沒準備好，顯示載入動畫
-    if (!isChartLibReady) {
-        if (chartLoadError) {
+            const avgDuration = sessions.length > 0 ? Math.round(sessions.reduce((a, b) => a + (b.durationSeconds || 0), 0) / sessions.length) : 0;
+
+            // 確保元件存在
+            if (!BarChart || !LineChart) return <div>Chart components missing</div>;
+
             return (
-                <div className="p-12 text-center border-2 border-dashed border-red-200 rounded-xl m-4 bg-red-50">
-                    <Icon name="alert-triangle" className="mb-2 mx-auto text-red-500" size={32}/>
-                    <h3 className="font-bold text-red-600">圖表引擎載入失敗</h3>
-                    <p className="text-xs text-red-400 mt-2 mb-4">可能是網路連線問題或 CDN 阻擋</p>
-                    <button onClick={() => window.location.reload()} className="bg-red-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-600 transition">重新整理頁面</button>
-                </div>
-            );
-        }
+                <div className="fade-in max-w-6xl mx-auto pb-20 space-y-6">
+                    <header className="flex justify-between items-end">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-800">流量數據中心</h2>
+                            <p className="text-sm text-slate-500">掌握訪客動向與時段分析</p>
+                        </div>
+                        <div className="text-xs text-slate-400">統計樣本: 最近 {sessions.length} 筆</div>
+                    </header>
 
-        return (
-            <div className="p-12 text-center border-2 border-dashed border-slate-200 rounded-xl m-4 bg-slate-50">
-                <Icon name="loader-2" className="animate-spin mb-2 mx-auto text-blue-500" size={32}/>
-                <h3 className="font-bold text-slate-600">正在啟動圖表引擎...</h3>
-                <p className="text-xs text-slate-400 mt-2">首次載入可能需要幾秒鐘</p>
-            </div>
-        );
-    }
-
-    if (loading) return <div className="p-8 text-center text-slate-400"><Icon name="loader-2" className="animate-spin inline mr-2"/>讀取數據中...</div>;
-
-    const avgDuration = sessions.length > 0 ? Math.round(sessions.reduce((a, b) => a + (b.durationSeconds || 0), 0) / sessions.length) : 0;
-
-    return (
-        <div className="fade-in max-w-6xl mx-auto pb-20 space-y-6">
-            <header className="flex justify-between items-end">
-                <div>
-                    <h2 className="text-2xl font-bold text-slate-800">流量數據中心</h2>
-                    <p className="text-sm text-slate-500">掌握訪客動向與時段分析</p>
-                </div>
-                <div className="text-xs text-slate-400">統計樣本: 最近 {sessions.length} 筆</div>
-            </header>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-blue-100">
-                    <div className="text-sm font-bold text-blue-500 mb-1">總累積訪客數</div>
-                    <div className="text-4xl font-bold text-slate-800">{(stats.total || 0).toLocaleString()}</div>
-                </div>
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-emerald-100">
-                    <div className="text-sm font-bold text-emerald-500 mb-1">今日訪客</div>
-                    <div className="text-4xl font-bold text-slate-800">{(stats.today || 0).toLocaleString()}</div>
-                </div>
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-orange-100">
-                    <div className="text-sm font-bold text-orange-500 mb-1">平均停留時間</div>
-                    <div className="text-4xl font-bold text-slate-800">{avgDuration} <span className="text-base text-slate-400 font-normal">秒</span></div>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="font-bold text-slate-700 flex items-center gap-2"><Icon name="trending-up" size={18}/> 流量趨勢</h3>
-                        <div className="flex bg-slate-100 rounded-lg p-1">
-                            {['daily','weekly','monthly'].map(m => (
-                                <button key={m} onClick={()=>setTrendMode(m)} className={`px-3 py-1 text-xs rounded-md transition-all ${trendMode===m ? 'bg-white shadow text-blue-600 font-bold' : 'text-slate-500'}`}>
-                                    {m==='daily'?'日':m==='weekly'?'週':'月'}
-                                </button>
-                            ))}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-blue-100">
+                            <div className="text-sm font-bold text-blue-500 mb-1">總累積訪客數</div>
+                            <div className="text-4xl font-bold text-slate-800">{(stats.total || 0).toLocaleString()}</div>
+                        </div>
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-emerald-100">
+                            <div className="text-sm font-bold text-emerald-500 mb-1">今日訪客</div>
+                            <div className="text-4xl font-bold text-slate-800">{(stats.today || 0).toLocaleString()}</div>
+                        </div>
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-orange-100">
+                            <div className="text-sm font-bold text-orange-500 mb-1">平均停留時間</div>
+                            <div className="text-4xl font-bold text-slate-800">{avgDuration} <span className="text-base text-slate-400 font-normal">秒</span></div>
                         </div>
                     </div>
-                    <div className="h-[250px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={processTrendData}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0"/>
-                                <XAxis dataKey="date" tick={{fontSize:10}} stroke="#94a3b8"/>
-                                <YAxis tick={{fontSize:10}} stroke="#94a3b8"/>
-                                <RechartsTooltip contentStyle={{borderRadius:'8px', border:'none', boxShadow:'0 4px 6px -1px rgb(0 0 0 / 0.1)'}}/>
-                                <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={3} dot={{r:3}} activeDot={{r:6}} name="訪客數"/>
-                            </LineChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
 
-                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="font-bold text-slate-700 flex items-center gap-2"><Icon name="clock" size={18}/> 單日熱門時段 (0-23時)</h3>
-                    </div>
-                    <div className="h-[250px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={processHourlyData}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0"/>
-                                <XAxis dataKey="hour" tick={{fontSize:10}} stroke="#94a3b8"/>
-                                <YAxis tick={{fontSize:10}} stroke="#94a3b8"/>
-                                <RechartsTooltip cursor={{fill: '#f1f5f9'}} contentStyle={{borderRadius:'8px', border:'none', boxShadow:'0 4px 6px -1px rgb(0 0 0 / 0.1)'}}/>
-                                <Bar dataKey="count" fill="#8b5cf6" radius={[4, 4, 0, 0]} name="活躍次數"/>
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-            </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="font-bold text-slate-700 flex items-center gap-2"><Icon name="trending-up" size={18}/> 流量趨勢</h3>
+                                <div className="flex bg-slate-100 rounded-lg p-1">
+                                    {['daily','weekly','monthly'].map(m => (
+                                        <button key={m} onClick={()=>setTrendMode(m)} className={`px-3 py-1 text-xs rounded-md transition-all ${trendMode===m ? 'bg-white shadow text-blue-600 font-bold' : 'text-slate-500'}`}>
+                                            {m==='daily'?'日':m==='weekly'?'週':'月'}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="h-[250px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={processTrendData}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0"/>
+                                        <XAxis dataKey="date" tick={{fontSize:10}} stroke="#94a3b8"/>
+                                        <YAxis tick={{fontSize:10}} stroke="#94a3b8"/>
+                                        <RechartsTooltip contentStyle={{borderRadius:'8px', border:'none', boxShadow:'0 4px 6px -1px rgb(0 0 0 / 0.1)'}}/>
+                                        <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={3} dot={{r:3}} activeDot={{r:6}} name="訪客數"/>
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="p-4 border-b border-slate-100 font-bold text-slate-700 bg-slate-50/50">🕵️ 最近訪客紀錄 (最近 50 筆)</div>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm">
-                        <thead className="bg-slate-50 text-slate-500"><tr><th className="p-4">時間</th><th className="p-4">裝置</th><th className="p-4">停留</th><th className="p-4">最後互動 (活動追蹤)</th></tr></thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {sessions.slice(0, 50).map(s => (
-                                <tr key={s.id} className="hover:bg-slate-50 transition-colors">
-                                    <td className="p-4 text-slate-600"><div className="font-bold">{s.date}</div><div className="text-xs text-slate-400">{s.startTime ? new Date(s.startTime).toLocaleTimeString() : '-'}</div></td>
-                                    <td className="p-4"><span className={`px-2 py-1 rounded text-xs font-bold ${s.device === 'Mobile' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-600'}`}>{s.device || 'Desktop'}</span></td>
-                                    <td className="p-4 font-mono font-bold text-blue-600">{(s.durationSeconds||0)<60 ? `${s.durationSeconds||0}s` : `${Math.floor((s.durationSeconds||0)/60)}m`}</td>
-                                    <td className="p-4">
-                                        <div className="max-w-[240px] truncate text-slate-700 font-medium" title={s.lastAction}>{s.lastAction || '-'}</div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="font-bold text-slate-700 flex items-center gap-2"><Icon name="clock" size={18}/> 單日熱門時段 (0-23時)</h3>
+                            </div>
+                            <div className="h-[250px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={processHourlyData}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0"/>
+                                        <XAxis dataKey="hour" tick={{fontSize:10}} stroke="#94a3b8"/>
+                                        <YAxis tick={{fontSize:10}} stroke="#94a3b8"/>
+                                        <RechartsTooltip cursor={{fill: '#f1f5f9'}} contentStyle={{borderRadius:'8px', border:'none', boxShadow:'0 4px 6px -1px rgb(0 0 0 / 0.1)'}}/>
+                                        <Bar dataKey="count" fill="#8b5cf6" radius={[4, 4, 0, 0]} name="活躍次數"/>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div className="p-4 border-b border-slate-100 font-bold text-slate-700 bg-slate-50/50">🕵️ 最近訪客紀錄 (最近 50 筆)</div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-slate-50 text-slate-500"><tr><th className="p-4">時間</th><th className="p-4">裝置</th><th className="p-4">停留</th><th className="p-4">最後互動 (活動追蹤)</th></tr></thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {sessions.slice(0, 50).map(s => (
+                                        <tr key={s.id} className="hover:bg-slate-50 transition-colors">
+                                            <td className="p-4 text-slate-600"><div className="font-bold">{s.date}</div><div className="text-xs text-slate-400">{s.startTime ? new Date(s.startTime).toLocaleTimeString() : '-'}</div></td>
+                                            <td className="p-4"><span className={`px-2 py-1 rounded text-xs font-bold ${s.device === 'Mobile' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-600'}`}>{s.device || 'Desktop'}</span></td>
+                                            <td className="p-4 font-mono font-bold text-blue-600">{(s.durationSeconds||0)<60 ? `${s.durationSeconds||0}s` : `${Math.floor((s.durationSeconds||0)/60)}m`}</td>
+                                            <td className="p-4">
+                                                <div className="max-w-[240px] truncate text-slate-700 font-medium" title={s.lastAction}>{s.lastAction || '-'}</div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </div>
-    );
-};
+            );
+        };
+        
         const MainApp = () => {
             const [user, setUser] = useState(null);
             const [activeTab, setActiveTab] = useState('events'); 
@@ -2448,28 +2398,26 @@ const AnalyticsDashboard = ({ db, dbSource }) => {
             const [showCrmDropdown, setShowCrmDropdown] = useState(false);
             const [newReg, setNewReg] = useState({ date: new Date().toISOString().split('T')[0], eventName: '', instructor: '', customerName: '', price: '', transport: '', idNo: '', birthday: '', email: '', source: '', orderDate: new Date().toISOString().split('T')[0], phone: '' });
             const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-            // [原有] 跑馬燈公告文字 State
-            const [latestNews, setLatestNews] = useState(''); 
-const [marqueeIconHistory, setMarqueeIconHistory] = useState([]);
-const [marqueeBgColor, setMarqueeBgColor] = useState('#0f172a'); 
-const [marqueeTextColor, setMarqueeTextColor] = useState('#ffffff'); // 預設白色
-const [marqueeIconSize, setMarqueeIconSize] = useState(24);
             
-            // [新增] 跑馬燈速度與圖示 State
-            const [marqueeSpeed, setMarqueeSpeed] = useState(20); // 預設 20秒
-            const [marqueeIcon, setMarqueeIcon] = useState('');   // 預設無圖
-            const [dailyStats, setDailyStats] = useState({}); // [修改] 改為儲存每日完整統計資料(含吉祥物數據)
-            const [mascotConfig, setMascotConfig] = useState([]); // [新增] 吉祥物設定檔
-            const [showMascotSettings, setShowMascotSettings] = useState(false); // [新增] 控制 Modal 顯示
+            // 跑馬燈與吉祥物 State
+            const [latestNews, setLatestNews] = useState(''); 
+            const [marqueeIconHistory, setMarqueeIconHistory] = useState([]);
+            const [marqueeBgColor, setMarqueeBgColor] = useState('#0f172a'); 
+            const [marqueeTextColor, setMarqueeTextColor] = useState('#ffffff'); 
+            const [marqueeIconSize, setMarqueeIconSize] = useState(24);
+            const [marqueeSpeed, setMarqueeSpeed] = useState(20); 
+            const [marqueeIcon, setMarqueeIcon] = useState('');   
+            const [dailyStats, setDailyStats] = useState({}); 
+            const [mascotConfig, setMascotConfig] = useState([]); 
+            const [showMascotSettings, setShowMascotSettings] = useState(false); 
 
-// ✅ [修正] 啟用訪客追蹤 Hook，讓它開始運作
-useVisitorTracker(db, dbSource, viewMode);
+            useVisitorTracker(db, dbSource, viewMode);
 
-const handleDbSourceChange = (newSource) => { setDbSource(newSource); localStorage.setItem('crm_db_source', newSource); };
+            const handleDbSourceChange = (newSource) => { setDbSource(newSource); localStorage.setItem('crm_db_source', newSource); };
             const uniqueTransports = useMemo(() => { const defaults = ['共乘', '自行前往']; const existing = new Set(parsedData.map(r => r.transport).filter(Boolean)); return Array.from(new Set([...defaults, ...existing])); }, [parsedData]);
 
-
             useEffect(() => { if (auth) { signInAnonymously(auth).catch(console.error); return onAuthStateChanged(auth, u => setUser(u)); } else { setUser({ isAnonymous: true, uid: 'demo' }); } }, []);
+            
             useEffect(() => {
                 if (!user) return;
                 setLoading(true);
@@ -2477,7 +2425,36 @@ const handleDbSourceChange = (newSource) => { setDbSource(newSource); localStora
                 if (db) {
                     const settingsRef = doc(db, basePath, 'settings', 'auth');
                     if (settingsRef) { onSnapshot(settingsRef, s => { if (s && s.exists()) { setAdminPassword(s.data().password || '8888'); } else { setAdminPassword('8888'); } }); }
-                    const updateParsedData = (raw) => { try { const lines = raw.trim().split('\n'); const data = lines.slice(1).map((line, i) => { const v = line.split(','); if(v.length < 5) return null; return { id: i, date: v[0]?.trim(), eventName: v[1]?.trim(), instructor: v[2]?.trim(), customerName: v[3]?.trim(), price: parseInt(v[4])||0, transport: v[5]?.trim(), idNo: v[6]?.trim(), birthday: v[7]?.trim(), email: v[8]?.trim(), source: v[9]?.trim(), socialName: v[10]?.trim(), notes: v[11]?.trim(), orderDate: v[12]?.trim(), phone: v[13]?.trim(), isCheckedIn: v[14]?.trim() === '1' }; }).filter(Boolean); setParsedData(data); } catch(e) { console.error(e); } };
+                    
+                    const updateParsedData = (raw) => { 
+                        try { 
+                            const lines = raw.trim().split('\n'); 
+                            const data = lines.slice(1).map((line, i) => { 
+                                const v = line.split(','); 
+                                if(v.length < 5) return null; 
+                                return { 
+                                    id: i, 
+                                    date: v[0]?.trim(), 
+                                    eventName: v[1]?.trim(), 
+                                    instructor: v[2]?.trim(), 
+                                    customerName: v[3]?.trim(), 
+                                    price: parseInt(v[4])||0, 
+                                    transport: v[5]?.trim(), 
+                                    idNo: v[6]?.trim(), 
+                                    birthday: v[7]?.trim(), 
+                                    email: v[8]?.trim(), 
+                                    source: v[9]?.trim(), 
+                                    socialName: v[10]?.trim(), 
+                                    notes: v[11]?.trim(), 
+                                    orderDate: v[12]?.trim(), 
+                                    phone: v[13]?.trim(), 
+                                    isCheckedIn: v[14]?.trim() === '1' 
+                                }; 
+                            }).filter(row => row && row.date); // FIX: Filter out invalid rows or empty dates
+                            setParsedData(data); 
+                        } catch(e) { console.error(e); } 
+                    };
+
                     const mainRef = doc(db, basePath, 'settings', 'main');
                     const unsub1 = onSnapshot(mainRef, s => { 
                         if(s && s.exists()) { 
@@ -2486,17 +2463,15 @@ const handleDbSourceChange = (newSource) => { setDbSource(newSource); localStora
                             if (data.globalRules) setGlobalRules(data.globalRules); 
                             if (data.tagDefinitions) setTagDefinitions(data.tagDefinitions); 
                             
-                            // [原有] 讀取跑馬燈資料
                             if (data.latestNews) setLatestNews(data.latestNews);
                             
-                            // [新增] 讀取速度與圖示設定
                             if (data.marqueeSpeed) setMarqueeSpeed(data.marqueeSpeed);
                             if (data.marqueeIcon) setMarqueeIcon(data.marqueeIcon); 
-if (data.marqueeIconHistory) setMarqueeIconHistory(data.marqueeIconHistory);
-if (data.marqueeBgColor) setMarqueeBgColor(data.marqueeBgColor);
-if (data.marqueeTextColor) setMarqueeTextColor(data.marqueeTextColor);
-if (data.marqueeIconSize) setMarqueeIconSize(data.marqueeIconSize);
-                            if (data.mascotConfig) setMascotConfig(data.mascotConfig); // 讀取吉祥物設定
+                            if (data.marqueeIconHistory) setMarqueeIconHistory(data.marqueeIconHistory);
+                            if (data.marqueeBgColor) setMarqueeBgColor(data.marqueeBgColor);
+                            if (data.marqueeTextColor) setMarqueeTextColor(data.marqueeTextColor);
+                            if (data.marqueeIconSize) setMarqueeIconSize(data.marqueeIconSize);
+                            if (data.mascotConfig) setMascotConfig(data.mascotConfig); 
                             if (!isEditingRef.current) { 
                                 setCsvInput(d); 
                                 updateParsedData(d); 
@@ -2515,7 +2490,6 @@ if (data.marqueeIconSize) setMarqueeIconSize(data.marqueeIconSize);
                     const scheduleRef = doc(db, basePath, 'settings', 'schedule');
                     const unsub6 = onSnapshot(scheduleRef, s => { if (s && s.exists()) { setInstructorSchedule(s.data().resting || {}); setCompanyRestDates(s.data().companyRest || []); } });
                     
-                    // [修改] 監聽今日完整統計資料 (含吉祥物計數)
                     const todayStr = getLocalDateStr();
                     const analyticsRef = doc(db, `artifacts/${dbSource}/analytics`, 'stats', 'daily', todayStr);
                     const unsub7 = onSnapshot(analyticsRef, s => { if(s && s.exists()) setDailyStats(s.data() || {}); });
@@ -2531,8 +2505,6 @@ if (data.marqueeIconSize) setMarqueeIconSize(data.marqueeIconSize);
             const handleSaveCSV = async (newData) => { if(!user || !db) return; setCsvSaveStatus('saving'); setIsSaving(true); try { isEditingRef.current = false; await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), { csvData: newData }, { merge: true }); setCsvInput(newData); setCsvSaveStatus('success'); setTimeout(() => setCsvSaveStatus('idle'), 3000); } catch(e) { console.error(e); setCsvSaveStatus('error'); } finally { setIsSaving(false); } };
             const arrayToCSV = (dataArray) => { let csv = CSV_HEADER + '\n'; dataArray.forEach(row => { const check = row.isCheckedIn ? '1' : '0'; const line = `${row.date||''},${row.eventName||''},${row.instructor||''},${row.customerName||''},${row.price||0},${row.transport||''},${row.idNo||''},${row.birthday||''},${row.email||''},${row.source||''},${row.socialName||''},${toCSVField(row.notes)},${row.orderDate||''},${row.phone||''},${check}`; csv += line + '\n'; }); return csv; };
             const handleUpdateRow = async (newRowData) => { 
-                // [修正] 單純更新 CSV 名單資料，完全不觸碰 event_configs (活動設定/顏色)
-                // 這樣可以確保客人移動時，不會影響舊活動的顏色，也不會覆蓋新活動的顏色
                 const newData = parsedData.map(row => row.id === newRowData.id ? newRowData : row); 
                 await handleSaveCSV(arrayToCSV(newData)); 
                 setEditingRow(null); 
@@ -2557,7 +2529,6 @@ if (data.marqueeIconSize) setMarqueeIconSize(data.marqueeIconSize);
                         activityCategory: activityCategory || '', 
                         capacity: parseInt(capacity) || 12, 
                         tags: tags || { levels: '', types: '', locations: '' },
-                        // [重點] 這裡將顏色寫入資料庫
                         backendColor: backendColor || '#eff6ff'
                     }, { merge: true }); 
                 }); 
@@ -2566,7 +2537,6 @@ if (data.marqueeIconSize) setMarqueeIconSize(data.marqueeIconSize);
             };
             const handleCheckInToggle = async (customerId, currentStatus) => { const row = parsedData.find(r => r.id === customerId); if (row) { await handleUpdateRow({ ...row, isCheckedIn: !currentStatus }); } };
             const handleSaveEventConfig = async (oldEventKey, newConfig, newInstructorStr) => { 
-                // [修正] 使用 sortedInstr 確保 Key 比對正確
                 const affectedRows = parsedData.filter(r => { 
                     const sortedInstr = r.instructor ? r.instructor.split(/[&,]/).map(s=>s.trim()).sort().join(' & ') : '';
                     const key = `${r.date}_${r.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-'); 
@@ -2587,25 +2557,18 @@ if (data.marqueeIconSize) setMarqueeIconSize(data.marqueeIconSize);
                         const newKey = `${evt.date}_${evt.eventName}_${newInstructorStr}`.replace(/[\/\\#\?]/g, '-'); 
                         
                         if (newKey !== oldEventKey) { 
-                            // [重點修正] 判斷目標活動(newKey)是否已經有設定檔？
                             const targetConfigExists = eventConfigs[newKey];
 
                             if (targetConfigExists) {
-                                // 情況 A：目標活動已存在 (合併發生)
-                                // 策略：完全不覆寫設定，保留目標活動原本的顏色、連結與備註
                                 console.log("合併至既有活動，保留既有設定");
                             } else {
-                                // 情況 B：目標活動不存在 (新分組產生)
-                                // 策略：繼承目前的設定過去
                                 await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', newKey), newConfig, { merge: true }); 
                             }
                         } else { 
-                            // 情況 C：Key 沒變 (單純修改設定)
                             await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', oldEventKey), newConfig, { merge: true }); 
                         } 
                     } 
                 } else { 
-                    // 情況 D：沒有改講師 (單純修改設定)
                     await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', oldEventKey), newConfig, { merge: true }); 
                 } 
             };
@@ -2624,7 +2587,6 @@ if (data.marqueeIconSize) setMarqueeIconSize(data.marqueeIconSize);
                 const { date, eventName, instructor, key } = editingEvent; 
                 if (!confirm(`確定要刪除「${date} ${eventName}」嗎？\n⚠️ 警告：這將會刪除該場次的所有報名資料，無法復原！`)) return; 
                 
-                // [修正] 使用 sortedInstr 確保 Key 比對正確
                 const newRows = parsedData.filter(r => { 
                     const sortedInstr = r.instructor ? r.instructor.split(/[&,]/).map(s=>s.trim()).sort().join(' & ') : '';
                     const rowKey = `${r.date}_${r.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-'); 
@@ -2636,7 +2598,7 @@ if (data.marqueeIconSize) setMarqueeIconSize(data.marqueeIconSize);
                 setEditingEvent(null); 
             };
             const handleAddTagDefinition = async (type, newValue) => { const currentList = tagDefinitions[type] || []; if (currentList.includes(newValue)) return; const newDefs = { ...tagDefinitions, [type]: [...currentList, newValue] }; setTagDefinitions(newDefs); await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), { tagDefinitions: newDefs }, { merge: true }); };
-// ✅ 新增：初始化流量資料庫的函式 (已修正路徑)
+
             const handleInitializeAnalytics = async () => {
                 if (!db || !user) return alert("資料庫未連線");
                 if (!confirm("確定要初始化流量統計資料庫嗎？")) return;
@@ -2652,7 +2614,6 @@ if (data.marqueeIconSize) setMarqueeIconSize(data.marqueeIconSize);
                     const dailyRef = doc(db, basePath, 'stats', 'daily', todayStr);
                     batch.set(dailyRef, { count: 0 }, { merge: true });
 
-                    // ✅ 修正點 4：路徑插入 'traffic'
                     const testSessionRef = doc(db, basePath, 'traffic', 'sessions', `init_${Date.now()}`);
                     batch.set(testSessionRef, {
                         startTime: new Date().toISOString(),
@@ -2682,6 +2643,61 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
             const filteredCrmCustomers = ltvStats.sortedCustomers.filter(c => c.toLowerCase().includes(crmSearchTerm.toLowerCase()));
             const customerProfile = useMemo(() => { if (!selectedCustomer) return null; const history = parsedData.filter(d => d.customerName === selectedCustomer); const totalSpend = history.reduce((a,c)=>a+c.price,0); const avgSpend = history.length ? Math.round(totalSpend / history.length) : 0; const lastReg = history[history.length-1]; return { history, totalSpend, avgSpend, email: lastReg?.email, source: lastReg?.source, idNo: lastReg?.idNo, birthday: lastReg?.birthday, transport: lastReg?.transport, phone: lastReg?.phone, socialName: lastReg?.socialName, notes: lastReg?.notes, latestRecord: lastReg }; }, [selectedCustomer, parsedData]);
             const calendarDays = useMemo(() => { const year = currentDate.getFullYear(); const month = currentDate.getMonth(); const daysInMonth = getDaysInMonth(year, month); const firstDay = getFirstDayOfMonth(year, month); return Array(firstDay).fill(null).concat([...Array(daysInMonth).keys()].map(i => i + 1)); }, [currentDate]);
+            
+            // [修正] 計算月曆每天的佔用情形 (包含跨日與前置) - 增加日期檢查與排序
+            const calendarOccupancy = useMemo(() => {
+                const map = {};
+                Object.values(stats.events).forEach(evt => {
+                    if (!evt.date) return;
+                    const mainDate = new Date(evt.date);
+                    if (isNaN(mainDate.getTime())) return;
+
+                    const cfg = eventConfigs[evt.key] || {};
+                    const duration = parseInt(cfg.duration) || 1;
+                    const prepDays = parseInt(cfg.prepDays) || 0;
+                    const prepTime = cfg.prepTime || '09:00'; // 預設前置時間
+                    const mainTime = cfg.time || '23:59';     // 預設活動時間
+
+                    // 1. 前置
+                    for (let i = prepDays; i > 0; i--) {
+                        const d = new Date(mainDate);
+                        d.setDate(d.getDate() - i);
+                        const dateStr = d.toISOString().split('T')[0];
+                        if (!map[dateStr]) map[dateStr] = [];
+                        map[dateStr].push({ 
+                            type: 'prep', evt, cfg, 
+                            displayTime: prepTime, // 綁定前置時間
+                            label: `⚠️ 前置: ${evt.eventName}` 
+                        });
+                    }
+
+                    // 2. 主活動與跨日
+                    for (let i = 0; i < duration; i++) {
+                        const d = new Date(mainDate);
+                        d.setDate(d.getDate() + i);
+                        const dateStr = d.toISOString().split('T')[0];
+                        if (!map[dateStr]) map[dateStr] = [];
+                        
+                        if (i === 0) {
+                            map[dateStr].push({ type: 'main', evt, cfg, displayTime: mainTime });
+                        } else {
+                            map[dateStr].push({ 
+                                type: 'cont', evt, cfg, 
+                                displayTime: '00:00', // 跨日通常置頂
+                                label: `↳ D${i+1}: ${evt.eventName}` 
+                            });
+                        }
+                    }
+                });
+
+                // 針對每一天進行時間排序
+                Object.keys(map).forEach(date => {
+                    map[date].sort((a, b) => a.displayTime.localeCompare(b.displayTime));
+                });
+
+                return map;
+            }, [stats.events, eventConfigs]);
+
             const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
             const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
             const groupedTasks = useMemo(() => { return tasks.reduce((acc, task) => { const groupKey = task.name; if (!acc[groupKey]) acc[groupKey] = []; acc[groupKey].push(task); return acc; }, {}); }, [tasks]);
@@ -2702,36 +2718,22 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                 
                 return (
                     <div className="min-h-screen bg-white pb-20 relative">
-                       
-
                         <nav className="glass-nav sticky top-0 z-50 px-6 py-4 flex justify-between items-center relative"><Logo className="h-8 w-auto" /><button onClick={() => setShowLoginModal(true)} className="text-sm text-slate-500 hover:text-blue-600 flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors"><Icon name="lock" size={14}/> 管理員登入</button></nav>
-                        {/* [修改] 跑馬燈區塊 (支援速度與圖示) */}
                         {latestNews && (
                             <div className="overflow-hidden py-2 relative z-40 marquee-container border-b border-slate-700 shadow-sm" style={{ backgroundColor: marqueeBgColor, color: marqueeTextColor }}>
-    <div 
-        className="animate-marquee font-bold text-sm tracking-wide flex items-center"
-        style={{ animationDuration: `${marqueeSpeed}s` }}
-    >
-        {marqueeIcon && (
-            <img src={marqueeIcon} className="w-auto mr-3 -mt-1 pixel-art inline-block" style={{ height: `${marqueeIconSize}px` }} alt="icon" />
-        )}
+                                <div className="animate-marquee font-bold text-sm tracking-wide flex items-center" style={{ animationDuration: `${marqueeSpeed}s` }}>
+                                    {marqueeIcon && (<img src={marqueeIcon} className="w-auto mr-3 -mt-1 pixel-art inline-block" style={{ height: `${marqueeIconSize}px` }} alt="icon" />)}
                                     <span className="text-yellow-400 mr-2"> 最新消息：</span>
                                     {latestNews}
                                 </div>
                             </div>
                         )}
                         
-                        {/* ... 原本的中間搜尋與篩選器 JSX ... */}
-                        {/* ...省略中間的搜尋與篩選器 JSX (保持原樣)... */}
-                        
                         <div className="bg-amber-50 text-amber-800 text-xs py-2 px-4 text-center font-bold border-b border-amber-100 flex items-center justify-center gap-2 relative z-10"><Icon name="alert-circle" size={14}/> 系統人數更新可能有延遲，準確名額請以點擊「前往報名」後的表單為主</div>
                         <main className="max-w-2xl mx-auto p-6 relative z-10">
-                            
-                            {/* ...省略 標題、搜尋框、篩選器按鈕區塊 (保持原樣)... */}
                             <div className="mb-6 text-center"><h1 className="text-2xl font-bold text-slate-800 mb-2">活動場次表</h1><p className="text-slate-500 text-sm">歡迎查看最新的活動資訊</p></div>
                             <div className="relative mb-2"><Icon name="search" className="absolute left-4 top-3 text-slate-400" size={20}/><input type="text" placeholder="搜尋活動關鍵字..." className="w-full pl-12 pr-4 py-3 bg-slate-100 border-none rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-700" value={publicSearchTerm} onChange={e => setPublicSearchTerm(e.target.value)} /></div>
                             
-                            {/* 這裡是篩選器按鈕區塊，保持原樣 */}
                             <div className="mb-6 bg-white p-5 rounded-2xl border border-slate-100 shadow-sm"><div className="flex justify-between items-center mb-4"><h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Icon name="filter" size={18} className="text-blue-500"/> 活動篩選</h3>{hasActiveFilters && (<button onClick={clearFilters} className="text-xs text-red-500 hover:bg-red-50 px-2 py-1 rounded-lg transition-colors flex items-center gap-1"><Icon name="x" size={14}/> 重置條件</button>)}</div><div className="space-y-4"><div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4"><span className="text-xs font-bold text-slate-400 w-12 shrink-0 flex items-center gap-1"><Icon name="bar-chart-2" size={12}/> 等級</span><div className="flex flex-wrap gap-2">{(tagDefinitions.levels || []).map(t => { const isActive = publicFilters.level.includes(t); const isAvailable = availableOptions.levels.has(t); return ( <button key={t} onClick={() => toggleFilter('level', t)} disabled={!isAvailable && !isActive} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${ isActive ? 'bg-blue-600 text-white border-blue-600 shadow-md ring-2 ring-blue-100' : !isAvailable ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-blue-300' }`} > {t} </button> ); })}</div></div><div className="border-t border-slate-50 my-2"></div><div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4"><span className="text-xs font-bold text-slate-400 w-12 shrink-0 flex items-center gap-1"><Icon name="tag" size={12}/> 種類</span><div className="flex flex-wrap gap-2">{(tagDefinitions.types || []).map(t => { const isActive = publicFilters.type.includes(t); const isAvailable = availableOptions.types.has(t); return ( <button key={t} onClick={() => toggleFilter('type', t)} disabled={!isAvailable && !isActive} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${ isActive ? 'bg-emerald-600 text-white border-emerald-600 shadow-md ring-2 ring-emerald-100' : !isAvailable ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-emerald-300' }`} > {t} </button> ); })}</div></div><div className="border-t border-slate-50 my-2"></div><div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4"><span className="text-xs font-bold text-slate-400 w-12 shrink-0 flex items-center gap-1"><Icon name="map-pin" size={12}/> 地點</span><div className="flex flex-wrap gap-2">{(tagDefinitions.locations || []).map(t => { const isActive = publicFilters.location.includes(t); const isAvailable = availableOptions.locations.has(t); return ( <button key={t} onClick={() => toggleFilter('location', t)} disabled={!isAvailable && !isActive} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${ isActive ? 'bg-purple-600 text-white border-purple-600 shadow-md ring-2 ring-purple-100' : !isAvailable ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-purple-300' }`} > {t} </button> ); })}</div></div></div></div>
 
                             {/* 月曆搜尋結果提示 (保持原樣) */}
@@ -2920,7 +2922,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                         <div className="md:hidden mb-6 flex justify-between items-center sticky top-0 z-30 bg-slate-50/90 backdrop-blur-sm py-2"><Logo className="h-6 w-auto" /><button onClick={() => setMobileMenuOpen(true)} className="p-2 bg-white rounded-lg shadow-sm text-slate-600 border border-slate-200"><Icon name="menu" /></button></div>
                         {activeTab === 'tasks' && <div className="max-w-6xl mx-auto fade-in pb-20"><header className="mb-8 flex justify-between items-end"><div><h2 className="text-2xl font-bold text-slate-800 mb-1">任務指揮中心</h2><p className="text-slate-500 text-sm">智慧追蹤系統，根據活動日期自動排序</p></div><div className="bg-white px-4 py-2 rounded-full border text-sm font-medium whitespace-nowrap">待處理: <span className="text-blue-600 font-bold ml-1">{tasks.length}</span></div></header>{Object.keys(groupedTasks).length === 0 ? (<div className="text-center py-20"><div className="text-6xl mb-4">🎉</div><h3 className="text-xl font-bold text-slate-700">太棒了！任務已清空</h3></div>) : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{(() => { const fixedOrder = ['辦理保險', '寄送行前信', '寄送花絮信']; const allTaskNames = [...new Set([...fixedOrder, ...Object.keys(groupedTasks)])]; allTaskNames.sort((a, b) => { const idxA = fixedOrder.indexOf(a); const idxB = fixedOrder.indexOf(b); if (idxA !== -1 && idxB !== -1) return idxA - idxB; if (idxA !== -1) return -1; if (idxB !== -1) return 1; return a.localeCompare(b); }); return allTaskNames.map((taskName, index) => { const taskList = groupedTasks[taskName] || []; if (taskList.length === 0 && !fixedOrder.includes(taskName)) return null; const color = TASK_GROUP_COLORS[index % TASK_GROUP_COLORS.length]; return (<div key={taskName} className={`rounded-2xl border ${color.border} ${color.bg} p-4 h-fit`}><h3 className={`font-bold text-lg mb-4 ${color.text} flex items-center gap-2`}><Icon name="layers" className={color.icon} size={20}/>{taskName}<span className="text-sm opacity-75 font-normal ml-auto bg-white/50 px-2 py-0.5 rounded-full">{taskList.length}</span></h3><div className="space-y-3 min-h-[50px]">{taskList.length > 0 ? taskList.map((t, i) => (<div key={`${t.cfgKey}-${t.taskIdx}`} onClick={() => setActiveTaskDetail(t)} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden"><div className={`absolute top-0 left-0 w-1 h-full ${t.style.bg.replace('bg-', 'bg-') === 'bg-white' ? 'bg-slate-200' : t.style.bg.replace('bg', 'bg').replace('50', '400')}`}></div><div className="flex justify-between mb-2 pl-2"><span className="bg-slate-100 text-slate-600 text-xs font-mono px-2 py-0.5 rounded">{t.evtDate}</span>{t.style.label && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${t.style.color} ${t.style.border} ${t.style.bg}`}>{t.style.label}</span>}</div><div className="pl-2"><div className="text-sm font-bold text-slate-800 mb-1 truncate">{t.evtName}</div><button onClick={(e) => { e.stopPropagation(); toggleTask(t.cfgKey, t.taskIdx) }} className="w-full mt-3 py-2 rounded-lg bg-slate-50 text-slate-400 hover:bg-green-500 hover:text-white transition-all flex justify-center gap-2 text-xs font-bold"><Icon name="check-circle-2" size={14} /> 標示完成</button></div></div>)) : <div className="text-center text-xs text-slate-400 py-8 border-2 border-dashed border-slate-200 rounded-xl">目前無待辦事項</div>}</div></div>); }); })()}</div>)}</div>}
                         {activeTab === 'promises' && <div className="max-w-6xl mx-auto fade-in pb-20"><header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4"><div><h2 className="text-2xl font-bold text-slate-800 mb-1">團隊承諾牆</h2><p className="text-slate-500 text-sm">紀錄那些非正式但重要的約定</p></div><div className="flex gap-3 w-full md:w-auto"><div className="relative flex-1 md:w-64"><Icon name="search" className="absolute left-3 top-2.5 text-slate-400" size={18}/><input type="text" placeholder="搜尋承諾..." className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 transition-all" value={promiseSearch} onChange={e => setPromiseSearch(e.target.value)} /></div><button onClick={()=>setShowAddPromise(true)} className="bg-purple-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 shadow-md hover:bg-purple-700 whitespace-nowrap"><Icon name="plus" size={18}/> <span className="hidden md:inline">新增</span></button></div></header><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{promises.filter(p => !promiseSearch || (p.content && p.content.toLowerCase().includes(promiseSearch.toLowerCase())) || (p.who && p.who.toLowerCase().includes(promiseSearch.toLowerCase()))).map(p => { const st = getPromiseStatus(p.date, p.time); const isDone = p.status === 'done'; return (<div key={p.id} className={`bg-white p-5 rounded-2xl border shadow-sm relative transition-all ${isDone ? 'opacity-50 border-slate-100' : 'border-slate-200 hover:shadow-md'}`}><button onClick={()=>handleDeletePromise(p.id)} className="absolute top-3 right-3 text-slate-300 hover:text-red-400 opacity-0 hover:opacity-100 transition"><Icon name="trash-2" size={16}/></button><div className="flex items-center gap-2 mb-3"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isDone ? 'text-slate-400 border-slate-200 bg-slate-50' : `${st.color} ${st.border} ${st.bg}`}`}>{isDone ? '已完成' : st.label}</span><span className="text-xs text-slate-400 flex items-center gap-1"><Icon name="clock" size={12}/> {p.date} {p.time}</span></div><h4 className={`font-bold text-lg mb-2 ${isDone ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{p.content}</h4>{p.who && <div className="text-sm text-slate-500 mb-4 flex items-center gap-1"><Icon name="user" size={14}/> {p.who}</div>}<button onClick={()=>handleTogglePromise(p.id, p.status)} className={`w-full py-2 rounded-xl border font-bold text-sm flex items-center justify-center gap-2 transition-all ${isDone ? 'bg-slate-50 text-slate-400 border-slate-200' : 'bg-white text-purple-600 border-purple-200 hover:bg-purple-50'}`}>{isDone ? '重啟任務' : '標示完成'}</button></div>);})}</div></div>}
-                        {activeTab === 'events' && <div className="fade-in max-w-6xl mx-auto pb-20"><header className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold">活動場次</h2><div className="flex gap-3"><button onClick={()=>setShowCreateEvent(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-md"><Icon name="plus" size={18}/> 快速開團</button><div className="bg-white p-1 rounded-lg border flex"><button onClick={()=>setEventsViewMode('list')} className={`p-2 rounded-md ${eventsViewMode==='list'?'bg-slate-100':''}`}><Icon name="list" size={18}/></button><button onClick={()=>setEventsViewMode('calendar')} className={`p-2 rounded-md ${eventsViewMode==='calendar'?'bg-slate-100':''}`}><Icon name="calendar" size={18}/></button></div></div></header>{eventsViewMode === 'list' && (<div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden table-container"><table className="w-full text-left min-w-[600px]"><thead className="bg-slate-50 border-b border-slate-100 text-slate-500 text-sm"><tr><th className="px-6 py-4 whitespace-nowrap">日期</th><th className="px-6 py-4 whitespace-nowrap">活動</th><th className="px-6 py-4 whitespace-nowrap">報名</th><th className="px-6 py-4 whitespace-nowrap">操作</th></tr></thead><tbody className="divide-y divide-slate-100">{Object.values(stats.events).map((e, i) => { const cfg = eventConfigs[e.key] || {}; const cap = cfg.capacity || 12; const isFull = e.count >= cap; const carpool = e.customers ? e.customers.filter(c=>c.transport==='共乘').length : 0; return (<tr key={i} className="hover:bg-slate-50/80"><td className="px-6 py-4 text-slate-600 whitespace-nowrap">{e.date}</td><td className="px-6 py-4"><div className="font-bold text-slate-800">{e.eventName}</div><div className="text-xs text-slate-400 mt-0.5">{e.instructor}</div></td><td className="px-6 py-4"><div className="flex items-center gap-2"><span className={`font-bold ${isFull?'text-red-500':'text-slate-700'}`}>{e.count}</span><span className="text-xs text-slate-400">/ {cap}</span><div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full ${isFull?'bg-red-500':'bg-green-500'}`} style={{width:`${Math.min((e.count/cap)*100,100)}%`}}></div></div></div>{carpool > 0 && <div className="text-[10px] text-orange-500 mt-1 flex items-center"><Icon name="car" size={10} className="mr-1"/> 共乘 {carpool} 人</div>}</td><td className="px-6 py-4"><button onClick={()=>setEditingEvent(e)} className="text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded flex items-center gap-1 text-sm whitespace-nowrap"><Icon name="settings" size={14}/> 管理</button></td></tr>);})}</tbody></table></div>)}{eventsViewMode === 'calendar' && (<div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-200 table-container"><div className="flex justify-between items-center mb-6 sticky left-0"><div className="flex items-center gap-2"><button onClick={prevMonth} className="p-2 hover:bg-slate-100 rounded-full"><Icon name="chevron-left"/></button><h3 className="text-xl font-bold text-slate-800 whitespace-nowrap">{currentDate.getFullYear()}年 {currentDate.getMonth()+1}月</h3><button onClick={nextMonth} className="p-2 hover:bg-slate-100 rounded-full"><Icon name="chevron-right"/></button></div></div><div className="min-w-[600px]"><div className="grid grid-cols-7 mb-2 text-center text-sm font-bold text-slate-400">{['日','一','二','三','四','五','六'].map(d=><div key={d}>{d}</div>)}</div><div className="grid grid-cols-7 auto-rows-[160px] border-t border-l border-slate-200">{calendarDays.map((day, i) => { const dateStr = day ? `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}` : ''; const dayEvents = day ? Object.values(stats.events).filter(e => e.date === dateStr) : []; return (<div key={i} 
+                        {activeTab === 'events' && <div className="fade-in max-w-6xl mx-auto pb-20"><header className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold">活動場次</h2><div className="flex gap-3"><button onClick={()=>setShowCreateEvent(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-md"><Icon name="plus" size={18}/> 快速開團</button><div className="bg-white p-1 rounded-lg border flex"><button onClick={()=>setEventsViewMode('list')} className={`p-2 rounded-md ${eventsViewMode==='list'?'bg-slate-100':''}`}><Icon name="list" size={18}/></button><button onClick={()=>setEventsViewMode('calendar')} className={`p-2 rounded-md ${eventsViewMode==='calendar'?'bg-slate-100':''}`}><Icon name="calendar" size={18}/></button></div></div></header>{eventsViewMode === 'list' && (<div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden table-container"><table className="w-full text-left min-w-[600px]"><thead className="bg-slate-50 border-b border-slate-100 text-slate-500 text-sm"><tr><th className="px-6 py-4 whitespace-nowrap">日期</th><th className="px-6 py-4 whitespace-nowrap">活動</th><th className="px-6 py-4 whitespace-nowrap">報名</th><th className="px-6 py-4 whitespace-nowrap">操作</th></tr></thead><tbody className="divide-y divide-slate-100">{Object.values(stats.events).map((e, i) => { const cfg = eventConfigs[e.key] || {}; const cap = cfg.capacity || 12; const isFull = e.count >= cap; const carpool = e.customers ? e.customers.filter(c=>c.transport==='共乘').length : 0; return (<tr key={i} className="hover:bg-slate-50/80"><td className="px-6 py-4 text-slate-600 whitespace-nowrap">{e.date}</td><td className="px-6 py-4"><div className="font-bold text-slate-800">{e.eventName}</div><div className="text-xs text-slate-400 mt-0.5">{e.instructor}</div></td><td className="px-6 py-4"><div className="flex items-center gap-2"><span className={`font-bold ${isFull?'text-red-500':'text-slate-700'}`}>{e.count}</span><span className="text-xs text-slate-400">/ {cap}</span><div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full ${isFull?'bg-red-500':'bg-green-500'}`} style={{width:`${Math.min((e.count/cap)*100,100)}%`}}></div></div></div>{carpool > 0 && <div className="text-[10px] text-orange-500 mt-1 flex items-center"><Icon name="car" size={10} className="mr-1"/> 共乘 {carpool} 人</div>}</td><td className="px-6 py-4"><button onClick={()=>setEditingEvent(e)} className="text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded flex items-center gap-1 text-sm whitespace-nowrap"><Icon name="settings" size={14}/> 管理</button></td></tr>);})}</tbody></table></div>)}{eventsViewMode === 'calendar' && (<div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-200 table-container"><div className="flex justify-between items-center mb-6 sticky left-0"><div className="flex items-center gap-2"><button onClick={prevMonth} className="p-2 hover:bg-slate-100 rounded-full"><Icon name="chevron-left"/></button><h3 className="text-xl font-bold text-slate-800 whitespace-nowrap">{currentDate.getFullYear()}年 {currentDate.getMonth()+1}月</h3><button onClick={nextMonth} className="p-2 hover:bg-slate-100 rounded-full"><Icon name="chevron-right"/></button></div></div><div className="min-w-[600px]"><div className="grid grid-cols-7 mb-2 text-center text-sm font-bold text-slate-400">{['日','一','二','三','四','五','六'].map(d=><div key={d}>{d}</div>)}</div><div className="grid grid-cols-7 auto-rows-[160px] border-t border-l border-slate-200">{calendarDays.map((day, i) => { const dateStr = day ? `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}` : ''; const dayItems = day ? (calendarOccupancy[dateStr] || []) : []; return (<div key={i} 
     onClick={() => { if(day) { setScheduleDate(dateStr); setShowCreateEvent(true); } }} 
     className={`border-b border-r border-slate-200 p-1 md:p-2 relative group ${day ? 'hover:bg-blue-50 cursor-pointer' : 'bg-slate-50/50'}`}
 >
@@ -2935,44 +2937,65 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                 <div className="flex items-center justify-center h-[100px] text-slate-300 font-bold text-2xl select-none bg-slate-50/50 rounded-lg">✕</div>
             ) : (
                 <div className="space-y-1 overflow-y-auto max-h-[120px] no-scrollbar">
-                    {dayEvents.map((e, idx) => { 
-                        const cfg = eventConfigs[e.key] || {}; 
-                        const capacity = cfg.capacity || 12; 
-                        const isFull = capacity > 0 && e.count >= capacity; 
-                        let cardStyle = { };
-let cardClass = 'mb-1 p-1.5 rounded-lg border cursor-pointer transition-all group hover:shadow-md ';
+                    {/* [修改] 改用 dayItems 渲染，包含前置與跨日，並顯示講師 */ }
+                    {dayItems.map((item, idx) => {
+                        const { type, evt, cfg, label, displayTime } = item;
+                        const isMain = type === 'main';
+                        const isPrep = type === 'prep';
+                        
+                        // 樣式設定
+                        let cardClass = 'mb-1 p-1 px-1.5 rounded-md border cursor-pointer transition-all group hover:shadow-md text-[10px] ';
+                        let cardStyle = {};
+                        
+                        const baseColor = cfg.backendColor || '#3b82f6';
+                        
+                        if (isPrep) {
+                            cardClass += 'bg-amber-50 text-amber-700 border-amber-200 opacity-90';
+                            cardStyle = { backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(251, 191, 36, 0.1) 5px, rgba(251, 191, 36, 0.1) 10px)' };
+                        } else if (type === 'cont') {
+                            cardClass += 'text-slate-600 border-slate-200';
+                            cardStyle = { backgroundColor: baseColor + '22', borderLeft: `3px solid ${baseColor}` };
+                        } else {
+                            const isFull = (cfg.capacity > 0 && evt.count >= cfg.capacity);
+                            if (cfg.backendColor) {
+                                const bgColor = cfg.backendColor.startsWith('#') ? cfg.backendColor + '33' : cfg.backendColor;
+                                cardStyle = { backgroundColor: bgColor, borderColor: cfg.backendColor, borderWidth: '1.5px' };
+                                cardClass += 'border font-bold text-slate-800';
+                            } else {
+                                cardClass += 'bg-blue-50 border-blue-100 font-bold text-blue-800';
+                            }
+                            if (isFull) cardClass += ' opacity-60 contrast-75';
+                        }
 
-// 1. 先處理顏色基礎
-const baseColor = cfg.backendColor || '#3b82f6'; // 若無顏色則預設藍色
-
-if (cfg.backendColor) {
-    const bgColor = cfg.backendColor.startsWith('#') ? cfg.backendColor + '33' : cfg.backendColor;
-    cardStyle = { backgroundColor: bgColor, borderColor: cfg.backendColor, borderWidth: '1.5px' };
-    cardClass += 'border';
-} else {
-    cardClass += 'bg-blue-50 border-blue-100';
-}
-
-// 2. 如果滿團，透過 CSS 濾鏡調低飽和度並增加透明度，不覆蓋背景色
-if (isFull) {
-    cardClass += ' opacity-50 contrast-75'; // 調低對比與透明度
-}
                         return (
-                            <div key={idx} onClick={(evt)=>{ evt.stopPropagation(); setEditingEvent(e); }} className={cardClass} style={cardStyle}>
-                                <div className="flex justify-between items-start mb-0.5">
-                                    <div className="font-bold text-xs text-slate-800 truncate flex-1 flex items-center">
-                                        {e.eventName}
-                                        {isFull && <span className="ml-1 text-[9px] bg-slate-600 text-white px-1 rounded">已滿</span>}
+                            <div key={`${evt.key}_${type}_${idx}`} onClick={(e)=>{ e.stopPropagation(); setEditingEvent(evt); }} className={cardClass} style={cardStyle} title={evt.eventName}>
+                                {isMain ? (
+                                    // 主活動：顯示時間、講師、名稱、人數
+                                    <div className="flex flex-col gap-0.5 leading-tight">
+                                        <div className="flex justify-between items-center opacity-80 text-[9px]">
+                                            <span>{displayTime}</span>
+                                            <span className="font-bold">{evt.count}人</span>
+                                        </div>
+                                        <div className="truncate font-bold">{evt.eventName}</div>
+                                        <div className="truncate opacity-70 text-[9px]">@{evt.instructor || '未定'}</div>
                                     </div>
-                                    {cfg.time && <div className="text-[10px] text-slate-500 bg-white/50 px-1 rounded ml-1 whitespace-nowrap">{cfg.time}</div>}
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <div className="text-[10px] text-slate-600 flex items-center truncate max-w-[60%]">
-                                        <Icon name="user" size={10} className="mr-0.5 flex-shrink-0"/>
-                                        <span className="truncate">{e.instructor || '未定'}</span>
+                                ) : isPrep ? (
+                                    // 前置：顯示時間、標題、講師
+                                    <div className="flex flex-col gap-0.5 leading-tight">
+                                        <div className="flex items-center gap-1 opacity-80 text-[9px]">
+                                            <span>{displayTime}</span>
+                                            <Icon name="alert-circle" size={10}/> 
+                                            <span className="font-bold">前置</span>
+                                        </div>
+                                        <div className="truncate">{evt.eventName}</div>
+                                        <div className="truncate opacity-70 text-[9px]">@{evt.instructor || '未定'}</div>
                                     </div>
-                                    <div className="text-[10px] font-bold text-blue-600">{e.count}人</div>
-                                </div>
+                                ) : (
+                                    // 跨日
+                                    <div className="flex items-center gap-1">
+                                        {label}
+                                    </div>
+                                )}
                             </div>
                         );
                     })}
