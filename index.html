@@ -2450,7 +2450,7 @@
                                     phone: v[13]?.trim(), 
                                     isCheckedIn: v[14]?.trim() === '1' 
                                 }; 
-                            }).filter(row => row && row.date); // FIX: Filter out invalid rows or empty dates
+                            }).filter(row => row && row.date);
                             setParsedData(data); 
                         } catch(e) { console.error(e); } 
                     };
@@ -2713,7 +2713,8 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
             const activeEditingEvent = editingEvent && stats.events[editingEvent.key] ? stats.events[editingEvent.key] : editingEvent;
 
             if (viewMode === 'public') {
-                const selectedDayEvents = Object.values(stats.events).filter(e => e.date === selectedPublicDate && checkEventMatchesFilters(e.key));
+                // [修改] 改用 calendarOccupancy 取得該日所有事項 (含主活動、前置、跨日)
+                const selectedDayItems = (calendarOccupancy[selectedPublicDate] || []).filter(item => checkEventMatchesFilters(item.evt.key));
                 const currentMonthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}`;
                 
                 return (
@@ -2756,39 +2757,43 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                                     {calendarDays.map((day, i) => { 
                                         const dateStr = day ? `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}` : ''; 
                                         
-                                        // 找出這一天「符合篩選條件」的所有活動
-                                        const dayEvents = day ? Object.values(stats.events).filter(e => e.date === dateStr && checkEventMatchesFilters(e.key)) : []; 
-                                        const hasEvents = dayEvents.length > 0;
-                                        
-                                        // [新增邏輯] 檢查這一天符合條件的活動是否「全部」都額滿了
-                                        const areAllFull = hasEvents && dayEvents.every(e => {
-                                            const cfg = eventConfigs[e.key] || {};
-                                            const cap = cfg.capacity || 12; // 使用新設定的 capacity
-                                            return e.count >= cap;
+                                        // [修改] 改用 calendarOccupancy 判斷格子內容，支援前置與跨日顯示
+                                        const dayItems = day ? (calendarOccupancy[dateStr] || []).filter(item => checkEventMatchesFilters(item.evt.key)) : [];
+                                        const hasEvents = dayItems.length > 0;
+
+                                        // [修改] 檢查當天所有事項是否都已滿 (針對主活動或跨日)
+                                        const areAllFull = hasEvents && dayItems.every(item => {
+                                            const cfg = eventConfigs[item.evt.key] || {};
+                                            const cap = cfg.capacity || 12;
+                                            // 前置準備通常不算額滿，但為了視覺統一，若主活動滿了前置也顯示滿
+                                            return item.evt.count >= cap;
                                         });
+                                        // 判斷是否包含前置準備 (用於顯示不同顏色的點)
+                                        const hasPrep = hasEvents && dayItems.some(item => item.type === 'prep');
 
                                         const isSelected = dateStr === selectedPublicDate;
                                         const isRestDay = companyRestDates.includes(dateStr);
-                                        
-                                        // [修改邏輯] 判斷是否符合篩選 (包含 關鍵字搜尋 OR 標籤篩選)
-                                        const isSearchMatch = publicSearchTerm && matchingDates.includes(dateStr);
-                                        const isFilterMatch = hasActiveFilters && hasEvents; // 如果有開篩選器且這天有活動
-                                        const shouldHighlight = isSearchMatch || isFilterMatch; // 統稱為「高亮」
 
-                                        let cellClass = "hover:bg-slate-50 cursor-pointer flex flex-col items-center justify-center relative transition-all"; 
-                                        let numClass = "text-sm font-medium text-slate-700"; 
-                                        
+                                        // [修改邏輯] 判斷是否符合篩選
+                                        const isSearchMatch = publicSearchTerm && matchingDates.includes(dateStr);
+                                        const isFilterMatch = hasActiveFilters && hasEvents;
+                                        const shouldHighlight = isSearchMatch || isFilterMatch;
+
+                                        // [修改] 為了讓內部的「點」能連成線，移除 mx-1 讓格子緊貼
+                                        let cellClass = "cursor-pointer flex flex-col items-center justify-center relative transition-all border-b border-r border-slate-50"; 
+                                        let numClass = "text-sm font-medium text-slate-700 z-10 relative"; 
+
                                         if (isRestDay) { 
-                                            cellClass = "bg-slate-50 flex flex-col items-center justify-center relative cursor-not-allowed"; 
+                                            cellClass += " bg-slate-50 cursor-not-allowed"; 
                                             numClass = "text-slate-300"; 
                                         } else if (isSelected) { 
-                                            // 選中狀態優先
-                                            cellClass += " bg-slate-800 text-white hover:bg-slate-900 rounded-xl mx-1 my-1 shadow-md transform scale-105 z-10"; 
+                                            cellClass += " bg-slate-800 text-white hover:bg-slate-900 shadow-md z-20"; 
                                             numClass = "text-white font-bold"; 
                                         } else if (shouldHighlight) { 
-                                            // [修改樣式] 篩選或搜尋符合時，顯示黃色背景
-                                            cellClass += " bg-yellow-100 text-yellow-800 rounded-xl mx-1 my-1 border border-yellow-200"; 
-                                        } 
+                                            cellClass += " bg-yellow-100 text-yellow-800 z-10"; 
+                                        } else {
+                                            cellClass += " hover:bg-slate-50";
+                                        }
                                         
                                         return ( 
                                             <div key={i} onClick={() => {if(day && !isRestDay) setSelectedPublicDate(dateStr)}} className={cellClass}> 
@@ -2798,13 +2803,67 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                                                         <div className="text-slate-300 font-bold text-lg select-none">✕</div> 
                                                     ) : ( 
                                                         hasEvents && !isSelected && (
-                                                            // [修改邏輯] 顯示紅字額滿 或 藍點
+                                                            // [修改] 顯示紅字額滿 或 連續線條(Bar)
                                                             areAllFull ? (
-                                                                <div className="text-[9px] font-bold text-red-500 mt-0.5 scale-90">額滿</div>
+                                                                <div className="text-[9px] font-bold text-red-500 mt-0.5 scale-90 relative z-10">額滿</div>
                                                             ) : (
-                                                                // 如果是被高亮選中的，不用顯示藍點(因為背景黃色已經很明顯)，或者可以改顏色
-                                                                // 這裡維持藍點，但在黃底上可能需要微調，我們保持原樣即可
-                                                                <div className={`w-1.5 h-1.5 rounded-full mt-1 ${shouldHighlight ? 'bg-blue-600 ring-1 ring-white' : 'bg-blue-500'}`}></div>
+                                                                (() => {
+                                                                    // --- 計算連結邏輯 ---
+                                                                    const dObj = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+                                                                    dObj.setDate(dObj.getDate() + 1);
+                                                                    const nextDateStr = `${dObj.getFullYear()}-${String(dObj.getMonth()+1).padStart(2,'0')}-${String(dObj.getDate()).padStart(2,'0')}`;
+                                                                    const nextDayItems = calendarOccupancy[nextDateStr] || [];
+
+                                                                    // 判斷藍色 (主活動)
+                                                                    const isBlueCont = dayItems.some(i => i.type === 'cont'); // 今天是續
+                                                                    const willBlueCont = nextDayItems.some(i => i.type === 'cont'); // 明天是續
+                                                                    // 判斷橘色 (前置) - 簡單判斷：只要今天是前置，且明天有東西(前置或主)，就往右連
+                                                                    const isPrep = dayItems.some(i => i.type === 'prep');
+                                                                    const willPrepConnect = isPrep && nextDayItems.some(i => i.type === 'prep' || i.type === 'main');
+
+                                                                    let dotClass = "h-1.5 mt-1 transition-all relative z-0 "; // 基礎高度
+                                                                    let colorClass = "bg-blue-500";
+
+                                                                    if (isPrep) {
+                                                                        colorClass = "bg-orange-400";
+                                                                        // 前置的連結邏輯
+                                                                        if (willPrepConnect) {
+                                                                            // 這裡簡化：前置通常是連續的，若這天是前置且明天也有活動，視為「開始」或「中間」
+                                                                            // 為了視覺簡單，假設前置一定連向明天
+                                                                            dotClass += "w-full mr-[-50%] rounded-l-full rounded-r-none ml-auto"; 
+                                                                            // 修正：如果是中間天數(昨天也是前置)，應該全平，但這裡沒讀昨天資料
+                                                                            // 用簡單策略：靠右連
+                                                                            dotClass = "h-1.5 mt-1 bg-orange-400 w-[60%] ml-[40%] rounded-l-full rounded-r-none"; 
+                                                                            if (dayItems.length > 1 && dayItems[0].label?.includes('前置')) {
+                                                                                // 如果有多個標記或明顯是中間態，改全寬
+                                                                                dotClass = "h-1.5 mt-1 bg-orange-400 w-full rounded-none";
+                                                                            }
+                                                                        } else {
+                                                                            // 前置最後一天 (通常不會發生，因為前置接主活動)
+                                                                            dotClass += "w-1.5 rounded-full mx-auto";
+                                                                        }
+                                                                    } else {
+                                                                        // 主活動連結邏輯
+                                                                        if (isBlueCont && willBlueCont) {
+                                                                            // 中間：全寬、無圓角
+                                                                            dotClass += "w-full rounded-none mx-0";
+                                                                        } else if (willBlueCont) {
+                                                                            // 開始：靠右、左圓右平
+                                                                            dotClass += "w-[60%] ml-[40%] rounded-l-full rounded-r-none";
+                                                                        } else if (isBlueCont) {
+                                                                            // 結束：靠左、左平右圓
+                                                                            dotClass += "w-[60%] mr-[40%] rounded-r-full rounded-l-none";
+                                                                        } else {
+                                                                            // 單日：置中圓點
+                                                                            dotClass += "w-1.5 rounded-full mx-auto";
+                                                                        }
+                                                                    }
+                                                                    
+                                                                    // 高亮時強制換色
+                                                                    if (shouldHighlight) colorClass = "bg-blue-600 ring-1 ring-white";
+
+                                                                    return <div className={`${dotClass} ${colorClass}`}></div>;
+                                                                })()
                                                             )
                                                         )
                                                     )} 
@@ -2818,7 +2877,12 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                             {/* ...下方活動列表保持原樣... */}
                             <div className="space-y-4 fade-in">
                                 {/* ...活動列表內容... */}
-                                <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2 border-l-4 border-blue-500 pl-3">{selectedPublicDate} 活動列表</h3>{companyRestDates.includes(selectedPublicDate) ? (<div className="text-center py-12 bg-red-50 rounded-3xl border border-red-100"><div className="text-4xl mb-2">😴</div><div className="text-red-400 font-bold">本日全公司公休</div><div className="text-red-300 text-sm mt-1">我們休息充電中，請改期再來喔！</div></div>) : (selectedDayEvents.length > 0 ? (selectedDayEvents.map((e) => {
+                                <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2 border-l-4 border-blue-500 pl-3">{selectedPublicDate} 活動列表</h3>{companyRestDates.includes(selectedPublicDate) ? (<div className="text-center py-12 bg-red-50 rounded-3xl border border-red-100"><div className="text-4xl mb-2">😴</div><div className="text-red-400 font-bold">本日全公司公休</div><div className="text-red-300 text-sm mt-1">我們休息充電中，請改期再來喔！</div></div>) : (selectedDayItems.length > 0 ? (selectedDayItems.map((item) => {
+    // [修改] 解構 item 取得 evt (原始活動) 與 type (類型: main/cont/prep)
+    const e = item.evt;
+    const itemType = item.type; // 'main', 'cont', 'prep'
+    const itemLabel = item.label; // 例如 "⚠️ 前置: ..." 或 "↳ D2: ..."
+    
     const cfg = eventConfigs[e.key] || {};
     const status = getEventStatus(e.count, cfg.capacity, cfg, e.date, globalRules);
     const displayName = cfg.displayName || e.eventName;
@@ -2851,8 +2915,13 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
             
             {/* 上半部：標題與狀態 (保持不變) */}
           
-            <div className="flex justify-between items-start mb-3">
-                <div className="font-bold text-lg text-slate-800">{displayName}</div>
+           <div className="flex justify-between items-start mb-3">
+    <div className="font-bold text-lg text-slate-800">
+        {/* [新增] 顯示前置或跨日標籤 */}
+        {itemType === 'prep' && <span className="inline-block bg-orange-100 text-orange-700 text-xs px-2 py-0.5 rounded mr-2 align-middle">⚠️ 前置準備</span>}
+        {itemType === 'cont' && <span className="inline-block bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded mr-2 align-middle">{itemLabel?.split(':')[0]}</span>}
+        <span className="align-middle">{displayName}</span>
+    </div>
                 <div className="flex flex-col items-end gap-1">
                     <span className={`text-xs px-2 py-1 rounded-lg font-bold ${statusBadgeClass}`}>{status.label}</span>
                     {!status.isEnded && (<span className="text-[10px] text-slate-500 font-bold bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">目前: <span className="text-blue-600">{e.count}</span> 人</span>)}
@@ -2968,30 +3037,34 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                         }
 
                         return (
-                            <div key={`${evt.key}_${type}_${idx}`} onClick={(e)=>{ e.stopPropagation(); setEditingEvent(evt); }} className={cardClass} style={cardStyle} title={evt.eventName}>
+                            <div key={`${evt.key}_${type}_${idx}`} onClick={(e)=>{ e.stopPropagation(); setEditingEvent(evt); }} className={cardClass} style={cardStyle} title={`${evt.eventName} @${evt.instructor || '未定'}`}>
                                 {isMain ? (
-                                    // 主活動：顯示時間、講師、名稱、人數
-                                    <div className="flex flex-col gap-0.5 leading-tight">
-                                        <div className="flex justify-between items-center opacity-80 text-[9px]">
+                                    // [修改] 主活動：兩行式佈局
+                                    // 第一行：時間 + 人數
+                                    // 第二行：活動名稱 + @講師 (單行顯示)
+                                    <div className="flex flex-col leading-none py-0.5">
+                                        <div className="flex justify-between items-center opacity-70 text-[8px] mb-0.5 font-mono">
                                             <span>{displayTime}</span>
                                             <span className="font-bold">{evt.count}人</span>
                                         </div>
-                                        <div className="truncate font-bold">{evt.eventName}</div>
-                                        <div className="truncate opacity-70 text-[9px]">@{evt.instructor || '未定'}</div>
+                                        <div className="truncate font-bold text-[10px]">
+                                            {evt.eventName} <span className="opacity-60 font-normal text-[9px]">@{evt.instructor || '?'}</span>
+                                        </div>
                                     </div>
                                 ) : isPrep ? (
-                                    // 前置：顯示時間、標題、講師
-                                    <div className="flex flex-col gap-0.5 leading-tight">
-                                        <div className="flex items-center gap-1 opacity-80 text-[9px]">
+                                    // [修改] 前置：同樣併為單行
+                                    <div className="flex flex-col leading-none py-0.5">
+                                        <div className="flex items-center gap-1 opacity-70 text-[8px] mb-0.5 font-mono">
                                             <span>{displayTime}</span>
-                                            <Icon name="alert-circle" size={10}/> 
-                                            <span className="font-bold">前置</span>
+                                            <Icon name="alert-circle" size={8}/> 
+                                            <span>前置</span>
                                         </div>
-                                        <div className="truncate">{evt.eventName}</div>
-                                        <div className="truncate opacity-70 text-[9px]">@{evt.instructor || '未定'}</div>
+                                        <div className="truncate text-[10px]">
+                                            {evt.eventName} <span className="opacity-60 text-[9px]">@{evt.instructor}</span>
+                                        </div>
                                     </div>
                                 ) : (
-                                    // 跨日
+                                    // 跨日 (保持原樣)
                                     <div className="flex items-center gap-1">
                                         {label}
                                     </div>
