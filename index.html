@@ -1216,17 +1216,59 @@
                 </div>
             );
         };
-// --- 新增：月曆資料匯出模組 ---
+// --- 修正版：月曆資料匯出模組 (強力抓取最後日期) ---
         const CalendarExportModal = ({ events, eventConfigs, onClose }) => {
+            
+            // 1. 計算預設結束日期 (加強版邏輯)
+            const defaultEndDate = useMemo(() => {
+                try {
+                    const list = Object.values(events);
+                    if (list.length === 0) {
+                        // 若無活動，預設為下個月
+                        return new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().split('T')[0];
+                    }
+
+                    // 轉換所有日期為 Timestamp 進行排序 (避免字串格式 2024/1/2 排序錯誤)
+                    const validDates = list
+                        .map(e => e.date)
+                        .filter(d => d) // 過濾空值
+                        .map(d => {
+                            // 嘗試修正格式：將 2024/1/1 轉為 2024-01-01
+                            const cleanDate = d.replace(/\//g, '-').trim();
+                            return new Date(cleanDate);
+                        })
+                        .filter(d => !isNaN(d.getTime())) // 過濾無效日期
+                        .sort((a, b) => a - b); // 依時間先後排序
+
+                    if (validDates.length > 0) {
+                        // 取最後一個日期，並轉回 YYYY-MM-DD 格式
+                        return validDates[validDates.length - 1].toISOString().split('T')[0];
+                    }
+                } catch (e) {
+                    console.error("日期計算錯誤", e);
+                }
+                
+                // 萬一出錯，回傳今天
+                return new Date().toISOString().split('T')[0];
+            }, [events]);
+
             const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
-            const [endDate, setEndDate] = useState(new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().split('T')[0]);
-            const [listingDate, setListingDate] = useState(new Date().toISOString().split('T')[0]); // Q欄 上架時間
-            const [selectedTypes, setSelectedTypes] = useState([]); // 篩選活動名稱
+            const [endDate, setEndDate] = useState(defaultEndDate); 
+            const [listingDate, setListingDate] = useState(new Date().toISOString().split('T')[0]); 
+            const [selectedTypes, setSelectedTypes] = useState([]); 
+
+            // (確保 endDate 隨著 defaultEndDate 改變而更新，這是之前可能失敗的原因之一)
+            useEffect(() => {
+                if (defaultEndDate) {
+                    setEndDate(defaultEndDate);
+                }
+            }, [defaultEndDate]);
 
             // 取得範圍內所有不重複的活動名稱
             const uniqueEventNames = useMemo(() => {
                 const names = new Set();
                 Object.values(events).forEach(e => {
+                    // 簡單的日期字串比較 (需確保格式一致，或依賴 input type="date" 的值)
                     if (e.date >= startDate && e.date <= endDate) {
                         names.add(e.eventName);
                     }
@@ -1246,7 +1288,6 @@
             const clearAll = () => setSelectedTypes([]);
 
             const handleExport = () => {
-                // 1. 篩選資料
                 const filteredEvents = Object.values(events).filter(e => {
                     const inDate = e.date >= startDate && e.date <= endDate;
                     const inType = selectedTypes.length === 0 || selectedTypes.includes(e.eventName);
@@ -1255,44 +1296,36 @@
 
                 if (filteredEvents.length === 0) return alert("無符合條件的資料");
 
-                // 2. 準備 CSV 內容 (模擬 Excel 欄位位置)
-                // 目標: A=講師, B=日期, F=活動名稱, Q=上架時間, R=一般票價格
-                // 對應 CSV 結構 (逗號數量):
-                // A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R
-                // 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,15,16,17
-                
                 let csvContent = "\uFEFF講師,日期,,,,活動名稱,,,,,,,,,,,上架時間,一般票價格\n";
 
                 filteredEvents.forEach(e => {
                     const cfg = eventConfigs[e.key] || {};
-                    
-                    // 欄位 A: 講師
                     const colA = toCSVField(e.instructor || '未定');
-                    // 欄位 B: 日期 (格式: 3/3)
-                    const dateObj = new Date(e.date);
-                    const colB = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
-                    // 欄位 F: 活動名稱
+                    
+                    // 日期格式化 M/D
+                    let colB = '';
+                    try {
+                        const dateObj = new Date(e.date);
+                        if (!isNaN(dateObj.getTime())) {
+                            colB = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
+                        } else {
+                            colB = e.date;
+                        }
+                    } catch(err) { colB = e.date; }
+
                     const colF = toCSVField(e.eventName);
-                    // 欄位 Q: 上架時間 (格式: 1/23)
+                    
+                    // 上架日期格式化 M/D
                     const listDateObj = new Date(listingDate);
                     const colQ = `${listDateObj.getMonth() + 1}/${listDateObj.getDate()}`;
-                    // 欄位 R: 價格 (優先使用 Config 設定的價格，若無則從報名資料抓取眾數，再沒有則 0)
+                    
                     let price = cfg.price || 0;
                     if (!price && e.customers && e.customers.length > 0) {
-                        // 簡單抓取第一筆有效金額
                         const validP = e.customers.find(c => c.price > 0);
                         if (validP) price = validP.price;
                     }
                     const colR = price;
 
-                    // 組合 CSV 行: A,B,,, ,F,,,,,,,,,,,Q,R
-                    // 空白欄位數:
-                    // A,B (2欄)
-                    // C,D,E (3空欄) -> ,,,
-                    // F (1欄)
-                    // G~P (10空欄) -> ,,,,,,,,,,
-                    // Q (1欄)
-                    // R (1欄)
                     const row = `${colA},${colB},,,,${colF},,,,,,,,,,,${colQ},${colR}`;
                     csvContent += row + "\n";
                 });
@@ -1314,12 +1347,12 @@
                         <div className="space-y-4">
                             <div className="grid grid-cols-2 gap-4">
                                 <div><label className="text-xs font-bold text-slate-500 mb-1 block">開始日期</label><input type="date" className="w-full p-2 border rounded-lg" value={startDate} onChange={e=>setStartDate(e.target.value)}/></div>
-                                <div><label className="text-xs font-bold text-slate-500 mb-1 block">結束日期</label><input type="date" className="w-full p-2 border rounded-lg" value={endDate} onChange={e=>setEndDate(e.target.value)}/></div>
+                                <div><label className="text-xs font-bold text-slate-500 mb-1 block">結束日期 (最後一團)</label><input type="date" className="w-full p-2 border rounded-lg font-bold text-blue-600 bg-blue-50" value={endDate} onChange={e=>setEndDate(e.target.value)}/></div>
                             </div>
 
                             <div>
                                 <label className="text-xs font-bold text-slate-500 mb-1 block">Q欄: 上架時間 (顯示於報表)</label>
-                                <input type="date" className="w-full p-2 border rounded-lg bg-blue-50/50 border-blue-200" value={listingDate} onChange={e=>setListingDate(e.target.value)}/>
+                                <input type="date" className="w-full p-2 border rounded-lg bg-slate-50 border-slate-200" value={listingDate} onChange={e=>setListingDate(e.target.value)}/>
                             </div>
 
                             <div className="border-t pt-4">
@@ -1344,8 +1377,8 @@
                         </div>
 
                         <div className="mt-6 flex justify-end gap-2">
-                            <button onClick={onClose} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg">取消</button>
-                            <button onClick={handleExport} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-md flex items-center gap-2">
+                            <button onClick={onClose} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg text-sm font-bold">取消</button>
+                            <button onClick={handleExport} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-md flex items-center gap-2 text-sm font-bold">
                                 <Icon name="file-text" size={16}/> 匯出 Excel (CSV)
                             </button>
                         </div>
@@ -3249,7 +3282,27 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                         <div className="md:hidden mb-6 flex justify-between items-center sticky top-0 z-30 bg-slate-50/90 backdrop-blur-sm py-2"><Logo className="h-6 w-auto" /><button onClick={() => setMobileMenuOpen(true)} className="p-2 bg-white rounded-lg shadow-sm text-slate-600 border border-slate-200"><Icon name="menu" /></button></div>
                         {activeTab === 'tasks' && <div className="max-w-6xl mx-auto fade-in pb-20"><header className="mb-8 flex justify-between items-end"><div><h2 className="text-2xl font-bold text-slate-800 mb-1">任務指揮中心</h2><p className="text-slate-500 text-sm">智慧追蹤系統，根據活動日期自動排序</p></div><div className="bg-white px-4 py-2 rounded-full border text-sm font-medium whitespace-nowrap">待處理: <span className="text-blue-600 font-bold ml-1">{tasks.length}</span></div></header>{Object.keys(groupedTasks).length === 0 ? (<div className="text-center py-20"><div className="text-6xl mb-4">🎉</div><h3 className="text-xl font-bold text-slate-700">太棒了！任務已清空</h3></div>) : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{(() => { const fixedOrder = ['辦理保險', '寄送行前信', '寄送花絮信']; const allTaskNames = [...new Set([...fixedOrder, ...Object.keys(groupedTasks)])]; allTaskNames.sort((a, b) => { const idxA = fixedOrder.indexOf(a); const idxB = fixedOrder.indexOf(b); if (idxA !== -1 && idxB !== -1) return idxA - idxB; if (idxA !== -1) return -1; if (idxB !== -1) return 1; return a.localeCompare(b); }); return allTaskNames.map((taskName, index) => { const taskList = groupedTasks[taskName] || []; if (taskList.length === 0 && !fixedOrder.includes(taskName)) return null; const color = TASK_GROUP_COLORS[index % TASK_GROUP_COLORS.length]; return (<div key={taskName} className={`rounded-2xl border ${color.border} ${color.bg} p-4 h-fit`}><h3 className={`font-bold text-lg mb-4 ${color.text} flex items-center gap-2`}><Icon name="layers" className={color.icon} size={20}/>{taskName}<span className="text-sm opacity-75 font-normal ml-auto bg-white/50 px-2 py-0.5 rounded-full">{taskList.length}</span></h3><div className="space-y-3 min-h-[50px]">{taskList.length > 0 ? taskList.map((t, i) => (<div key={`${t.cfgKey}-${t.taskIdx}`} onClick={() => setActiveTaskDetail(t)} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden"><div className={`absolute top-0 left-0 w-1 h-full ${t.style.bg.replace('bg-', 'bg-') === 'bg-white' ? 'bg-slate-200' : t.style.bg.replace('bg', 'bg').replace('50', '400')}`}></div><div className="flex justify-between mb-2 pl-2"><span className="bg-slate-100 text-slate-600 text-xs font-mono px-2 py-0.5 rounded">{t.evtDate}</span>{t.style.label && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${t.style.color} ${t.style.border} ${t.style.bg}`}>{t.style.label}</span>}</div><div className="pl-2"><div className="text-sm font-bold text-slate-800 mb-1 truncate">{t.evtName}</div><button onClick={(e) => { e.stopPropagation(); toggleTask(t.cfgKey, t.taskIdx) }} className="w-full mt-3 py-2 rounded-lg bg-slate-50 text-slate-400 hover:bg-green-500 hover:text-white transition-all flex justify-center gap-2 text-xs font-bold"><Icon name="check-circle-2" size={14} /> 標示完成</button></div></div>)) : <div className="text-center text-xs text-slate-400 py-8 border-2 border-dashed border-slate-200 rounded-xl">目前無待辦事項</div>}</div></div>); }); })()}</div>)}</div>}
                         {activeTab === 'promises' && <div className="max-w-6xl mx-auto fade-in pb-20"><header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4"><div><h2 className="text-2xl font-bold text-slate-800 mb-1">團隊承諾牆</h2><p className="text-slate-500 text-sm">紀錄那些非正式但重要的約定</p></div><div className="flex gap-3 w-full md:w-auto"><div className="relative flex-1 md:w-64"><Icon name="search" className="absolute left-3 top-2.5 text-slate-400" size={18}/><input type="text" placeholder="搜尋承諾..." className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 transition-all" value={promiseSearch} onChange={e => setPromiseSearch(e.target.value)} /></div><button onClick={()=>setShowAddPromise(true)} className="bg-purple-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 shadow-md hover:bg-purple-700 whitespace-nowrap"><Icon name="plus" size={18}/> <span className="hidden md:inline">新增</span></button></div></header><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{promises.filter(p => !promiseSearch || (p.content && p.content.toLowerCase().includes(promiseSearch.toLowerCase())) || (p.who && p.who.toLowerCase().includes(promiseSearch.toLowerCase()))).map(p => { const st = getPromiseStatus(p.date, p.time); const isDone = p.status === 'done'; return (<div key={p.id} className={`bg-white p-5 rounded-2xl border shadow-sm relative transition-all ${isDone ? 'opacity-50 border-slate-100' : 'border-slate-200 hover:shadow-md'}`}><button onClick={()=>handleDeletePromise(p.id)} className="absolute top-3 right-3 text-slate-300 hover:text-red-400 opacity-0 hover:opacity-100 transition"><Icon name="trash-2" size={16}/></button><div className="flex items-center gap-2 mb-3"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isDone ? 'text-slate-400 border-slate-200 bg-slate-50' : `${st.color} ${st.border} ${st.bg}`}`}>{isDone ? '已完成' : st.label}</span><span className="text-xs text-slate-400 flex items-center gap-1"><Icon name="clock" size={12}/> {p.date} {p.time}</span></div><h4 className={`font-bold text-lg mb-2 ${isDone ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{p.content}</h4>{p.who && <div className="text-sm text-slate-500 mb-4 flex items-center gap-1"><Icon name="user" size={14}/> {p.who}</div>}<button onClick={()=>handleTogglePromise(p.id, p.status)} className={`w-full py-2 rounded-xl border font-bold text-sm flex items-center justify-center gap-2 transition-all ${isDone ? 'bg-slate-50 text-slate-400 border-slate-200' : 'bg-white text-purple-600 border-purple-200 hover:bg-purple-50'}`}>{isDone ? '重啟任務' : '標示完成'}</button></div>);})}</div></div>}
-                        {activeTab === 'events' && <div className="fade-in max-w-6xl mx-auto pb-20"><header className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold">活動場次</h2><div className="flex gap-3"><button onClick={()=>setShowExportModal(true)} className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-md"><Icon name="download" size={18}/> 匯出月曆資料</button><button onClick={()=>setShowCreateEvent(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-md"><Icon name="plus" size={18}/> 快速開團</button><div className="bg-white p-1 rounded-lg border flex"><button onClick={()=>setEventsViewMode('list')} className={`p-2 rounded-md ${eventsViewMode==='list'?'bg-slate-100':''}`}><Icon name="list" size={18}/></button><button onClick={()=>setEventsViewMode('calendar')} className={`p-2 rounded-md ${eventsViewMode==='calendar'?'bg-slate-100':''}`}><Icon name="calendar" size={18}/></button></div></div></header>{eventsViewMode === 'list' && (<div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden table-container"><table className="w-full text-left min-w-[600px]"><thead className="bg-slate-50 border-b border-slate-100 text-slate-500 text-sm"><tr><th className="px-6 py-4 whitespace-nowrap">日期</th><th className="px-6 py-4 whitespace-nowrap">活動</th><th className="px-6 py-4 whitespace-nowrap">報名</th><th className="px-6 py-4 whitespace-nowrap">操作</th></tr></thead><tbody className="divide-y divide-slate-100">{Object.values(stats.events).map((e, i) => { const cfg = eventConfigs[e.key] || {}; const cap = cfg.capacity || 12; const isFull = e.count >= cap; const carpool = e.customers ? e.customers.filter(c=>c.transport==='共乘').length : 0; return (<tr key={i} className="hover:bg-slate-50/80"><td className="px-6 py-4 text-slate-600 whitespace-nowrap">{e.date}</td><td className="px-6 py-4"><div className="font-bold text-slate-800">{e.eventName}</div><div className="text-xs text-slate-400 mt-0.5">{e.instructor}</div></td><td className="px-6 py-4"><div className="flex items-center gap-2"><span className={`font-bold ${isFull?'text-red-500':'text-slate-700'}`}>{e.count}</span><span className="text-xs text-slate-400">/ {cap}</span><div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full ${isFull?'bg-red-500':'bg-green-500'}`} style={{width:`${Math.min((e.count/cap)*100,100)}%`}}></div></div></div>{carpool > 0 && <div className="text-[10px] text-orange-500 mt-1 flex items-center"><Icon name="car" size={10} className="mr-1"/> 共乘 {carpool} 人</div>}</td><td className="px-6 py-4"><button onClick={()=>setEditingEvent(e)} className="text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded flex items-center gap-1 text-sm whitespace-nowrap"><Icon name="settings" size={14}/> 管理</button></td></tr>);})}</tbody></table></div>)}{eventsViewMode === 'calendar' && (<div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-200 table-container"><div className="flex justify-between items-center mb-6 sticky left-0"><div className="flex items-center gap-2"><button onClick={prevMonth} className="p-2 hover:bg-slate-100 rounded-full"><Icon name="chevron-left"/></button><h3 className="text-xl font-bold text-slate-800 whitespace-nowrap">{currentDate.getFullYear()}年 {currentDate.getMonth()+1}月</h3><button onClick={nextMonth} className="p-2 hover:bg-slate-100 rounded-full"><Icon name="chevron-right"/></button></div></div><div className="min-w-[600px]"><div className="grid grid-cols-7 mb-2 text-center text-sm font-bold text-slate-400">{['日','一','二','三','四','五','六'].map(d=><div key={d}>{d}</div>)}</div><div className="grid grid-cols-7 auto-rows-[160px] border-t border-l border-slate-200">{calendarDays.map((day, i) => { const dateStr = day ? `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}` : ''; const dayItems = day ? (calendarOccupancy[dateStr] || []) : []; return (<div key={i} 
+                        {activeTab === 'events' && <div className="fade-in max-w-6xl mx-auto pb-20">
+                            <header className="flex justify-between items-center mb-6">
+                                <h2 className="text-2xl font-bold">活動場次</h2>
+                                <div className="flex gap-3">
+                                    {/* 修改後的按鈕：字體變小 (text-xs)，padding 變小 (px-3 py-1.5) */}
+                                    <button onClick={()=>setShowExportModal(true)} className="bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 text-xs font-bold rounded-lg flex items-center gap-2 shadow-md">
+                                        <Icon name="download" size={14}/> 匯出月曆資料
+                                    </button>
+                                    
+                                    <button onClick={()=>setShowCreateEvent(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs font-bold rounded-lg flex items-center gap-2 shadow-md">
+                                        <Icon name="plus" size={14}/> 快速開團
+                                    </button>
+                                    
+                                    <div className="bg-white p-1 rounded-lg border flex">
+                                        <button onClick={()=>setEventsViewMode('list')} className={`p-2 rounded-md ${eventsViewMode==='list'?'bg-slate-100':''}`}><Icon name="list" size={18}/></button>
+                                        <button onClick={()=>setEventsViewMode('calendar')} className={`p-2 rounded-md ${eventsViewMode==='calendar'?'bg-slate-100':''}`}><Icon name="calendar" size={18}/></button>
+                                    </div>
+                                </div>
+                            </header>
+                            
+                            {/* ... 下接 eventsViewMode === 'list' 的內容 ... */}{eventsViewMode === 'list' && (<div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden table-container"><table className="w-full text-left min-w-[600px]"><thead className="bg-slate-50 border-b border-slate-100 text-slate-500 text-sm"><tr><th className="px-6 py-4 whitespace-nowrap">日期</th><th className="px-6 py-4 whitespace-nowrap">活動</th><th className="px-6 py-4 whitespace-nowrap">報名</th><th className="px-6 py-4 whitespace-nowrap">操作</th></tr></thead><tbody className="divide-y divide-slate-100">{Object.values(stats.events).map((e, i) => { const cfg = eventConfigs[e.key] || {}; const cap = cfg.capacity || 12; const isFull = e.count >= cap; const carpool = e.customers ? e.customers.filter(c=>c.transport==='共乘').length : 0; return (<tr key={i} className="hover:bg-slate-50/80"><td className="px-6 py-4 text-slate-600 whitespace-nowrap">{e.date}</td><td className="px-6 py-4"><div className="font-bold text-slate-800">{e.eventName}</div><div className="text-xs text-slate-400 mt-0.5">{e.instructor}</div></td><td className="px-6 py-4"><div className="flex items-center gap-2"><span className={`font-bold ${isFull?'text-red-500':'text-slate-700'}`}>{e.count}</span><span className="text-xs text-slate-400">/ {cap}</span><div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full ${isFull?'bg-red-500':'bg-green-500'}`} style={{width:`${Math.min((e.count/cap)*100,100)}%`}}></div></div></div>{carpool > 0 && <div className="text-[10px] text-orange-500 mt-1 flex items-center"><Icon name="car" size={10} className="mr-1"/> 共乘 {carpool} 人</div>}</td><td className="px-6 py-4"><button onClick={()=>setEditingEvent(e)} className="text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded flex items-center gap-1 text-sm whitespace-nowrap"><Icon name="settings" size={14}/> 管理</button></td></tr>);})}</tbody></table></div>)}{eventsViewMode === 'calendar' && (<div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-200 table-container"><div className="flex justify-between items-center mb-6 sticky left-0"><div className="flex items-center gap-2"><button onClick={prevMonth} className="p-2 hover:bg-slate-100 rounded-full"><Icon name="chevron-left"/></button><h3 className="text-xl font-bold text-slate-800 whitespace-nowrap">{currentDate.getFullYear()}年 {currentDate.getMonth()+1}月</h3><button onClick={nextMonth} className="p-2 hover:bg-slate-100 rounded-full"><Icon name="chevron-right"/></button></div></div><div className="min-w-[600px]"><div className="grid grid-cols-7 mb-2 text-center text-sm font-bold text-slate-400">{['日','一','二','三','四','五','六'].map(d=><div key={d}>{d}</div>)}</div><div className="grid grid-cols-7 auto-rows-[160px] border-t border-l border-slate-200">{calendarDays.map((day, i) => { const dateStr = day ? `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}` : ''; const dayItems = day ? (calendarOccupancy[dateStr] || []) : []; return (<div key={i} 
     onClick={() => { if(day) { setScheduleDate(dateStr); setShowCreateEvent(true); } }} 
     className={`border-b border-r border-slate-200 p-1 md:p-2 relative group ${day ? 'hover:bg-blue-50 cursor-pointer' : 'bg-slate-50/50'}`}
 >
