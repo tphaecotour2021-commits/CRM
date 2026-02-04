@@ -1033,8 +1033,11 @@
             );
         };
 
-        const EventManagerModal = ({ event, config, onClose, onSaveConfig, availableInstructors, instructorSchedule, onCheckInToggle, onDeleteEvent, globalRules, onEditCustomer, tagDefinitions, onAddTag, parsedData, onAddDirectReg }) => {
+        const EventManagerModal = ({ event, config, onClose, onSaveConfig, availableInstructors, instructorSchedule, onCheckInToggle, onDeleteEvent, globalRules, onEditCustomer, tagDefinitions, onAddTag, parsedData, onAddDirectReg, adminPassword }) => {
             const [capacity, setCapacity] = useState(config?.capacity || 12);
+            const [internalName, setInternalName] = useState(event.eventName);
+            const [isEditingInternalName, setIsEditingInternalName] = useState(false);
+            const [tempName, setTempName] = useState(event.eventName);
             const [eventNote, setEventNote] = useState(config?.note || '');
             const [eventTime, setEventTime] = useState(config?.time || '');
             const [eventLink, setEventLink] = useState(config?.link || '');
@@ -1047,13 +1050,40 @@
             const [statusRules, setStatusRules] = useState(config?.statusRules || globalRules || DEFAULT_STATUS_RULES);
             const [newRule, setNewRule] = useState({ min: 0, max: 10, label: '', color: 'blue' });
             const [showAddRegModal, setShowAddRegModal] = useState(false);
-            
             const [tags, setTags] = useState(config?.tags || { levels: '', types: '', locations: '' });
             
-            const handleTagChange = (type, val) => {
-                setTags({ ...tags, [type]: val });
-            };
+            const handleTagChange = (type, val) => { setTags({ ...tags, [type]: val }); };
+// 偵測是否有任何變更
+            const hasChanges = useMemo(() => {
+                const currentInstr = [...instructors].sort().join(' & ');
+                const originalInstr = event.instructor || '';
+                
+                return (
+                    internalName !== event.eventName ||
+                    capacity !== (config?.capacity || 12) ||
+                    eventNote !== (config?.note || '') ||
+                    eventTime !== (config?.time || '') ||
+                    eventLink !== (config?.link || '') ||
+                    backendColor !== (config?.backendColor || '#eff6ff') ||
+                    displayName !== (config?.displayName || '') ||
+                    activityCategory !== (config?.activityCategory || '') ||
+                    currentInstr !== originalInstr ||
+                    JSON.stringify(tasks) !== JSON.stringify(config?.tasks || DEFAULT_TASKS_TEMPLATE) ||
+                    JSON.stringify(tags) !== JSON.stringify(config?.tags || { levels: '', types: '', locations: '' }) ||
+                    JSON.stringify(statusRules) !== JSON.stringify(config?.statusRules || globalRules || DEFAULT_STATUS_RULES)
+                );
+            }, [internalName, capacity, eventNote, eventTime, eventLink, backendColor, displayName, activityCategory, instructors, tasks, tags, statusRules, event, config]);
 
+            // 攔截關閉請求
+            const handleRequestClose = () => {
+                if (hasChanges) {
+                    if (confirm("您有尚未儲存的編輯內容，確定要直接關閉嗎？（變更將會遺失）")) {
+                        onClose();
+                    }
+                } else {
+                    onClose();
+                }
+            };
             const sortedCustomers = useMemo(() => {
                 if (!event.customers) return [];
                 return [...event.customers].sort((a, b) => {
@@ -1062,6 +1092,7 @@
                     return 0;
                 });
             }, [event.customers]);
+
             const carpoolCount = event.customers ? event.customers.filter(c => c.transport === '共乘').length : 0;
             const checkedInCount = event.customers ? event.customers.filter(c => c.isCheckedIn).length : 0;
 
@@ -1075,38 +1106,64 @@
 
             const handleSave = () => { 
                 const newInstructorStr = [...instructors].sort().join(' & ');
-                onSaveConfig({ 
-                    capacity: parseInt(capacity), 
-                    tasks, 
-                    note: eventNote, 
-                    time: eventTime, 
-                    link: eventLink, 
-                    statusRules, 
-                    displayName, 
-                    activityCategory, 
-                    tags, 
-                    backendColor
-                }, newInstructorStr);    
+                onSaveConfig({ capacity: parseInt(capacity), tasks, note: eventNote, time: eventTime, link: eventLink, statusRules, displayName, activityCategory, tags, backendColor }, newInstructorStr, internalName);    
                 onClose(); 
             };
+            
             const handleExportList = () => {
                 let csv = "\uFEFF姓名,手機,Email,身分證字號,生日,交通,備註,報到狀態\n";
                 sortedCustomers.forEach(c => { const status = c.isCheckedIn ? '已報到' : '未報到'; csv += `${c.customerName},${c.phone},${c.email},${c.idNo},${c.birthday},${c.transport},${toCSVField(c.notes)},${status}\n`; });
                 downloadCSV(csv, `${event.eventName}_${event.date}_名單.csv`);
             };
+
             const progress = Math.round((tasks.filter(t => t.completed).length / Math.max(tasks.length, 1)) * 100);
 
-            const handleSaveNewReg = async (data) => {
-                await onAddDirectReg(event, data);
-                setShowAddRegModal(false);
-            };
-
             return (
-                <div onClick={onClose} className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4 fade-in backdrop-blur-sm cursor-pointer">
+                <div onClick={handleRequestClose} className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4 fade-in backdrop-blur-sm cursor-pointer">
                     <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl w-full max-w-lg flex flex-col max-h-[90vh] shadow-2xl m-auto cursor-auto">
-                        <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-                            <div><div className="text-xs text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded mb-1 inline-block">{event.date}</div><h3 className="text-xl font-bold text-slate-800">{event.eventName}</h3></div><button onClick={onClose}><Icon name="x" className="text-slate-400 hover:text-slate-600"/></button>
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-start">
+                            <div className="flex-1 mr-4">
+                                <div className="text-xs text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded mb-1 inline-block">{event.date}</div>
+                                {!isEditingInternalName ? (
+                                    <div className="flex items-center gap-2 group cursor-pointer" onClick={() => { setTempName(internalName); setIsEditingInternalName(true); }}>
+                                        <h3 className="text-xl font-bold text-slate-800">{internalName}</h3>
+                                        <Icon name="edit-3" size={16} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2 animate-in fade-in zoom-in-95">
+                                        <input 
+                                            type="text" 
+                                            className="text-xl font-bold text-slate-800 border-b-2 border-blue-500 outline-none bg-blue-50 px-1 rounded-t w-full" 
+                                            value={tempName} 
+                                            onChange={e => setTempName(e.target.value)}
+                                            autoFocus
+                                        />
+                                        <button 
+                                            onClick={() => {
+                                                const pwd = prompt("修改後台名稱將連動所有報名資料，請輸入管理員密碼確認：");
+                                                if (pwd === adminPassword) {
+                                                    setInternalName(tempName);
+                                                    setIsEditingInternalName(false);
+                                                } else if (pwd !== null) {
+                                                    alert("密碼錯誤，取消修改");
+                                                }
+                                            }}
+                                            className="bg-blue-600 text-white p-1 rounded hover:bg-blue-700 shadow-sm"
+                                        >
+                                            <Icon name="check" size={18} />
+                                        </button>
+                                        <button onClick={() => setIsEditingInternalName(false)} className="bg-slate-200 text-slate-600 p-1 rounded hover:bg-slate-300">
+                                            <Icon name="x" size={18} />
+                                        </button>
+                                    </div>
+                                )}
+                                <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
+                                    <Icon name="info" size={10}/> 後台原始名稱 (修改將連動所有報名資料)
+                                </div>
+                            </div>
+                            <button onClick={handleRequestClose}><Icon name="x" className="text-slate-400 hover:text-slate-600"/></button>
                         </div>
+                        {/* 以下內容省略，請保留您原本的列表與設定區塊 */}
                         <div className="p-6 overflow-y-auto space-y-6">
                             <section>
                                 <h4 className="font-bold text-slate-700 mb-2 flex items-center"><Icon name="user" size={18} className="mr-2"/> 帶團講師</h4>
@@ -1341,7 +1398,7 @@
                             <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                                 <Icon name="download" className="text-blue-600"/> 匯出月曆資料
                             </h3>
-                            <button onClick={onClose}><Icon name="x" className="text-slate-400 hover:text-slate-600"/></button>
+                            <button onClick={handleRequestClose}><Icon name="x" className="text-slate-400 hover:text-slate-600"/></button>
                         </div>
 
                         <div className="space-y-4">
@@ -2827,42 +2884,37 @@ const handleCreateEvent = async ({ dates, eventName, instructors, time, link, di
     setShowCreateEvent(false); 
 };
             const handleCheckInToggle = async (customerId, currentStatus) => { const row = parsedData.find(r => r.id === customerId); if (row) { await handleUpdateRow({ ...row, isCheckedIn: !currentStatus }); } };
-            const handleSaveEventConfig = async (oldEventKey, newConfig, newInstructorStr) => { 
-                const affectedRows = parsedData.filter(r => { 
-                    const sortedInstr = r.instructor ? r.instructor.split(/[&,]/).map(s=>s.trim()).sort().join(' & ') : '';
-                    const key = `${r.date}_${r.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-'); 
-                    return key === oldEventKey; 
-                }); 
-                
-                if (newInstructorStr !== undefined) { 
-                    const newRows = parsedData.map(r => { 
-                        const sortedInstr = r.instructor ? r.instructor.split(/[&,]/).map(s=>s.trim()).sort().join(' & ') : '';
-                        const key = `${r.date}_${r.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-'); 
-                        if (key === oldEventKey) { return { ...r, instructor: newInstructorStr }; } 
-                        return r; 
-                    }); 
-                    await handleSaveCSV(arrayToCSV(newRows)); 
-                    
-                    if (affectedRows.length > 0) { 
-                        const evt = affectedRows[0]; 
-                        const newKey = `${evt.date}_${evt.eventName}_${newInstructorStr}`.replace(/[\/\\#\?]/g, '-'); 
-                        
-                        if (newKey !== oldEventKey) { 
-                            const targetConfigExists = eventConfigs[newKey];
+            const handleSaveEventConfig = async (oldEventKey, newConfig, newInstructorStr, newInternalName) => { 
+    // 1. 更新所有報名行
+    const newRows = parsedData.map(r => { 
+        const sortedInstr = r.instructor ? r.instructor.split(/[&,]/).map(s=>s.trim()).sort().join(' & ') : '';
+        const key = `${r.date}_${r.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-'); 
+        
+        if (key === oldEventKey) { 
+            return { 
+                ...r, 
+                instructor: newInstructorStr !== undefined ? newInstructorStr : r.instructor,
+                eventName: newInternalName || r.eventName 
+            }; 
+        } 
+        return r; 
+    }); 
 
-                            if (targetConfigExists) {
-                                console.log("合併至既有活動，保留既有設定");
-                            } else {
-                                await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', newKey), newConfig, { merge: true }); 
-                            }
-                        } else { 
-                            await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', oldEventKey), newConfig, { merge: true }); 
-                        } 
-                    } 
-                } else { 
-                    await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', oldEventKey), newConfig, { merge: true }); 
-                } 
-            };
+    await handleSaveCSV(arrayToCSV(newRows)); 
+    
+    // 2. 更新 Firestore Config
+    const finalName = newInternalName || editingEvent.eventName;
+    const finalInstr = newInstructorStr !== undefined ? newInstructorStr : editingEvent.instructor;
+    const newKey = `${editingEvent.date}_${finalName}_${finalInstr}`.replace(/[\/\\#\?]/g, '-');
+
+    if (newKey !== oldEventKey) {
+        await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', newKey), newConfig, { merge: true });
+        // 改名後可選擇刪除舊 Config 避免殘留
+        await deleteDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', oldEventKey));
+    } else {
+        await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', oldEventKey), newConfig, { merge: true }); 
+    }
+};
             const handleSaveTemplate = (tpl) => { let newList; if (tpl.id) { newList = customTemplates.map(t => t.id === tpl.id ? tpl : t); } else { newList = [...customTemplates, { ...tpl, id: `custom_${Date.now()}` }]; } setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'templates'), { list: newList }, { merge: true }); };
             const handleAddTemplate = (tpl) => handleSaveTemplate(tpl);
             const onDeleteTemplate = (id) => { if(confirm("確定刪除?")) setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'templates'), { list: customTemplates.filter(t=>t.id!==id) }, { merge: true }); };
@@ -3704,7 +3756,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                         event={activeEditingEvent} 
                         config={eventConfigs[editingEvent.key]} 
                         onClose={()=>setEditingEvent(null)} 
-                        onSaveConfig={(cfg, newInstr)=>handleSaveEventConfig(editingEvent.key, cfg, newInstr)} 
+                        onSaveConfig={(cfg, newInstr, newInternalName)=>handleSaveEventConfig(editingEvent.key, cfg, newInstr, newInternalName)} 
                         availableInstructors={Object.keys(stats.instrs).sort()} 
                         instructorSchedule={instructorSchedule} 
                         onCheckInToggle={handleCheckInToggle}
@@ -3715,6 +3767,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                         onAddTag={handleAddTagDefinition}
                         parsedData={parsedData}
                         onAddDirectReg={handleAddDirectReg}
+                        adminPassword={adminPassword} 
                     />}
                     
                     {editingProject && <ProjectDetailModal 
