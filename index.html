@@ -1116,6 +1116,15 @@
                 downloadCSV(csv, `${event.eventName}_${event.date}_名單.csv`);
             };
 
+            // --- 修正開始：補上缺失的 handleSaveNewReg 函式 ---
+            const handleSaveNewReg = (customerData) => {
+                // 呼叫上層傳入的 onAddDirectReg 函式將資料寫入 CSV
+                onAddDirectReg(event, customerData);
+                // 關閉新增報名視窗
+                setShowAddRegModal(false);
+            };
+            // --- 修正結束 ---
+
             const progress = Math.round((tasks.filter(t => t.completed).length / Math.max(tasks.length, 1)) * 100);
 
             return (
