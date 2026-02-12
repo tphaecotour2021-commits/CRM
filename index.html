@@ -83,6 +83,21 @@
         
         /* 像素風圖片修正 */
         .pixel-art { image-rendering: pixelated; }
+        .schedule-title-wrap { overflow: visible; }
+        .schedule-side-decor { pointer-events: none; user-select: none; z-index: 5; }
+        @media (max-width: 767px) {
+            .schedule-side-decor {
+                display: block !important;
+                width: var(--decor-mobile-width) !important;
+                opacity: 1 !important;
+            }
+            .schedule-side-decor-left {
+                left: 0 !important;
+            }
+            .schedule-side-decor-right {
+                right: 0 !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -292,6 +307,7 @@
             leftImage: '',
             rightImage: '',
             width: 180,
+            mobileWidth: 0,
             offsetY: 0,
             offsetX: 24,
             opacity: 1
@@ -300,9 +316,10 @@
         const normalizePublicSideDecor = (decor) => ({
             ...DEFAULT_PUBLIC_SIDE_DECOR,
             ...(decor || {}),
-            // 相容舊資料：以前用 top
-            offsetY: Number((decor && decor.offsetY) ?? (decor && decor.top) ?? DEFAULT_PUBLIC_SIDE_DECOR.offsetY),
-            offsetX: Number((decor && decor.offsetX) ?? DEFAULT_PUBLIC_SIDE_DECOR.offsetX)
+            // 只使用新錨點偏移，不再吃舊 top
+            offsetY: Number((decor && decor.offsetY) ?? DEFAULT_PUBLIC_SIDE_DECOR.offsetY),
+            offsetX: Number((decor && decor.offsetX) ?? DEFAULT_PUBLIC_SIDE_DECOR.offsetX),
+            mobileWidth: Number((decor && decor.mobileWidth) ?? DEFAULT_PUBLIC_SIDE_DECOR.mobileWidth)
         });
 
         const COLOR_OPTIONS = [
@@ -3529,16 +3546,17 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                         <div className="bg-amber-50 text-amber-800 text-xs py-2 px-4 text-center font-bold border-b border-amber-100 flex items-center justify-center gap-2 relative z-10"><Icon name="alert-circle" size={14}/> 系統人數更新可能有延遲，準確名額請以點擊「前往報名」後的表單為主</div>
                         <main className="max-w-6xl mx-auto p-6 relative z-10">
                             <div className="max-w-2xl mx-auto relative z-10">
-                            <div className="mb-6 text-center relative">
+                            <div className="mb-6 text-center relative schedule-title-wrap">
                                 {appliedSideDecor.leftImage && (
                                     <img
                                         src={appliedSideDecor.leftImage}
                                         alt="left decor"
-                                        className="hidden xl:block absolute pointer-events-none select-none"
+                                        className="absolute schedule-side-decor schedule-side-decor-left"
                                         style={{
                                             left: `calc(-${Number(appliedSideDecor.width || 180)}px - ${Number(appliedSideDecor.offsetX || 24)}px)`,
-                                            top: `${Number(appliedSideDecor.offsetY || 0)}px`,
+                                            bottom: `${-Number(appliedSideDecor.offsetY || 0)}px`,
                                             width: `${appliedSideDecor.width}px`,
+                                            '--decor-mobile-width': `${Number(appliedSideDecor.mobileWidth || appliedSideDecor.width || 180)}px`,
                                             opacity: Number(appliedSideDecor.opacity) || 1
                                         }}
                                     />
@@ -3547,11 +3565,12 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                                     <img
                                         src={appliedSideDecor.rightImage}
                                         alt="right decor"
-                                        className="hidden xl:block absolute pointer-events-none select-none"
+                                        className="absolute schedule-side-decor schedule-side-decor-right"
                                         style={{
                                             right: `calc(-${Number(appliedSideDecor.width || 180)}px - ${Number(appliedSideDecor.offsetX || 24)}px)`,
-                                            top: `${Number(appliedSideDecor.offsetY || 0)}px`,
+                                            bottom: `${-Number(appliedSideDecor.offsetY || 0)}px`,
                                             width: `${appliedSideDecor.width}px`,
+                                            '--decor-mobile-width': `${Number(appliedSideDecor.mobileWidth || appliedSideDecor.width || 180)}px`,
                                             opacity: Number(appliedSideDecor.opacity) || 1
                                         }}
                                     />
@@ -3724,7 +3743,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
     let cardClass = 'bg-white border-slate-100 shadow-sm hover:shadow-md border-l-4';
     const borderColor = (status.colorObj && status.colorObj.border) ? status.colorObj.border.replace('border-', 'border-l-') : 'border-l-blue-500';
     
-    if (status.isFull) cardClass = 'bg-slate-50 border-slate-200 border-l-slate-400 opacity-70';
+    if (status.isFull) cardClass = 'bg-slate-50 border-slate-200 border-l-slate-400';
     else cardClass = `bg-white border-slate-100 shadow-sm hover:shadow-md border-l-4 ${borderColor.replace('border-l-100', 'border-l-500')}`;
     
     const statusBadgeClass = status.isFull ? "bg-slate-600 text-white" : `${status.colorObj?.bg || 'bg-blue-50'} ${status.colorObj?.text || 'text-blue-600'}`;
@@ -3879,7 +3898,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                             } else {
                                 cardClass += 'bg-blue-50 border-blue-100 font-bold text-blue-800';
                             }
-                            if (isFull) cardClass += ' opacity-60 contrast-75';
+                            if (isFull) cardClass += ' contrast-95';
                         }
 
                         return (
@@ -4140,6 +4159,10 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                                         <div>
                                             <label className="block text-xs font-bold text-slate-500 mb-1">圖片寬度(px)</label>
                                             <input type="number" min="60" max="480" className="w-full p-2 border rounded-lg text-sm" value={publicSideDecor.width} onChange={e => setPublicSideDecor({ ...publicSideDecor, width: Number(e.target.value) || 180 })} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 mb-1">手機圖片寬度(px，留空=同桌機)</label>
+                                            <input type="number" min="40" max="480" className="w-full p-2 border rounded-lg text-sm" value={publicSideDecor.mobileWidth || ''} onChange={e => setPublicSideDecor({ ...publicSideDecor, mobileWidth: e.target.value === '' ? 0 : Number(e.target.value) })} />
                                         </div>
                                         <div>
                                             <label className="block text-xs font-bold text-slate-500 mb-1">上下距離(px)</label>
