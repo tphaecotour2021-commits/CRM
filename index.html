@@ -269,6 +269,42 @@
             locations: ['新店場', '北投場', '內湖場', '信義場', '富陽公園', '虎山溪']
         };
 
+        const DEFAULT_PUBLIC_THEME = {
+            pageBg: '#fff7ed',
+            pageBgAlt: '#fef3c7',
+            surfaceBg: '#ffffff',
+            surfaceBorder: '#fde68a',
+            textColor: '#334155',
+            titleColor: '#1e293b',
+            accentColor: '#2563eb'
+        };
+
+        const PUBLIC_THEME_PRESETS = [
+            { id: 'sunny', label: '晴空琥珀', values: { pageBg: '#fff7ed', pageBgAlt: '#fef3c7', surfaceBg: '#ffffff', surfaceBorder: '#fde68a', textColor: '#334155', titleColor: '#1e293b', accentColor: '#2563eb' } },
+            { id: 'forest', label: '森林薄霧', values: { pageBg: '#ecfdf5', pageBgAlt: '#d1fae5', surfaceBg: '#ffffff', surfaceBorder: '#a7f3d0', textColor: '#14532d', titleColor: '#064e3b', accentColor: '#059669' } },
+            { id: 'ocean', label: '海洋晨光', values: { pageBg: '#f0f9ff', pageBgAlt: '#dbeafe', surfaceBg: '#ffffff', surfaceBorder: '#bfdbfe', textColor: '#1e3a8a', titleColor: '#1e40af', accentColor: '#0284c7' } },
+            { id: 'newyear', label: '新年喜慶', values: { pageBg: '#fff1f2', pageBgAlt: '#ffe4b5', surfaceBg: '#fffaf0', surfaceBorder: '#f59e0b', textColor: '#7f1d1d', titleColor: '#991b1b', accentColor: '#dc2626' } }
+        ];
+
+        const normalizePublicTheme = (theme) => ({ ...DEFAULT_PUBLIC_THEME, ...(theme || {}) });
+
+        const DEFAULT_PUBLIC_SIDE_DECOR = {
+            leftImage: '',
+            rightImage: '',
+            width: 180,
+            offsetY: 0,
+            offsetX: 24,
+            opacity: 1
+        };
+
+        const normalizePublicSideDecor = (decor) => ({
+            ...DEFAULT_PUBLIC_SIDE_DECOR,
+            ...(decor || {}),
+            // 相容舊資料：以前用 top
+            offsetY: Number((decor && decor.offsetY) ?? (decor && decor.top) ?? DEFAULT_PUBLIC_SIDE_DECOR.offsetY),
+            offsetX: Number((decor && decor.offsetX) ?? DEFAULT_PUBLIC_SIDE_DECOR.offsetX)
+        });
+
         const COLOR_OPTIONS = [
             { value: 'blue', label: '藍色 (正常)', bg: 'bg-blue-50', border: 'border-blue-100', text: 'text-blue-600', hover: 'hover:bg-blue-100' },
             { value: 'green', label: '綠色 (充足)', bg: 'bg-green-50', border: 'border-green-100', text: 'text-green-600', hover: 'hover:bg-green-100' },
@@ -289,6 +325,77 @@
 
         const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
         const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
+        const getDayOfYear = (dateStr) => {
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return 0;
+            const start = new Date(date.getFullYear(), 0, 0);
+            const diff = date - start;
+            return Math.floor(diff / (1000 * 60 * 60 * 24));
+        };
+        const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const createProjectConsoleTemplate = (name) => ({
+            id: `proj_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            name: name || "新專案",
+            pm: "未設定",
+            department: "未設定",
+            totalBudget: 0,
+            deadline: new Date().toISOString().split('T')[0],
+            status: "active",
+            workPackages: [],
+            issues: [],
+            createdAt: new Date().toISOString()
+        });
+        const normalizeConsoleTask = (task, idx, wpId) => ({
+            id: task?.id || `${wpId}.${idx + 1}`,
+            name: task?.name || task?.title || "新任務",
+            owner: task?.owner || task?.assignee || "未指派",
+            plan: {
+                start: task?.plan?.start || task?.dueDate || new Date().toISOString().split('T')[0],
+                end: task?.plan?.end || task?.dueDate || new Date().toISOString().split('T')[0],
+                cost: Number(task?.plan?.cost || task?.kpi?.target || 0)
+            },
+            actual: {
+                start: task?.actual?.start || task?.dueDate || new Date().toISOString().split('T')[0],
+                end: task?.actual?.end || task?.dueDate || new Date().toISOString().split('T')[0],
+                cost: Number(task?.actual?.cost || task?.kpi?.current || 0)
+            },
+            progress: Number(task?.progress ?? (task?.completed ? 100 : 0))
+        });
+        const normalizeConsoleProject = (project, fallbackId) => {
+            const id = project?.id || fallbackId || `proj_${Date.now()}`;
+            const workspaceStatus = project?.workspaceStatus || (project?.status === 'archived' ? 'archived' : 'active');
+            let workPackages = Array.isArray(project?.workPackages) ? project.workPackages : [];
+            if (!workPackages.length) {
+                const sourceTasks = Array.isArray(project?.phases) && project.phases.length > 0
+                    ? project.phases.flatMap(p => p.tasks || [])
+                    : (Array.isArray(project?.subTasks) ? project.subTasks : []);
+                if (sourceTasks.length > 0) {
+                    workPackages = [{ id: 'WP1', name: '第一工作包', tasks: sourceTasks }];
+                }
+            }
+            workPackages = workPackages.map((wp, wpIdx) => {
+                const wpId = wp?.id || `WP${wpIdx + 1}`;
+                return {
+                    id: wpId,
+                    name: wp?.name || `工作包 ${wpIdx + 1}`,
+                    tasks: Array.isArray(wp?.tasks) ? wp.tasks.map((t, tIdx) => normalizeConsoleTask(t, tIdx, wpId)) : []
+                };
+            });
+            return {
+                ...project,
+                id,
+                name: project?.name || "未命名專案",
+                pm: project?.pm || project?.owner || "未設定",
+                department: project?.department || "未設定",
+                totalBudget: Number(project?.totalBudget || 0),
+                deadline: project?.deadline || new Date().toISOString().split('T')[0],
+                status: workspaceStatus,
+                workspaceStatus,
+                workPackages,
+                issues: Array.isArray(project?.issues) ? project.issues : [],
+                createdAt: project?.createdAt || new Date().toISOString()
+            };
+        };
         const toCSVField = (text) => {
             if (!text) return '';
             const str = String(text);
@@ -2702,6 +2809,323 @@ const removeFormRule = (idx) => {
             );
         };
         
+        const ProjectConsoleTab = ({ user, db, dbSource, sourceProjects }) => {
+            const [allProjects, setAllProjects] = useState([]);
+            const [activeProjectId, setActiveProjectId] = useState(null);
+            const [expandedWPs, setExpandedWPs] = useState([]);
+            const [viewMode, setViewMode] = useState('table');
+            const [workspaceMode, setWorkspaceMode] = useState('active');
+            const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+            const [newProjectName, setNewProjectName] = useState("");
+            const [isSaving, setIsSaving] = useState(false);
+
+            useEffect(() => {
+                const mapped = (sourceProjects || []).map((p, idx) => normalizeConsoleProject(p, `proj_${idx}`));
+                setAllProjects(mapped);
+            }, [sourceProjects]);
+
+            useEffect(() => {
+                const list = allProjects.filter(p => p.status === workspaceMode);
+                if (!activeProjectId && list.length > 0) setActiveProjectId(list[0].id);
+                if (activeProjectId && !list.some(p => p.id === activeProjectId)) {
+                    setActiveProjectId(list[0]?.id || null);
+                }
+            }, [allProjects, workspaceMode, activeProjectId]);
+
+            const currentProject = useMemo(() => allProjects.find(p => p.id === activeProjectId) || null, [allProjects, activeProjectId]);
+
+            useEffect(() => {
+                if (!user || !db || !currentProject) return;
+                const timer = setTimeout(async () => {
+                    setIsSaving(true);
+                    try {
+                        await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'projects', currentProject.id), currentProject, { merge: true });
+                    } catch (e) {
+                        console.error("Project autosave error:", e);
+                    } finally {
+                        setIsSaving(false);
+                    }
+                }, 1000);
+                return () => clearTimeout(timer);
+            }, [currentProject, user, db, dbSource]);
+
+            const setProjectData = (field, value) => {
+                setAllProjects(prev => prev.map(p => p.id === activeProjectId ? { ...p, [field]: value } : p));
+            };
+
+            const updateTask = (wpId, taskId, field, subfield, value) => {
+                setAllProjects(prev => prev.map(p => {
+                    if (p.id !== activeProjectId) return p;
+                    return {
+                        ...p,
+                        workPackages: p.workPackages.map(wp => {
+                            if (wp.id !== wpId) return wp;
+                            if (!taskId) return { ...wp, [field]: value };
+                            return {
+                                ...wp,
+                                tasks: wp.tasks.map(t => {
+                                    if (t.id !== taskId) return t;
+                                    if (subfield) return { ...t, [field]: { ...t[field], [subfield]: value } };
+                                    return { ...t, [field]: value };
+                                })
+                            };
+                        })
+                    };
+                }));
+            };
+
+            const addWP = () => {
+                if (!currentProject) return;
+                const newId = `WP${(currentProject.workPackages.length + 1)}`;
+                setProjectData('workPackages', [...currentProject.workPackages, { id: newId, name: "新工作包", tasks: [] }]);
+                setExpandedWPs(prev => [...new Set([...prev, newId])]);
+            };
+
+            const deleteWP = (wpId) => {
+                if (!confirm("確定刪除此工作包？")) return;
+                setProjectData('workPackages', currentProject.workPackages.filter(wp => wp.id !== wpId));
+            };
+
+            const addTask = (wpId) => {
+                if (!currentProject) return;
+                const today = new Date().toISOString().split('T')[0];
+                const next = currentProject.workPackages.map(wp => {
+                    if (wp.id !== wpId) return wp;
+                    return {
+                        ...wp,
+                        tasks: [...wp.tasks, {
+                            id: `${wp.id.replace('WP', '')}.${wp.tasks.length + 1}`,
+                            name: "新任務",
+                            owner: "未指派",
+                            plan: { start: today, end: today, cost: 0 },
+                            actual: { start: today, end: today, cost: 0 },
+                            progress: 0
+                        }]
+                    };
+                });
+                setProjectData('workPackages', next);
+            };
+
+            const deleteTask = (wpId, taskId) => {
+                if (!confirm("確定刪除此任務？")) return;
+                const next = currentProject.workPackages.map(wp => wp.id === wpId ? { ...wp, tasks: wp.tasks.filter(t => t.id !== taskId) } : wp);
+                setProjectData('workPackages', next);
+            };
+
+            const handleCreateProject = async () => {
+                if (!newProjectName.trim() || !db) return;
+                const newProj = createProjectConsoleTemplate(newProjectName.trim());
+                await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'projects', newProj.id), newProj);
+                setNewProjectName("");
+                setIsCreateModalOpen(false);
+                setWorkspaceMode('active');
+                setActiveProjectId(newProj.id);
+            };
+
+            const archiveProject = () => { if (currentProject) setProjectData('status', 'archived'); };
+            const restartProject = () => { if (currentProject) setProjectData('status', 'active'); };
+            const deleteProject = async (id) => {
+                if (!confirm("確定要永久刪除此專案嗎？此動作無法復原。")) return;
+                await deleteDoc(doc(db, `artifacts/${dbSource}/public/data`, 'projects', id));
+                if (activeProjectId === id) setActiveProjectId(null);
+            };
+
+            const workspaceProjects = allProjects.filter(p => p.status === workspaceMode);
+            const evmStats = useMemo(() => {
+                if (!currentProject) return { totalPV: 0, totalAC: 0, totalEV: 0, cpi: "0.00", spi: "0.00", cv: 0 };
+                let totalPV = 0, totalAC = 0, totalEV = 0;
+                currentProject.workPackages.forEach(wp => {
+                    wp.tasks.forEach(task => {
+                        totalPV += Number(task.plan?.cost || 0);
+                        totalAC += Number(task.actual?.cost || 0);
+                        totalEV += Number(task.plan?.cost || 0) * (Number(task.progress || 0) / 100);
+                    });
+                });
+                return {
+                    totalPV,
+                    totalAC,
+                    totalEV,
+                    cpi: totalAC > 0 ? (totalEV / totalAC).toFixed(2) : "0.00",
+                    spi: totalPV > 0 ? (totalEV / totalPV).toFixed(2) : "0.00",
+                    cv: totalEV - totalAC
+                };
+            }, [currentProject]);
+
+            const getPosition = (dateStr) => (getDayOfYear(dateStr) / 365) * 100;
+
+            return (
+                <div className="min-h-[80vh] bg-slate-50 text-slate-900 rounded-2xl overflow-hidden border border-slate-200 flex flex-col md:flex-row">
+                    <div className="w-full md:w-72 bg-slate-900 text-white flex flex-col shrink-0 border-r border-slate-800">
+                        <div className="p-6 flex items-center gap-3 border-b border-slate-800">
+                            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-black">P</div>
+                            <span className="font-black tracking-tighter text-lg">Project Console</span>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                            <div className="space-y-1">
+                                <button onClick={() => setWorkspaceMode('active')} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold ${workspaceMode === 'active' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}><Icon name="briefcase" size={18}/> 執行中專案</button>
+                                <button onClick={() => setWorkspaceMode('archived')} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold ${workspaceMode === 'archived' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}><Icon name="history" size={18}/> 已結案存檔</button>
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-4 mb-3">Project List</p>
+                                <div className="space-y-1">
+                                    {workspaceProjects.map(p => (
+                                        <div key={p.id} className="group relative">
+                                            <button onClick={() => setActiveProjectId(p.id)} className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium truncate pr-10 ${activeProjectId === p.id ? 'bg-slate-800 text-blue-400 ring-1 ring-slate-700' : 'text-slate-400 hover:bg-slate-800/50'}`}>{p.name}</button>
+                                            {workspaceMode === 'archived' && <button onClick={() => deleteProject(p.id)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600 hover:text-rose-500 opacity-0 group-hover:opacity-100"><Icon name="trash-2" size={14}/></button>}
+                                        </div>
+                                    ))}
+                                    {workspaceProjects.length === 0 && <div className="px-4 py-8 text-center border-2 border-dashed border-slate-800 rounded-2xl"><p className="text-xs text-slate-600 font-bold">尚無項目</p></div>}
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-4 border-t border-slate-800">
+                            <button onClick={() => setIsCreateModalOpen(true)} className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-sm font-black flex items-center justify-center gap-2 border border-slate-700"><Icon name="folder-plus" size={18}/> 新增專案</button>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 flex flex-col overflow-hidden">
+                        {!currentProject ? (
+                            <div className="flex-1 flex flex-col items-center justify-center text-slate-300 p-12"><Icon name="layout-grid" size={64} className="mb-4 opacity-20"/><p className="text-xl font-black">請選擇或建立一個專案</p></div>
+                        ) : (
+                            <>
+                                <div className="bg-white border-b border-slate-200 p-6 shadow-sm">
+                                    <div className="max-w-[1400px] mx-auto flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6">
+                                        <div className="flex-1 w-full">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase ${currentProject.status === 'active' ? 'bg-blue-600 text-white' : 'bg-amber-600 text-white'}`}>{currentProject.status === 'active' ? 'Active Project' : 'Archived'}</span>
+                                                {isSaving && <span className="text-[10px] text-blue-500 animate-pulse font-bold flex items-center gap-1"><Icon name="cloud-upload" size={12}/> 儲存中</span>}
+                                            </div>
+                                            <input className="text-3xl font-black text-slate-800 bg-transparent border-none focus:ring-2 focus:ring-blue-50 rounded-lg w-full px-2 py-1 -ml-2" value={currentProject.name} onChange={e => setProjectData('name', e.target.value)} disabled={currentProject.status === 'archived'} />
+                                            <div className="flex flex-wrap gap-x-6 gap-y-3 mt-4 text-xs text-slate-500 font-bold">
+                                                <span>PM: <input className="bg-transparent border-none p-0 font-black text-slate-700 w-24 focus:ring-0" value={currentProject.pm} onChange={e => setProjectData('pm', e.target.value)} disabled={currentProject.status === 'archived'} /></span>
+                                                <span>Dept: <input className="bg-transparent border-none p-0 font-black text-slate-700 w-24 focus:ring-0" value={currentProject.department} onChange={e => setProjectData('department', e.target.value)} disabled={currentProject.status === 'archived'} /></span>
+                                                <span>Budget: NT$<input type="number" className="bg-transparent border-none p-0 font-black text-slate-700 w-24 focus:ring-0" value={currentProject.totalBudget} onChange={e => setProjectData('totalBudget', Number(e.target.value) || 0)} disabled={currentProject.status === 'archived'} /></span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3 shrink-0">
+                                            <div className="flex bg-slate-100 rounded-xl p-1 border border-slate-200">
+                                                <button onClick={() => setViewMode('table')} className={`px-4 py-2 text-xs font-bold rounded-lg ${viewMode === 'table' ? 'bg-white text-slate-800 shadow-sm' : 'text-gray-500'}`}>數據表</button>
+                                                <button onClick={() => setViewMode('gantt')} className={`px-4 py-2 text-xs font-bold rounded-lg ${viewMode === 'gantt' ? 'bg-white text-slate-800 shadow-sm' : 'text-gray-500'}`}>甘特圖</button>
+                                            </div>
+                                            {currentProject.status === 'active'
+                                                ? <button onClick={archiveProject} className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 text-white text-xs font-black rounded-xl"><Icon name="archive" size={16}/> 結案存檔</button>
+                                                : <button onClick={restartProject} className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-xs font-black rounded-xl"><Icon name="briefcase" size={16}/> 重啟專案</button>}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="p-8 max-w-[1400px] mx-auto w-full overflow-y-auto space-y-8 flex-1">
+                                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                        {[{ label: 'CPI (成本績效)', val: evmStats.cpi, color: Number(evmStats.cpi) >= 1 ? 'text-emerald-600' : 'text-rose-600' }, { label: 'SPI (進度績效)', val: evmStats.spi, color: Number(evmStats.spi) >= 1 ? 'text-emerald-600' : 'text-rose-600' }, { label: '實獲價值 (EV)', val: `NT$${Math.round(evmStats.totalEV).toLocaleString()}`, color: 'text-slate-800' }, { label: '成本偏差 (CV)', val: `${evmStats.cv >= 0 ? '+' : ''}${Math.round(evmStats.cv).toLocaleString()}`, color: evmStats.cv >= 0 ? 'text-emerald-600' : 'text-rose-600' }].map((kpi, idx) => (
+                                            <div key={idx} className="bg-white p-6 border border-slate-200 rounded-2xl shadow-sm"><p className="text-[10px] text-gray-400 font-black uppercase mb-1">{kpi.label}</p><div className={`text-2xl font-black ${kpi.color}`}>{kpi.val}</div></div>
+                                        ))}
+                                    </div>
+
+                                    <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden min-h-[400px]">
+                                        {viewMode === 'table' ? (
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-left border-collapse min-w-[920px]">
+                                                    <thead className="bg-slate-800 text-white text-[11px] uppercase tracking-wider font-bold">
+                                                        <tr><th className="px-5 py-4 w-[42%]">WBS 階層與工作內容</th><th className="px-3 py-4 text-center w-24">進度 %</th><th className="px-4 py-4 w-56">成本 (P vs A)</th><th className="px-4 py-4 w-72">起訖週期</th><th className="px-3 py-4 text-center w-14"></th></tr>
+                                                    </thead>
+                                                    <tbody className="text-sm">
+                                                        {currentProject.workPackages.map(wp => (
+                                                            <React.Fragment key={wp.id}>
+                                                                <tr className="bg-slate-50 border-b border-slate-100">
+                                                                    <td className="px-5 py-3 flex items-center gap-3">
+                                                                        <button onClick={() => setExpandedWPs(prev => prev.includes(wp.id) ? prev.filter(i => i !== wp.id) : [...prev, wp.id])}>{expandedWPs.includes(wp.id) ? <Icon name="chevron-down" size={18}/> : <Icon name="chevron-right" size={18}/>}</button>
+                                                                        <input className="bg-transparent border-none font-black text-slate-800 focus:ring-0 p-0 max-w-[240px]" value={wp.name} onChange={e => updateTask(wp.id, null, 'name', null, e.target.value)} disabled={currentProject.status === 'archived'} />
+                                                                        <button onClick={() => addTask(wp.id)} className="ml-4 text-[10px] font-black text-blue-600 uppercase hover:underline" disabled={currentProject.status === 'archived'}>+ Add Task</button>
+                                                                    </td>
+                                                                    <td colSpan="3"></td>
+                                                                    <td className="px-3 py-3 text-center text-slate-300 hover:text-rose-500 cursor-pointer" onClick={() => deleteWP(wp.id)}><Icon name="trash-2" size={16}/></td>
+                                                                </tr>
+                                                                {expandedWPs.includes(wp.id) && wp.tasks.map(task => (
+                                                                    <tr key={task.id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                                                                        <td className="px-8 py-4">
+                                                                            <input className="block w-full max-w-[260px] font-bold text-slate-700 bg-transparent border-none p-0 mb-1 focus:ring-0" value={task.name} onChange={e => updateTask(wp.id, task.id, 'name', null, e.target.value)} disabled={currentProject.status === 'archived'} />
+                                                                            <div className="text-[10px] text-slate-400">Owner: {task.owner}</div>
+                                                                        </td>
+                                                                        <td className="px-3 py-4 text-center"><input type="number" className="w-14 text-center font-black text-blue-600 bg-blue-50 border-none rounded py-1" value={task.progress} onChange={e => updateTask(wp.id, task.id, 'progress', null, Number(e.target.value) || 0)} disabled={currentProject.status === 'archived'} /></td>
+                                                                        <td className="px-4 py-4 text-[11px] space-y-2">
+                                                                            <div className="flex items-center justify-between gap-2 text-slate-500">
+                                                                                <span className="font-bold">P:</span>
+                                                                                <input type="number" className="w-24 bg-white border border-slate-200 rounded px-2 py-1 text-right font-bold focus:ring-1 focus:ring-blue-500 outline-none" value={task.plan.cost} onChange={e => updateTask(wp.id, task.id, 'plan', 'cost', Number(e.target.value) || 0)} disabled={currentProject.status === 'archived'} />
+                                                                            </div>
+                                                                            <div className="flex items-center justify-between gap-2 text-slate-700">
+                                                                                <span className="font-bold">A:</span>
+                                                                                <input type="number" className="w-24 bg-white border border-slate-200 rounded px-2 py-1 text-right font-bold focus:ring-1 focus:ring-blue-500 outline-none" value={task.actual.cost} onChange={e => updateTask(wp.id, task.id, 'actual', 'cost', Number(e.target.value) || 0)} disabled={currentProject.status === 'archived'} />
+                                                                            </div>
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-[10px] space-y-2">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="text-slate-400 w-9">Plan</span>
+                                                                                <input type="date" className="text-[10px] bg-white border border-slate-200 rounded px-1.5 py-1 focus:ring-1 focus:ring-blue-500 outline-none" value={task.plan.start} onChange={e => updateTask(wp.id, task.id, 'plan', 'start', e.target.value)} disabled={currentProject.status === 'archived'} />
+                                                                                <span className="text-slate-300">~</span>
+                                                                                <input type="date" className="text-[10px] bg-white border border-slate-200 rounded px-1.5 py-1 focus:ring-1 focus:ring-blue-500 outline-none" value={task.plan.end} onChange={e => updateTask(wp.id, task.id, 'plan', 'end', e.target.value)} disabled={currentProject.status === 'archived'} />
+                                                                            </div>
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="text-blue-600 font-bold w-9">Act</span>
+                                                                                <input type="date" className="text-[10px] bg-white border border-blue-100 rounded px-1.5 py-1 focus:ring-1 focus:ring-blue-500 outline-none" value={task.actual.start} onChange={e => updateTask(wp.id, task.id, 'actual', 'start', e.target.value)} disabled={currentProject.status === 'archived'} />
+                                                                                <span className="text-slate-300">~</span>
+                                                                                <input type="date" className="text-[10px] bg-white border border-blue-100 rounded px-1.5 py-1 focus:ring-1 focus:ring-blue-500 outline-none" value={task.actual.end} onChange={e => updateTask(wp.id, task.id, 'actual', 'end', e.target.value)} disabled={currentProject.status === 'archived'} />
+                                                                            </div>
+                                                                        </td>
+                                                                        <td className="px-3 py-4 text-center text-slate-200 hover:text-rose-500 cursor-pointer" onClick={() => deleteTask(wp.id, task.id)}><Icon name="trash-2" size={16}/></td>
+                                                                    </tr>
+                                                                ))}
+                                                            </React.Fragment>
+                                                        ))}
+                                                        {currentProject.status === 'active' && <tr><td colSpan="5" className="p-6 text-center"><button onClick={addWP} className="text-sm font-black text-blue-600 border-2 border-dashed border-blue-100 px-6 py-3 rounded-2xl hover:bg-blue-50 flex items-center gap-2 mx-auto"><Icon name="plus" size={18}/> 新增工作包 (WBS Group)</button></td></tr>}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        ) : (
+                                            <div className="p-8">
+                                                <div className="flex border-b border-slate-100 mb-8 pb-4 font-black text-[10px] text-slate-400"><div className="w-64 shrink-0 uppercase tracking-widest">WBS Tasks Timeline</div><div className="flex-1 flex justify-between px-4">{MONTH_LABELS.map(m => <div key={m} className="flex-1 pl-3 border-l border-slate-50">{m}</div>)}</div></div>
+                                                <div className="space-y-8">
+                                                    {currentProject.workPackages.map(wp => (
+                                                        <div key={wp.id} className="space-y-5">
+                                                            <div className="flex items-center gap-4 text-xs font-black text-slate-800 uppercase tracking-tight"><div className="w-1.5 h-1.5 rounded-full bg-blue-600" /> {wp.name}</div>
+                                                            {wp.tasks.map(task => {
+                                                                const planS = getPosition(task.plan.start), planE = getPosition(task.plan.end);
+                                                                const actS = getPosition(task.actual.start), actE = getPosition(task.actual.end);
+                                                                return (
+                                                                    <div key={task.id} className="flex items-center group">
+                                                                        <div className="w-64 shrink-0 pr-8 text-[11px] font-bold text-slate-600 truncate">{task.name}</div>
+                                                                        <div className="flex-1 relative h-10 bg-slate-50 rounded-lg border-x border-slate-100 overflow-hidden">
+                                                                            <div className="absolute h-1.5 bg-slate-200 rounded-full top-2 opacity-50" style={{ left: `${planS}%`, width: `${Math.max(1, planE - planS)}%` }} />
+                                                                            <div className={`absolute h-4 rounded shadow-sm top-4 ${Number(task.progress) === 100 ? 'bg-emerald-500' : 'bg-blue-600'}`} style={{ left: `${actS}%`, width: `${Math.max(1, actE - actS)}%` }}><div className="absolute inset-y-0 left-0 bg-white/25" style={{ width: `${task.progress}%` }} /></div>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    {isCreateModalOpen && (
+                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[120] p-4">
+                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+                                <div className="p-8 border-b border-slate-100 flex justify-between items-center"><h3 className="text-xl font-black text-slate-800">建立新專案</h3><button onClick={() => setIsCreateModalOpen(false)} className="text-slate-300 hover:text-slate-600"><Icon name="x" size={24}/></button></div>
+                                <div className="p-8 space-y-6">
+                                    <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Project Name</label><input autoFocus className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none" placeholder="例如：2026 年度行銷計畫" value={newProjectName} onChange={e => setNewProjectName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleCreateProject()} /></div>
+                                    <button onClick={handleCreateProject} disabled={!newProjectName.trim()} className="w-full py-4 bg-blue-600 disabled:bg-slate-200 text-white rounded-2xl font-black hover:bg-blue-700">確認建立專案</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
         const MainApp = () => {
 const [showExportModal, setShowExportModal] = useState(false); // 新增這行
             const [user, setUser] = useState(null);
@@ -2764,6 +3188,8 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
             const [dailyStats, setDailyStats] = useState({}); 
             const [mascotConfig, setMascotConfig] = useState([]); 
             const [showMascotSettings, setShowMascotSettings] = useState(false); 
+            const [publicTheme, setPublicTheme] = useState(DEFAULT_PUBLIC_THEME);
+            const [publicSideDecor, setPublicSideDecor] = useState(DEFAULT_PUBLIC_SIDE_DECOR);
 
             useVisitorTracker(db, dbSource, viewMode);
 
@@ -2826,6 +3252,8 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
                             if (data.marqueeTextColor) setMarqueeTextColor(data.marqueeTextColor);
                             if (data.marqueeIconSize) setMarqueeIconSize(data.marqueeIconSize);
                             if (data.mascotConfig) setMascotConfig(data.mascotConfig); 
+                            if (data.publicTheme) setPublicTheme(normalizePublicTheme(data.publicTheme));
+                            if (data.publicSideDecor) setPublicSideDecor(normalizePublicSideDecor(data.publicSideDecor));
                             if (!isEditingRef.current) { 
                                 setCsvInput(d); 
                                 updateParsedData(d); 
@@ -2856,6 +3284,20 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
             const handleUpdatePassword = async () => { if (!newPasswordInput) return; setPasswordSaveStatus('saving'); try { const ref = doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'auth'); if(ref) await setDoc(ref, { password: newPasswordInput }, { merge: true }); setNewPasswordInput(''); setPasswordSaveStatus('success'); setTimeout(() => setPasswordSaveStatus('idle'), 2000); } catch (e) { console.error("Password update failed", e); setPasswordSaveStatus('idle'); } };
             const handleToggleInstructorRest = async (date, name) => { if (!user || !db) return; const currentResting = instructorSchedule[date] || []; let newResting; if (currentResting.includes(name)) { newResting = currentResting.filter(n => n !== name); } else { newResting = [...currentResting, name]; } const newSchedule = { ...instructorSchedule }; if (newResting.length > 0) { newSchedule[date] = newResting; } else { newSchedule[date] = []; } await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'schedule'), { resting: newSchedule }, { merge: true }); };
             const handleToggleCompanyRest = async (date) => { if (!user || !db) return; const isResting = companyRestDates.includes(date); let newDates; if (isResting) { newDates = companyRestDates.filter(d => d !== date); } else { newDates = [...companyRestDates, date].sort(); } setCompanyRestDates(newDates); await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'schedule'), { companyRest: newDates }, { merge: true }); };
+            const handleApplyThemePreset = (presetId) => {
+                const preset = PUBLIC_THEME_PRESETS.find(p => p.id === presetId);
+                if (preset) setPublicTheme(normalizePublicTheme(preset.values));
+            };
+            const handleSavePublicTheme = async () => {
+                if (!user || !db) return alert("請先登入");
+                await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), { publicTheme: normalizePublicTheme(publicTheme) }, { merge: true });
+                alert("前台主題已更新！");
+            };
+            const handleSavePublicSideDecor = async () => {
+                if (!user || !db) return alert("請先登入");
+                await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), { publicSideDecor: normalizePublicSideDecor(publicSideDecor) }, { merge: true });
+                alert("活動場次表左右裝飾圖已更新！");
+            };
             const handleSaveCSV = async (newData) => { if(!user || !db) return; setCsvSaveStatus('saving'); setIsSaving(true); try { isEditingRef.current = false; await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), { csvData: newData }, { merge: true }); setCsvInput(newData); setCsvSaveStatus('success'); setTimeout(() => setCsvSaveStatus('idle'), 3000); } catch(e) { console.error(e); setCsvSaveStatus('error'); } finally { setIsSaving(false); } };
             const arrayToCSV = (dataArray) => { let csv = CSV_HEADER + '\n'; dataArray.forEach(row => { const check = row.isCheckedIn ? '1' : '0'; const line = `${row.date||''},${row.eventName||''},${row.instructor||''},${row.customerName||''},${row.price||0},${row.transport||''},${row.idNo||''},${row.birthday||''},${row.email||''},${row.source||''},${row.socialName||''},${toCSVField(row.notes)},${row.orderDate||''},${row.phone||''},${check}`; csv += line + '\n'; }); return csv; };
             const handleUpdateRow = async (newRowData) => { 
@@ -2989,7 +3431,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
             const dashboardData = useMemo(() => { const now = new Date(); const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`; const monthlyGroups = {}; parsedData.forEach(c => { if (!c.date) return; const m = c.date.substring(0, 7); if (c.customerName === '開放報名中') return; if (!monthlyGroups[m]) monthlyGroups[m] = []; monthlyGroups[m].push(c); }); const currentMonthData = monthlyGroups[currentMonthStr] || []; const currentMonthRev = currentMonthData.reduce((a,c)=>a+c.price,0); const currentMonthPax = currentMonthData.length; return { monthlyGroups, currentMonthRev, currentMonthPax }; }, [parsedData]);
             const tasks = useMemo(() => { const list = []; Object.values(stats.events).forEach(evt => { const cfg = eventConfigs[evt.key] || {}; const tList = cfg.tasks || DEFAULT_TASKS_TEMPLATE; tList.forEach((t, i) => { if(!t.completed) list.push({ ...t, taskIdx: i, evtDate: evt.date, evtName: evt.eventName, cfgKey: evt.key, style: getTaskStatusStyle(t.type, evt.date), fullEvent: evt }); }); }); return list.sort((a,b) => new Date(a.evtDate) - new Date(b.evtDate)); }, [stats.events, eventConfigs]);
             const toggleTask = async (key, idx) => { const cfg = eventConfigs[key] || {}; const tList = cfg.tasks || JSON.parse(JSON.stringify(DEFAULT_TASKS_TEMPLATE)); tList[idx].completed = !tList[idx].completed; await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', key), { ...cfg, tasks: tList }, { merge: true }); };
-            
+
             const [ltvTimeframe, setLtvTimeframe] = useState('all'); 
             const ltvStats = useMemo(() => { const now = new Date(); const map = {}; const countMap = {}; let periodRevenue = 0; let periodPax = 0; parsedData.forEach(d => { const name = d.customerName; if (!name || name === '開放報名中') return; let include = true; if (ltvTimeframe !== 'all') { const date = new Date(d.date); const diffTime = Math.abs(now - date); const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); if (ltvTimeframe === 'year' && diffDays > 365) include = false; if (ltvTimeframe === 'quarter' && diffDays > 90) include = false; if (ltvTimeframe === 'month' && diffDays > 30) include = false; } if (include) { const price = parseInt(d.price) || 0; map[name] = (map[name] || 0) + price; countMap[name] = (countMap[name] || 0) + 1; periodRevenue += price; periodPax++; } }); const sortedCustomers = Object.keys(map).sort((a, b) => map[b] - map[a]); const activeCustomerCount = sortedCustomers.length; const avgLtv = activeCustomerCount > 0 ? Math.round(periodRevenue / activeCustomerCount) : 0; return { map, countMap, sortedCustomers, avgLtv, periodRevenue, activeCustomerCount }; }, [parsedData, ltvTimeframe]);
             const filteredCrmCustomers = ltvStats.sortedCustomers.filter(c => c.toLowerCase().includes(crmSearchTerm.toLowerCase()));
@@ -3064,14 +3506,16 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
             if(loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-400"><Icon name="loader-2" className="animate-spin mr-2"/> 載入中...</div>;
             const activeEditingEvent = editingEvent && stats.events[editingEvent.key] ? stats.events[editingEvent.key] : editingEvent;
 
-            if (viewMode === 'public') {
-                // [修改] 改用 calendarOccupancy 取得該日所有事項 (含主活動、前置、跨日)
-                const selectedDayItems = (calendarOccupancy[selectedPublicDate] || []).filter(item => checkEventMatchesFilters(item.evt.key));
-                const currentMonthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}`;
-                
-                return (
-                    <div className="min-h-screen bg-white pb-20 relative">
-                        <nav className="glass-nav sticky top-0 z-50 px-6 py-4 flex justify-between items-center relative"><Logo className="h-8 w-auto" /><button onClick={() => setShowLoginModal(true)} className="text-sm text-slate-500 hover:text-blue-600 flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors"><Icon name="lock" size={14}/> 管理員登入</button></nav>
+                if (viewMode === 'public') {
+                    // [修改] 改用 calendarOccupancy 取得該日所有事項 (含主活動、前置、跨日)
+                    const selectedDayItems = (calendarOccupancy[selectedPublicDate] || []).filter(item => checkEventMatchesFilters(item.evt.key));
+                    const currentMonthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}`;
+                    const appliedTheme = normalizePublicTheme(publicTheme);
+                    const appliedSideDecor = normalizePublicSideDecor(publicSideDecor);
+                    
+                    return (
+                    <div className="min-h-screen pb-20 relative" style={{ background: `linear-gradient(180deg, ${appliedTheme.pageBg} 0%, ${appliedTheme.pageBgAlt} 100%)`, color: appliedTheme.textColor }}>
+                        <nav className="glass-nav sticky top-0 z-50 px-6 py-4 flex justify-between items-center relative" style={{ backgroundColor: `${appliedTheme.surfaceBg}f2`, borderBottomColor: appliedTheme.surfaceBorder }}><Logo className="h-8 w-auto" /><button onClick={() => setShowLoginModal(true)} className="text-sm flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors" style={{ color: appliedTheme.textColor, backgroundColor: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.color = appliedTheme.accentColor} onMouseLeave={(e) => e.currentTarget.style.color = appliedTheme.textColor}><Icon name="lock" size={14}/> 管理員登入</button></nav>
                         {latestNews && (
                             <div className="overflow-hidden py-2 relative z-40 marquee-container border-b border-slate-700 shadow-sm" style={{ backgroundColor: marqueeBgColor, color: marqueeTextColor }}>
                                 <div className="animate-marquee font-bold text-sm tracking-wide flex items-center" style={{ animationDuration: `${marqueeSpeed}s` }}>
@@ -3083,11 +3527,40 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                         )}
                         
                         <div className="bg-amber-50 text-amber-800 text-xs py-2 px-4 text-center font-bold border-b border-amber-100 flex items-center justify-center gap-2 relative z-10"><Icon name="alert-circle" size={14}/> 系統人數更新可能有延遲，準確名額請以點擊「前往報名」後的表單為主</div>
-                        <main className="max-w-2xl mx-auto p-6 relative z-10">
-                            <div className="mb-6 text-center"><h1 className="text-2xl font-bold text-slate-800 mb-2">活動場次表</h1><p className="text-slate-500 text-sm">歡迎查看最新的活動資訊</p></div>
-                            <div className="relative mb-2"><Icon name="search" className="absolute left-4 top-3 text-slate-400" size={20}/><input type="text" placeholder="搜尋活動關鍵字..." className="w-full pl-12 pr-4 py-3 bg-slate-100 border-none rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-700" value={publicSearchTerm} onChange={e => setPublicSearchTerm(e.target.value)} /></div>
+                        <main className="max-w-6xl mx-auto p-6 relative z-10">
+                            <div className="max-w-2xl mx-auto relative z-10">
+                            <div className="mb-6 text-center relative">
+                                {appliedSideDecor.leftImage && (
+                                    <img
+                                        src={appliedSideDecor.leftImage}
+                                        alt="left decor"
+                                        className="hidden xl:block absolute pointer-events-none select-none"
+                                        style={{
+                                            left: `calc(-${Number(appliedSideDecor.width || 180)}px - ${Number(appliedSideDecor.offsetX || 24)}px)`,
+                                            top: `${Number(appliedSideDecor.offsetY || 0)}px`,
+                                            width: `${appliedSideDecor.width}px`,
+                                            opacity: Number(appliedSideDecor.opacity) || 1
+                                        }}
+                                    />
+                                )}
+                                {appliedSideDecor.rightImage && (
+                                    <img
+                                        src={appliedSideDecor.rightImage}
+                                        alt="right decor"
+                                        className="hidden xl:block absolute pointer-events-none select-none"
+                                        style={{
+                                            right: `calc(-${Number(appliedSideDecor.width || 180)}px - ${Number(appliedSideDecor.offsetX || 24)}px)`,
+                                            top: `${Number(appliedSideDecor.offsetY || 0)}px`,
+                                            width: `${appliedSideDecor.width}px`,
+                                            opacity: Number(appliedSideDecor.opacity) || 1
+                                        }}
+                                    />
+                                )}
+                                <h1 className="text-2xl font-bold mb-2" style={{ color: appliedTheme.titleColor }}>活動場次表</h1><p className="text-sm" style={{ color: appliedTheme.textColor }}>歡迎查看最新的活動資訊</p>
+                            </div>
+                            <div className="relative mb-2"><Icon name="search" className="absolute left-4 top-3 text-slate-400" size={20}/><input type="text" placeholder="搜尋活動關鍵字..." className="w-full pl-12 pr-4 py-3 border-none rounded-2xl outline-none focus:ring-2 transition-all" style={{ backgroundColor: `${appliedTheme.surfaceBg}`, color: appliedTheme.textColor, boxShadow: `0 0 0 1px ${appliedTheme.surfaceBorder} inset`, '--tw-ring-color': appliedTheme.accentColor }} value={publicSearchTerm} onChange={e => setPublicSearchTerm(e.target.value)} /></div>
                             
-                            <div className="mb-6 bg-white p-5 rounded-2xl border border-slate-100 shadow-sm"><div className="flex justify-between items-center mb-4"><h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Icon name="filter" size={18} className="text-blue-500"/> 活動篩選</h3>{hasActiveFilters && (<button onClick={clearFilters} className="text-xs text-red-500 hover:bg-red-50 px-2 py-1 rounded-lg transition-colors flex items-center gap-1"><Icon name="x" size={14}/> 重置條件</button>)}</div><div className="space-y-4"><div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4"><span className="text-xs font-bold text-slate-400 w-12 shrink-0 flex items-center gap-1"><Icon name="bar-chart-2" size={12}/> 等級</span><div className="flex flex-wrap gap-2">{(tagDefinitions.levels || []).map(t => { const isActive = publicFilters.level.includes(t); const isAvailable = availableOptions.levels.has(t); return ( <button key={t} onClick={() => toggleFilter('level', t)} disabled={!isAvailable && !isActive} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${ isActive ? 'bg-blue-600 text-white border-blue-600 shadow-md ring-2 ring-blue-100' : !isAvailable ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-blue-300' }`} > {t} </button> ); })}</div></div><div className="border-t border-slate-50 my-2"></div><div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4"><span className="text-xs font-bold text-slate-400 w-12 shrink-0 flex items-center gap-1"><Icon name="tag" size={12}/> 種類</span><div className="flex flex-wrap gap-2">{(tagDefinitions.types || []).map(t => { const isActive = publicFilters.type.includes(t); const isAvailable = availableOptions.types.has(t); return ( <button key={t} onClick={() => toggleFilter('type', t)} disabled={!isAvailable && !isActive} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${ isActive ? 'bg-emerald-600 text-white border-emerald-600 shadow-md ring-2 ring-emerald-100' : !isAvailable ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-emerald-300' }`} > {t} </button> ); })}</div></div><div className="border-t border-slate-50 my-2"></div><div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4"><span className="text-xs font-bold text-slate-400 w-12 shrink-0 flex items-center gap-1"><Icon name="map-pin" size={12}/> 地點</span><div className="flex flex-wrap gap-2">{(tagDefinitions.locations || []).map(t => { const isActive = publicFilters.location.includes(t); const isAvailable = availableOptions.locations.has(t); return ( <button key={t} onClick={() => toggleFilter('location', t)} disabled={!isAvailable && !isActive} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${ isActive ? 'bg-purple-600 text-white border-purple-600 shadow-md ring-2 ring-purple-100' : !isAvailable ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-purple-300' }`} > {t} </button> ); })}</div></div></div></div>
+                            <div className="mb-6 p-5 rounded-2xl border shadow-sm" style={{ backgroundColor: appliedTheme.surfaceBg, borderColor: appliedTheme.surfaceBorder }}><div className="flex justify-between items-center mb-4"><h3 className="text-sm font-bold flex items-center gap-2" style={{ color: appliedTheme.titleColor }}><Icon name="filter" size={18} className="text-blue-500"/> 活動篩選</h3>{hasActiveFilters && (<button onClick={clearFilters} className="text-xs text-red-500 hover:bg-red-50 px-2 py-1 rounded-lg transition-colors flex items-center gap-1"><Icon name="x" size={14}/> 重置條件</button>)}</div><div className="space-y-4"><div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4"><span className="text-xs font-bold text-slate-400 w-12 shrink-0 flex items-center gap-1"><Icon name="bar-chart-2" size={12}/> 等級</span><div className="flex flex-wrap gap-2">{(tagDefinitions.levels || []).map(t => { const isActive = publicFilters.level.includes(t); const isAvailable = availableOptions.levels.has(t); return ( <button key={t} onClick={() => toggleFilter('level', t)} disabled={!isAvailable && !isActive} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${ isActive ? 'bg-blue-600 text-white border-blue-600 shadow-md ring-2 ring-blue-100' : !isAvailable ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-blue-300' }`} > {t} </button> ); })}</div></div><div className="border-t border-slate-50 my-2"></div><div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4"><span className="text-xs font-bold text-slate-400 w-12 shrink-0 flex items-center gap-1"><Icon name="tag" size={12}/> 種類</span><div className="flex flex-wrap gap-2">{(tagDefinitions.types || []).map(t => { const isActive = publicFilters.type.includes(t); const isAvailable = availableOptions.types.has(t); return ( <button key={t} onClick={() => toggleFilter('type', t)} disabled={!isAvailable && !isActive} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${ isActive ? 'bg-emerald-600 text-white border-emerald-600 shadow-md ring-2 ring-emerald-100' : !isAvailable ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-emerald-300' }`} > {t} </button> ); })}</div></div><div className="border-t border-slate-50 my-2"></div><div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4"><span className="text-xs font-bold text-slate-400 w-12 shrink-0 flex items-center gap-1"><Icon name="map-pin" size={12}/> 地點</span><div className="flex flex-wrap gap-2">{(tagDefinitions.locations || []).map(t => { const isActive = publicFilters.location.includes(t); const isAvailable = availableOptions.locations.has(t); return ( <button key={t} onClick={() => toggleFilter('location', t)} disabled={!isAvailable && !isActive} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${ isActive ? 'bg-purple-600 text-white border-purple-600 shadow-md ring-2 ring-purple-100' : !isAvailable ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-purple-300' }`} > {t} </button> ); })}</div></div></div></div>
 
                             {/* 月曆搜尋結果提示 (保持原樣) */}
                             {(publicSearchTerm || hasActiveFilters) && matchingMonths.length > 0 && (<div className="mb-6 flex flex-wrap gap-2 animate-in fade-in slide-in-from-top-2"><span className="text-xs text-slate-400 py-1.5 flex items-center"><Icon name="search" size={12} className="mr-1"/> 符合條件的月份：</span>{matchingMonths.sort().map(m => { const isCurrentView = m === currentMonthStr; return (<button key={m} onClick={() => { const [y, mon] = m.split('-'); setCurrentDate(new Date(parseInt(y), parseInt(mon)-1, 1)); }} className={`text-xs px-3 py-1.5 rounded-full font-bold transition-all flex items-center gap-1 ${isCurrentView ? 'bg-slate-800 text-white shadow-md ring-2 ring-slate-200' : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'}`} >{m} {!isCurrentView && <Icon name="arrow-right" size={12}/>}</button>); })}</div>)}
@@ -3096,8 +3569,8 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                             {!publicSearchTerm && !hasActiveFilters && <div className="flex justify-center gap-4 mb-4 text-xs text-slate-400"><div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span> 有活動</div><div className="flex items-center gap-1"><span className="text-red-500 font-bold text-[10px]">額滿</span> 已額滿</div><div className="flex items-center gap-1"><span className="text-slate-300 font-bold">✕</span> 公休</div></div>}
                             
                             {/* 月曆本體 */}
-                            <div className="bg-white rounded-3xl shadow-lg border border-slate-100 overflow-hidden mb-8">
-                                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                            <div className="rounded-3xl shadow-lg border overflow-hidden mb-8" style={{ backgroundColor: appliedTheme.surfaceBg, borderColor: appliedTheme.surfaceBorder }}>
+                                <div className="p-4 border-b flex justify-between items-center" style={{ borderColor: appliedTheme.surfaceBorder, backgroundColor: `${appliedTheme.surfaceBg}cc` }}>
                                     <div className="flex items-center gap-4 w-full justify-between px-2">
                                         <button onClick={prevMonth} className="p-2 hover:bg-white hover:shadow-sm rounded-full transition-all text-slate-500"><Icon name="chevron-left"/></button>
                                         <h2 className="text-lg font-bold text-slate-800">{currentDate.getFullYear()}年 {currentDate.getMonth()+1}月</h2>
@@ -3329,6 +3802,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
     );
 })) : (<div className="text-center py-12 bg-slate-50 rounded-3xl border border-dashed border-slate-200"><div className="text-4xl mb-2">📅</div><div className="text-slate-400 font-medium">{hasActiveFilters ? '此篩選條件下無活動' : '本日無活動'}</div><div className="text-slate-300 text-sm mt-1">請點選其他有藍點的日期</div></div>))}
                             </div>
+                            </div>
                         </main>
                         {showLoginModal && <LoginModal onClose={() => setShowLoginModal(false)} onLogin={handleVerifyLogin} />}
                     </div>
@@ -3459,11 +3933,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
     )}
 </div>);})}</div></div></div>)}</div>}
                         
-                        {activeTab === 'projects' && (
-                            <div className="fade-in max-w-6xl mx-auto pb-20">
-                                <header className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold">專案進度</h2><button onClick={handleAddProject} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition"><Icon name="plus" size={18}/> 新增專案</button></header>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">{['To Do', 'In Progress', 'Stuck'].map(status => { const statusProjects = projects.filter(p => p.status === status); const isStuck = status === 'Stuck'; return (<div key={status} className={`p-5 rounded-3xl border ${isStuck ? 'bg-red-50/50 border-red-100' : 'bg-slate-100/50 border-slate-200/60'}`}><h3 className={`text-sm font-bold uppercase mb-4 flex justify-between items-center ${isStuck ? 'text-red-500' : 'text-slate-500'}`}><span className="flex items-center gap-2">{isStuck && <Icon name="alert-circle" size={16}/>}{status}</span><span className="bg-white px-2.5 py-0.5 rounded-full shadow-sm text-slate-800 text-xs border border-slate-100">{statusProjects.length}</span></h3><div className="space-y-3">{statusProjects.map(p => { const taskCount = p.subTasks ? p.subTasks.length : 0; const completedCount = p.subTasks ? p.subTasks.filter(t => t.completed).length : 0; const progress = taskCount > 0 ? Math.round((completedCount/taskCount)*100) : 0; return (<div key={p.id} onClick={()=>setEditingProject(p)} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition cursor-pointer group relative hover:-translate-y-1 duration-200"><div className="flex justify-between items-start mb-2"><div className={`text-[10px] font-bold px-2 py-0.5 rounded w-fit ${p.status==='Stuck'?'bg-red-100 text-red-600':'bg-blue-50 text-blue-600'}`}>{p.status}</div><button onClick={(e)=>{e.stopPropagation(); handleProjectStatus(p.id, p.status)}} className="text-slate-300 hover:text-blue-500 p-1 rounded-full hover:bg-slate-50"><Icon name="refresh-cw" size={12}/></button></div><div className="font-bold text-slate-800 mb-2 line-clamp-2">{p.name}</div>{taskCount > 0 && (<div className="mb-3"><div className="flex justify-between text-[10px] text-slate-400 mb-1"><span>進度 {completedCount}/{taskCount}</span><span>{progress}%</span></div><div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full transition-all ${p.status==='Stuck'?'bg-red-400':'bg-blue-500'}`} style={{width: `${progress}%`}}></div></div></div>)}{p.stakeholders && (<div className="mb-2 text-xs text-slate-500 flex items-center gap-1 overflow-hidden"><Icon name="users" size={12} className="shrink-0 text-slate-400"/><span className="truncate">{p.stakeholders}</span></div>)}<div className="flex justify-between items-center mt-3 pt-3 border-t border-slate-50"><div className="text-xs text-slate-400 flex items-center gap-2"><span className="flex items-center gap-1 bg-slate-50 px-1.5 py-0.5 rounded"><Icon name="clock" size={10}/> {p.deadline}</span></div><div className="flex gap-1">{p.cloudLink && (<button onClick={(e)=>{e.stopPropagation(); window.open(p.cloudLink, '_blank')}} className="w-6 h-6 rounded-full flex items-center justify-center bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-600 transition" title="開啟雲端連結"><Icon name="external-link" size={12}/></button>)}<div className="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center text-xs font-bold text-slate-600">{p.owner?.[0]}</div></div></div></div>); })}{statusProjects.length === 0 && <div className="text-center text-slate-300 text-xs py-8 border-2 border-dashed border-slate-200/50 rounded-xl">無專案</div>}</div></div>); })}</div><div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm"><h3 className="text-lg font-bold text-slate-700 mb-6 flex items-center gap-2"><div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600"><Icon name="check-circle" size={18}/></div>已完成專案<span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full border border-slate-200">{projects.filter(p => p.status === 'Done').length}</span></h3><div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">{projects.filter(p => p.status === 'Done').map(p => (<div key={p.id} onClick={()=>setEditingProject(p)} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 hover:border-green-300 hover:bg-green-50/30 transition cursor-pointer group opacity-80 hover:opacity-100"><div className="flex justify-between items-center mb-2"><div className="text-[10px] font-bold px-2 py-0.5 rounded bg-green-100 text-green-700">Done</div>{p.cloudLink && (<button onClick={(e)=>{e.stopPropagation(); window.open(p.cloudLink, '_blank')}} className="text-slate-400 hover:text-blue-500"><Icon name="external-link" size={14}/></button>)}</div><div className="font-bold text-slate-600 mb-1">{p.name}</div><div className="text-xs text-slate-400 flex items-center gap-1"><Icon name="calendar" size={10}/> {p.deadline}</div></div>))}{projects.filter(p => p.status === 'Done').length === 0 && (<div className="col-span-full text-center py-8 text-slate-400 text-sm">尚未有完成的專案，加油！🚀</div>)}</div></div></div>
-                        )}
+                        {activeTab === 'projects' && <ProjectConsoleTab user={user} db={db} dbSource={dbSource} sourceProjects={projects} />}
 
                         {activeTab === 'dashboard' && <div className="fade-in max-w-6xl mx-auto space-y-8 pb-20"><header className="flex justify-between items-center"><h2 className="text-2xl font-bold">營運儀表板</h2><button onClick={()=>downloadCSV(csvInput, 'full_export.csv')} className="text-sm bg-slate-800 text-white px-4 py-2 rounded-lg flex items-center gap-2"><Icon name="download" size={16}/> 匯出總表 (Excel)</button></header><div className="grid grid-cols-1 md:grid-cols-3 gap-6"><div className="bg-white p-6 rounded-2xl shadow-sm border border-blue-100 relative overflow-hidden"><div className="absolute -right-4 -top-4 text-blue-50 opacity-50"><Icon name="trending-up" size={100}/></div><div className="relative"><div className="text-sm font-bold text-blue-600 mb-1 uppercase tracking-wider">本月營收</div><div className="text-4xl font-bold text-slate-800">${dashboardData.currentMonthRev.toLocaleString()}</div></div></div><div className="bg-white p-6 rounded-2xl shadow-sm border border-indigo-100 relative overflow-hidden"><div className="absolute -right-4 -top-4 text-indigo-50 opacity-50"><Icon name="users" size={100}/></div><div className="relative"><div className="text-sm font-bold text-indigo-600 mb-1 uppercase tracking-wider">本月人次</div><div className="text-4xl font-bold text-slate-800">{dashboardData.currentMonthPax} <span className="text-lg font-normal text-slate-400">人</span></div></div></div><div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><div className="text-sm font-medium text-slate-500 mb-4">歷史總營收</div><div className="text-2xl font-bold text-slate-700">${stats.totalRev.toLocaleString()}</div></div></div><div><h3 className="text-lg font-bold text-slate-700 mb-4">月度營運報表</h3>{Object.entries(dashboardData.monthlyGroups).sort((a,b)=>b[0].localeCompare(a[0])).map(([month, data]) => (<MonthlyReport key={month} month={month} data={data} />))}</div></div>}
                        
@@ -3627,6 +4097,72 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                                 </div>
                             </div>
                             {/* [修改] 跑馬燈設定區塊 (包含速度與圖示) */}
+                            <section className="mb-8">
+                                <h2 className="text-2xl font-bold mb-4">🎨 前台主題設定</h2>
+                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                                        <button onClick={() => handleApplyThemePreset('sunny')} className="bg-amber-500 text-white px-3 py-2 rounded-lg text-sm font-bold hover:bg-amber-600">套用 晴空琥珀</button>
+                                        <button onClick={() => handleApplyThemePreset('forest')} className="bg-emerald-600 text-white px-3 py-2 rounded-lg text-sm font-bold hover:bg-emerald-700">套用 森林薄霧</button>
+                                        <button onClick={() => handleApplyThemePreset('ocean')} className="bg-sky-600 text-white px-3 py-2 rounded-lg text-sm font-bold hover:bg-sky-700">套用 海洋晨光</button>
+                                        <button onClick={() => handleApplyThemePreset('newyear')} className="bg-red-600 text-white px-3 py-2 rounded-lg text-sm font-bold hover:bg-red-700">套用 新年喜慶</button>
+                                        <button onClick={() => setPublicTheme(DEFAULT_PUBLIC_THEME)} className="bg-slate-700 text-white px-3 py-2 rounded-lg text-sm font-bold hover:bg-slate-800">還原預設</button>
+                                    </div>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        <div><label className="block text-xs font-bold text-slate-500 mb-1">背景主色</label><input type="color" className="w-full h-10 p-1 border rounded-xl cursor-pointer" value={publicTheme.pageBg} onChange={e => setPublicTheme({ ...publicTheme, pageBg: e.target.value })} /></div>
+                                        <div><label className="block text-xs font-bold text-slate-500 mb-1">背景輔色</label><input type="color" className="w-full h-10 p-1 border rounded-xl cursor-pointer" value={publicTheme.pageBgAlt} onChange={e => setPublicTheme({ ...publicTheme, pageBgAlt: e.target.value })} /></div>
+                                        <div><label className="block text-xs font-bold text-slate-500 mb-1">卡片背景</label><input type="color" className="w-full h-10 p-1 border rounded-xl cursor-pointer" value={publicTheme.surfaceBg} onChange={e => setPublicTheme({ ...publicTheme, surfaceBg: e.target.value })} /></div>
+                                        <div><label className="block text-xs font-bold text-slate-500 mb-1">卡片邊框</label><input type="color" className="w-full h-10 p-1 border rounded-xl cursor-pointer" value={publicTheme.surfaceBorder} onChange={e => setPublicTheme({ ...publicTheme, surfaceBorder: e.target.value })} /></div>
+                                        <div><label className="block text-xs font-bold text-slate-500 mb-1">標題色</label><input type="color" className="w-full h-10 p-1 border rounded-xl cursor-pointer" value={publicTheme.titleColor} onChange={e => setPublicTheme({ ...publicTheme, titleColor: e.target.value })} /></div>
+                                        <div><label className="block text-xs font-bold text-slate-500 mb-1">內文字色</label><input type="color" className="w-full h-10 p-1 border rounded-xl cursor-pointer" value={publicTheme.textColor} onChange={e => setPublicTheme({ ...publicTheme, textColor: e.target.value })} /></div>
+                                        <div><label className="block text-xs font-bold text-slate-500 mb-1">強調色</label><input type="color" className="w-full h-10 p-1 border rounded-xl cursor-pointer" value={publicTheme.accentColor} onChange={e => setPublicTheme({ ...publicTheme, accentColor: e.target.value })} /></div>
+                                    </div>
+                                    <div className="mt-4 flex justify-end">
+                                        <button onClick={handleSavePublicTheme} className="bg-indigo-600 text-white px-6 py-2 rounded-xl hover:bg-indigo-700 shadow-md font-bold">
+                                            <Icon name="save" size={18} className="inline mr-2"/>儲存前台主題
+                                        </button>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section className="mb-8">
+                                <h2 className="text-2xl font-bold mb-4">🖼️ 活動場次表左右裝飾圖</h2>
+                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                                    <p className="text-xs text-slate-500">可填圖片檔名（例如 `left-newyear.png`）或完整網址。空白就不顯示。圖片會顯示在「活動場次表」標題左右兩側（桌面 `xl` 以上）。</p>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 mb-1">左側圖片</label>
+                                            <input type="text" className="w-full p-2 border rounded-lg text-sm" placeholder="例如: left.png 或 https://..." value={publicSideDecor.leftImage} onChange={e => setPublicSideDecor({ ...publicSideDecor, leftImage: e.target.value })} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 mb-1">右側圖片</label>
+                                            <input type="text" className="w-full p-2 border rounded-lg text-sm" placeholder="例如: right.png 或 https://..." value={publicSideDecor.rightImage} onChange={e => setPublicSideDecor({ ...publicSideDecor, rightImage: e.target.value })} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 mb-1">圖片寬度(px)</label>
+                                            <input type="number" min="60" max="480" className="w-full p-2 border rounded-lg text-sm" value={publicSideDecor.width} onChange={e => setPublicSideDecor({ ...publicSideDecor, width: Number(e.target.value) || 180 })} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 mb-1">上下距離(px)</label>
+                                            <input type="number" min="-300" max="500" className="w-full p-2 border rounded-lg text-sm" value={publicSideDecor.offsetY} onChange={e => setPublicSideDecor({ ...publicSideDecor, offsetY: Number(e.target.value) || 0 })} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 mb-1">左右距離(px)</label>
+                                            <input type="number" min="0" max="400" className="w-full p-2 border rounded-lg text-sm" value={publicSideDecor.offsetX} onChange={e => setPublicSideDecor({ ...publicSideDecor, offsetX: Number(e.target.value) || 24 })} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 mb-1">透明度(0-1)</label>
+                                            <input type="number" min="0" max="1" step="0.1" className="w-full p-2 border rounded-lg text-sm" value={publicSideDecor.opacity} onChange={e => setPublicSideDecor({ ...publicSideDecor, opacity: Number(e.target.value) })} />
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-end gap-2">
+                                        <button onClick={() => setPublicSideDecor(DEFAULT_PUBLIC_SIDE_DECOR)} className="bg-slate-100 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-200 text-sm font-bold">清空</button>
+                                        <button onClick={handleSavePublicSideDecor} className="bg-indigo-600 text-white px-6 py-2 rounded-xl hover:bg-indigo-700 shadow-md font-bold">
+                                            <Icon name="save" size={18} className="inline mr-2"/>儲存活動場次表左右圖
+                                        </button>
+                                    </div>
+                                </div>
+                            </section>
+
                             <section className="mb-8">
                                 <h2 className="text-2xl font-bold mb-4">📢 前台公告設定</h2>
                                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-4">
