@@ -1483,16 +1483,16 @@
                                 <h4 className="font-bold text-slate-700 mb-2 flex items-center"><Icon name="user" size={18} className="mr-2"/> 講師分工</h4>
                                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                                     <div className="mb-3">
-                                        <div className="text-xs font-bold text-blue-600 mb-2">帶團講師（統計會採用）</div>
-                                        <div className="flex flex-wrap gap-2 mb-2">{leadInstructors.map(ins=><div key={`lead_${ins}`} className="flex items-center bg-white text-blue-700 px-2 py-1 rounded-md text-sm border border-blue-100 shadow-sm"><span className="mr-1">{ins}</span><button onClick={()=>removeLeadInstructor(ins)}><Icon name="x" size={14} className="text-slate-400 hover:text-red-500"/></button></div>)}{leadInstructors.length===0 && <span className="text-xs text-slate-400 py-1">未指定帶團講師</span>}</div>
-                                        <div className="flex gap-2"><input type="text" className="flex-1 px-3 py-1.5 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" value={tempLeadInstructor} onChange={e=>setTempLeadInstructor(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addLeadInstructor(tempLeadInstructor)} placeholder="輸入帶團講師..."/><button onClick={()=>addLeadInstructor(tempLeadInstructor)} className="px-3 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200"><Icon name="plus" size={16}/></button></div>
+                                        <div className="text-xs font-bold text-blue-600 mb-2">主講（統計會採用）</div>
+                                        <div className="flex flex-wrap gap-2 mb-2">{leadInstructors.map(ins=><div key={`lead_${ins}`} className="flex items-center bg-white text-blue-700 px-2 py-1 rounded-md text-sm border border-blue-100 shadow-sm"><span className="mr-1">{ins}</span><button onClick={()=>removeLeadInstructor(ins)}><Icon name="x" size={14} className="text-slate-400 hover:text-red-500"/></button></div>)}{leadInstructors.length===0 && <span className="text-xs text-slate-400 py-1">未指定主講</span>}</div>
+                                        <div className="flex gap-2"><input type="text" className="flex-1 px-3 py-1.5 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" value={tempLeadInstructor} onChange={e=>setTempLeadInstructor(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addLeadInstructor(tempLeadInstructor)} placeholder="輸入主講..."/><button onClick={()=>addLeadInstructor(tempLeadInstructor)} className="px-3 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200"><Icon name="plus" size={16}/></button></div>
                                     </div>
                                     <div className="mb-2">
-                                        <div className="text-xs font-bold text-emerald-600 mb-2">跟團講師（不列入帶團量統計）</div>
-                                        <div className="flex flex-wrap gap-2 mb-2">{supportInstructors.map(ins=><div key={`support_${ins}`} className="flex items-center bg-white text-emerald-700 px-2 py-1 rounded-md text-sm border border-emerald-100 shadow-sm"><span className="mr-1">{ins}</span><button onClick={()=>removeSupportInstructor(ins)}><Icon name="x" size={14} className="text-slate-400 hover:text-red-500"/></button></div>)}{supportInstructors.length===0 && <span className="text-xs text-slate-400 py-1">未指定跟團講師</span>}</div>
-                                        <div className="flex gap-2"><input type="text" className="flex-1 px-3 py-1.5 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-emerald-500" value={tempSupportInstructor} onChange={e=>setTempSupportInstructor(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addSupportInstructor(tempSupportInstructor)} placeholder="輸入跟團講師..."/><button onClick={()=>addSupportInstructor(tempSupportInstructor)} className="px-3 bg-emerald-100 text-emerald-600 rounded-lg hover:bg-emerald-200"><Icon name="plus" size={16}/></button></div>
+                                        <div className="text-xs font-bold text-emerald-600 mb-2">跟團（不列入主講量統計）</div>
+                                        <div className="flex flex-wrap gap-2 mb-2">{supportInstructors.map(ins=><div key={`support_${ins}`} className="flex items-center bg-white text-emerald-700 px-2 py-1 rounded-md text-sm border border-emerald-100 shadow-sm"><span className="mr-1">{ins}</span><button onClick={()=>removeSupportInstructor(ins)}><Icon name="x" size={14} className="text-slate-400 hover:text-red-500"/></button></div>)}{supportInstructors.length===0 && <span className="text-xs text-slate-400 py-1">未指定跟團</span>}</div>
+                                        <div className="flex gap-2"><input type="text" className="flex-1 px-3 py-1.5 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-emerald-500" value={tempSupportInstructor} onChange={e=>setTempSupportInstructor(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addSupportInstructor(tempSupportInstructor)} placeholder="輸入跟團..."/><button onClick={()=>addSupportInstructor(tempSupportInstructor)} className="px-3 bg-emerald-100 text-emerald-600 rounded-lg hover:bg-emerald-200"><Icon name="plus" size={16}/></button></div>
                                     </div>
-                                    <div className="flex flex-wrap gap-2">{availableInstructors.slice(0,6).map(i=><div key={i} className="flex gap-1"><button onClick={()=>addLeadInstructor(i)} className="text-xs px-2 py-1 bg-white border rounded-full hover:bg-blue-50 text-slate-600">+帶 {i}</button><button onClick={()=>addSupportInstructor(i)} className="text-xs px-2 py-1 bg-white border rounded-full hover:bg-emerald-50 text-slate-600">+跟 {i}</button></div>)}</div>
+                                    <div className="flex flex-wrap gap-2">{availableInstructors.slice(0,6).map(i=><div key={i} className="flex gap-1"><button onClick={()=>addLeadInstructor(i)} className="text-xs px-2 py-1 bg-white border rounded-full hover:bg-blue-50 text-slate-600">+主 {i}</button><button onClick={()=>addSupportInstructor(i)} className="text-xs px-2 py-1 bg-white border rounded-full hover:bg-emerald-50 text-slate-600">+跟 {i}</button></div>)}</div>
                                 </div>
                             </section>
                             <section>
@@ -1894,7 +1894,7 @@
                                         <div className="text-xs text-slate-500">本月有效總團數</div>
                                         <div className="text-2xl font-bold text-slate-800">{monthlyStats.totalGroups}</div>
                                         <div className="border-t pt-2">
-                                            <div className="text-xs font-bold text-slate-600 mb-1">每位帶團講師出團量</div>
+                                            <div className="text-xs font-bold text-slate-600 mb-1">每位主講出團量</div>
                                             <div className="max-h-32 overflow-y-auto space-y-1">
                                                 {monthlyStats.instructorRows.length === 0 && <div className="text-xs text-slate-400">此月份無有效資料</div>}
                                                 {monthlyStats.instructorRows.map(([name, count]) => (
@@ -2076,7 +2076,7 @@ const removeFormRule = (idx) => {
                                 <div><label className="block text-sm font-medium text-slate-700 mb-2">1. 選擇日期</label>{renderCalendar()}</div> 
                                 <div className="space-y-4"> 
                                     <div><label className="block text-sm font-medium text-slate-700 mb-1">2. 活動名稱</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" value={formData.eventName} onChange={e=>setFormData({...formData, eventName: e.target.value})} placeholder="輸入名稱..."/></div> 
-                                    <div> <label className="block text-sm font-medium text-slate-700 mb-1">3. 帶團講師</label> <div className="flex flex-wrap gap-2 mb-2 min-h-[38px] p-2 bg-white border border-slate-200 rounded-lg">{formData.instructors.map(ins=><div key={ins} className="flex items-center bg-blue-50 text-blue-700 px-2 py-1 rounded text-sm"><span className="mr-1">{ins}</span><button onClick={()=>setFormData({...formData, instructors: formData.instructors.filter(i=>i!==ins)})}><Icon name="x" size={14}/></button></div>)}</div> <div className="flex gap-2"><input type="text" className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" value={tempInstructor} onChange={e=>setTempInstructor(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addInstructor(tempInstructor)} placeholder="輸入名字..."/><button onClick={()=>addInstructor(tempInstructor)} className="px-3 bg-slate-100 rounded-lg hover:bg-slate-200"><Icon name="plus" size={18}/></button></div> <div className="flex flex-wrap gap-2 mt-2">{availableInstructors.slice(0,6).map(i=><button key={i} onClick={()=>addInstructor(i)} className={`text-xs px-2 py-1 border rounded-full transition ${unavailableInstructors.has(i)?'bg-slate-100 text-slate-400 border-slate-200':'bg-slate-50 hover:bg-blue-50 text-slate-600'}`}>+ {i}</button>)}</div> </div> 
+                                    <div> <label className="block text-sm font-medium text-slate-700 mb-1">3. 主講</label> <div className="flex flex-wrap gap-2 mb-2 min-h-[38px] p-2 bg-white border border-slate-200 rounded-lg">{formData.instructors.map(ins=><div key={ins} className="flex items-center bg-blue-50 text-blue-700 px-2 py-1 rounded text-sm"><span className="mr-1">{ins}</span><button onClick={()=>setFormData({...formData, instructors: formData.instructors.filter(i=>i!==ins)})}><Icon name="x" size={14}/></button></div>)}</div> <div className="flex gap-2"><input type="text" className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" value={tempInstructor} onChange={e=>setTempInstructor(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addInstructor(tempInstructor)} placeholder="輸入名字..."/><button onClick={()=>addInstructor(tempInstructor)} className="px-3 bg-slate-100 rounded-lg hover:bg-slate-200"><Icon name="plus" size={18}/></button></div> <div className="flex flex-wrap gap-2 mt-2">{availableInstructors.slice(0,6).map(i=><button key={i} onClick={()=>addInstructor(i)} className={`text-xs px-2 py-1 border rounded-full transition ${unavailableInstructors.has(i)?'bg-slate-100 text-slate-400 border-slate-200':'bg-slate-50 hover:bg-blue-50 text-slate-600'}`}>+ {i}</button>)}</div> </div> 
                                     <div className="grid grid-cols-2 gap-3">
                                         <div><label className="block text-sm font-medium text-slate-700 mb-1">4. 活動時間</label><input type="time" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" value={formData.time} onChange={e=>setFormData({...formData, time: e.target.value})}/></div> 
                                         <div><label className="block text-sm font-medium text-slate-700 mb-1">人數上限</label><input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" value={formData.capacity} onChange={e=>setFormData({...formData, capacity: e.target.value})}/></div> 
@@ -3211,7 +3211,13 @@ const removeFormRule = (idx) => {
             }, [currentProject, user, db, dbSource]);
 
             const setProjectData = (field, value) => {
-                setAllProjects(prev => prev.map(p => p.id === activeProjectId ? { ...p, [field]: value } : p));
+                setAllProjects(prev => prev.map(p => {
+                    if (p.id !== activeProjectId) return p;
+                    if (field === 'status' && (value === 'active' || value === 'archived')) {
+                        return { ...p, status: value, workspaceStatus: value };
+                    }
+                    return { ...p, [field]: value };
+                }));
             };
 
             const updateTask = (wpId, taskId, field, subfield, value) => {
@@ -3283,15 +3289,21 @@ const removeFormRule = (idx) => {
                 setActiveProjectId(newProj.id);
             };
 
-            const archiveProject = () => { if (currentProject) setProjectData('status', 'archived'); };
-            const restartProject = () => { if (currentProject) setProjectData('status', 'active'); };
+            const archiveProject = () => {
+                if (!currentProject) return;
+                setAllProjects(prev => prev.map(p => p.id === currentProject.id ? { ...p, status: 'archived', workspaceStatus: 'archived' } : p));
+            };
+            const restartProject = () => {
+                if (!currentProject) return;
+                setAllProjects(prev => prev.map(p => p.id === currentProject.id ? { ...p, status: 'active', workspaceStatus: 'active' } : p));
+            };
             const deleteProject = async (id) => {
                 if (!confirm("確定要永久刪除此專案嗎？此動作無法復原。")) return;
                 await deleteDoc(doc(db, `artifacts/${dbSource}/public/data`, 'projects', id));
                 if (activeProjectId === id) setActiveProjectId(null);
             };
 
-            const workspaceProjects = allProjects.filter(p => p.status === workspaceMode);
+            const workspaceProjects = allProjects.filter(p => (p.workspaceStatus || p.status) === workspaceMode);
             const evmStats = useMemo(() => {
                 if (!currentProject) return { totalPV: 0, totalAC: 0, totalEV: 0, cpi: "0.00", spi: "0.00", cv: 0 };
                 let totalPV = 0, totalAC = 0, totalEV = 0;
@@ -3405,7 +3417,16 @@ const removeFormRule = (idx) => {
                                                                     <tr key={task.id} className="border-b border-slate-50 hover:bg-slate-50/50">
                                                                         <td className="px-8 py-4">
                                                                             <input className="block w-full max-w-[260px] font-bold text-slate-700 bg-transparent border-none p-0 mb-1 focus:ring-0" value={task.name} onChange={e => updateTask(wp.id, task.id, 'name', null, e.target.value)} disabled={currentProject.status === 'archived'} />
-                                                                            <div className="text-[10px] text-slate-400">Owner: {task.owner}</div>
+                                                                            <div className="flex items-center gap-2 text-[10px] mt-1">
+                                                                                <span className="text-slate-400 shrink-0">Owner</span>
+                                                                                <input
+                                                                                    className="w-full max-w-[180px] bg-white border border-slate-200 rounded px-2 py-1 text-slate-600 focus:ring-1 focus:ring-blue-500 outline-none"
+                                                                                    value={task.owner || ''}
+                                                                                    onChange={e => updateTask(wp.id, task.id, 'owner', null, e.target.value)}
+                                                                                    placeholder="輸入負責人"
+                                                                                    disabled={currentProject.status === 'archived'}
+                                                                                />
+                                                                            </div>
                                                                         </td>
                                                                         <td className="px-3 py-4 text-center"><input type="number" className="w-14 text-center font-black text-blue-600 bg-blue-50 border-none rounded py-1" value={task.progress} onChange={e => updateTask(wp.id, task.id, 'progress', null, Number(e.target.value) || 0)} disabled={currentProject.status === 'archived'} /></td>
                                                                         <td className="px-4 py-4 text-[11px] space-y-2">
@@ -3482,6 +3503,244 @@ const removeFormRule = (idx) => {
                                 </div>
                             </div>
                         </div>
+                    )}
+                </div>
+            );
+        };
+
+        const ProjectOwnerTimelineTab = ({ sourceProjects }) => {
+            const normalizedProjects = useMemo(
+                () => (sourceProjects || []).map((p, idx) => normalizeConsoleProject(p, `proj_${idx}`)),
+                [sourceProjects]
+            );
+
+            const ownerOptions = useMemo(() => {
+                const ownerSet = new Set();
+                normalizedProjects.forEach(project => {
+                    (project.workPackages || []).forEach(wp => {
+                        (wp.tasks || []).forEach(task => {
+                            const owner = (task.owner || '').trim();
+                            if (owner) ownerSet.add(owner);
+                        });
+                    });
+                });
+                return Array.from(ownerSet).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+            }, [normalizedProjects]);
+
+            const [selectedOwner, setSelectedOwner] = useState('');
+
+            useEffect(() => {
+                if (ownerOptions.length === 0) {
+                    setSelectedOwner('');
+                    return;
+                }
+                if (!selectedOwner || !ownerOptions.includes(selectedOwner)) {
+                    setSelectedOwner(ownerOptions[0]);
+                }
+            }, [ownerOptions, selectedOwner]);
+
+            const ownerProjects = useMemo(() => {
+                if (!selectedOwner) return [];
+                return normalizedProjects.map(project => {
+                    const tasks = [];
+                    (project.workPackages || []).forEach(wp => {
+                        (wp.tasks || []).forEach(task => {
+                            if ((task.owner || '').trim() !== selectedOwner) return;
+                            const start = task.actual?.start || task.plan?.start || '';
+                            const end = task.actual?.end || task.plan?.end || start;
+                            if (!start) return;
+                            tasks.push({
+                                id: `${project.id}_${wp.id}_${task.id}`,
+                                projectId: project.id,
+                                projectName: project.name || '未命名專案',
+                                wpName: wp.name || '未命名工作包',
+                                taskName: task.name || '未命名任務',
+                                start,
+                                end: end || start,
+                                progress: Number(task.progress || 0)
+                            });
+                        });
+                    });
+                    return { projectId: project.id, projectName: project.name || '未命名專案', tasks };
+                }).filter(p => p.tasks.length > 0);
+            }, [normalizedProjects, selectedOwner]);
+
+            const allOwnerTasks = useMemo(() => ownerProjects.flatMap(p => p.tasks), [ownerProjects]);
+
+            const timelineBounds = useMemo(() => {
+                if (allOwnerTasks.length === 0) return null;
+                const parseDate = (dateStr) => {
+                    const d = new Date(`${dateStr}T00:00:00`);
+                    return Number.isNaN(d.getTime()) ? null : d;
+                };
+                const starts = allOwnerTasks.map(t => parseDate(t.start)).filter(Boolean);
+                const ends = allOwnerTasks.map(t => parseDate(t.end || t.start)).filter(Boolean);
+                if (!starts.length || !ends.length) return null;
+                const minTime = Math.min(...starts.map(d => d.getTime()));
+                const maxTime = Math.max(...ends.map(d => d.getTime()));
+                const minDate = new Date(minTime);
+                const maxDate = new Date(maxTime);
+                const totalDays = Math.max(1, Math.round((maxDate.getTime() - minDate.getTime()) / 86400000) + 1);
+                return { minDate, maxDate, totalDays };
+            }, [allOwnerTasks]);
+
+            const getDateRatio = (dateStr) => {
+                if (!timelineBounds) return 0;
+                const date = new Date(`${dateStr}T00:00:00`);
+                if (Number.isNaN(date.getTime())) return 0;
+                const diff = Math.round((date.getTime() - timelineBounds.minDate.getTime()) / 86400000);
+                return Math.max(0, Math.min(1, diff / timelineBounds.totalDays));
+            };
+
+            const dateTicks = useMemo(() => {
+                if (!timelineBounds) return [];
+                const ticks = [];
+                const d = new Date(timelineBounds.minDate.getTime());
+                while (d <= timelineBounds.maxDate) {
+                    ticks.push(new Date(d.getTime()));
+                    d.setDate(d.getDate() + 7);
+                }
+                if (ticks.length === 0 || ticks[ticks.length - 1].getTime() !== timelineBounds.maxDate.getTime()) {
+                    ticks.push(new Date(timelineBounds.maxDate.getTime()));
+                }
+                return ticks;
+            }, [timelineBounds]);
+
+            const formatDateLabel = (dateObj) => `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
+
+            return (
+                <div className="max-w-7xl mx-auto fade-in pb-20 space-y-6">
+                    <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-800">Owner 時程總覽</h2>
+                            <p className="text-slate-500 text-sm">依負責人檢視涉入任務，橫軸日期、縱軸專案</p>
+                        </div>
+                        <div className="bg-white border border-slate-200 rounded-2xl p-3 flex items-center gap-3">
+                            <label className="text-xs font-bold text-slate-500">選擇 Owner</label>
+                            <select
+                                className="px-3 py-2 rounded-xl border border-slate-200 text-sm min-w-[180px] bg-white"
+                                value={selectedOwner}
+                                onChange={e => setSelectedOwner(e.target.value)}
+                            >
+                                {ownerOptions.length === 0 && <option value="">尚無 owner</option>}
+                                {ownerOptions.map(owner => <option key={owner} value={owner}>{owner}</option>)}
+                            </select>
+                        </div>
+                    </header>
+
+                    {ownerOptions.length === 0 ? (
+                        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400">
+                            尚未設定任務 owner，請先到「專案進度」為任務填寫 owner。
+                        </div>
+                    ) : ownerProjects.length === 0 ? (
+                        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400">
+                            此 owner 目前沒有任務。
+                        </div>
+                    ) : (
+                        <>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="bg-white border border-slate-200 rounded-2xl p-4">
+                                    <div className="text-xs text-slate-400 font-bold">涉及專案數</div>
+                                    <div className="text-2xl font-black text-slate-800 mt-1">{ownerProjects.length}</div>
+                                </div>
+                                <div className="bg-white border border-slate-200 rounded-2xl p-4">
+                                    <div className="text-xs text-slate-400 font-bold">任務總數</div>
+                                    <div className="text-2xl font-black text-slate-800 mt-1">{allOwnerTasks.length}</div>
+                                </div>
+                                <div className="bg-white border border-slate-200 rounded-2xl p-4">
+                                    <div className="text-xs text-slate-400 font-bold">日期範圍</div>
+                                    <div className="text-sm font-bold text-slate-700 mt-2">
+                                        {timelineBounds ? `${timelineBounds.minDate.toISOString().split('T')[0]} ~ ${timelineBounds.maxDate.toISOString().split('T')[0]}` : '-'}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+                                <div className="p-4 border-b border-slate-100 font-bold text-slate-700">專案 x 日期時程圖</div>
+                                <div className="overflow-x-auto">
+                                    <div className="min-w-[1000px]">
+                                        <div className="flex border-b border-slate-100 bg-slate-50">
+                                            <div className="w-64 shrink-0 px-4 py-3 text-[11px] font-black text-slate-500 uppercase tracking-wider">專案</div>
+                                            <div className="flex-1 relative h-12">
+                                                {dateTicks.map((tick, idx) => {
+                                                    const left = `${getDateRatio(tick.toISOString().split('T')[0]) * 100}%`;
+                                                    return (
+                                                        <div key={`${tick.getTime()}_${idx}`} className="absolute top-0 h-full" style={{ left }}>
+                                                            <div className="h-full border-l border-slate-200" />
+                                                            <div className="absolute top-1 left-1 text-[10px] text-slate-400">{formatDateLabel(tick)}</div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+
+                                        {ownerProjects.map(project => {
+                                            const rowHeight = Math.max(44, project.tasks.length * 26 + 12);
+                                            return (
+                                                <div key={project.projectId} className="flex border-b border-slate-100 last:border-b-0">
+                                                    <div className="w-64 shrink-0 px-4 py-3 border-r border-slate-100 bg-slate-50/50">
+                                                        <div className="font-bold text-slate-700 text-sm truncate">{project.projectName}</div>
+                                                        <div className="text-[10px] text-slate-400 mt-1">{project.tasks.length} 項任務</div>
+                                                    </div>
+                                                    <div className="flex-1 relative" style={{ height: `${rowHeight}px` }}>
+                                                        {project.tasks.map((task, idx) => {
+                                                            const startRatio = getDateRatio(task.start);
+                                                            const endRatio = getDateRatio(task.end || task.start);
+                                                            const widthRatio = Math.max(0.01, endRatio - startRatio + (1 / Math.max(1, timelineBounds?.totalDays || 1)));
+                                                            const barColor = task.progress >= 100 ? 'bg-emerald-500' : task.progress >= 50 ? 'bg-blue-500' : 'bg-amber-500';
+                                                            return (
+                                                                <div
+                                                                    key={task.id}
+                                                                    className={`absolute h-5 rounded-md ${barColor} text-white text-[10px] leading-5 px-2 truncate shadow-sm`}
+                                                                    style={{
+                                                                        top: `${6 + idx * 24}px`,
+                                                                        left: `${startRatio * 100}%`,
+                                                                        width: `${Math.min(100, widthRatio * 100)}%`
+                                                                    }}
+                                                                    title={`${task.taskName} (${task.start} ~ ${task.end})`}
+                                                                >
+                                                                    {task.taskName}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+                                <div className="p-4 border-b border-slate-100 font-bold text-slate-700">任務明細</div>
+                                <div className="table-container max-h-[360px] overflow-y-auto">
+                                    <table className="w-full text-left text-sm">
+                                        <thead className="bg-slate-50 text-slate-500 sticky top-0">
+                                            <tr>
+                                                <th className="px-4 py-2">專案</th>
+                                                <th className="px-4 py-2">工作包</th>
+                                                <th className="px-4 py-2">任務</th>
+                                                <th className="px-4 py-2">起日</th>
+                                                <th className="px-4 py-2">迄日</th>
+                                                <th className="px-4 py-2 text-right">進度%</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {allOwnerTasks.map(task => (
+                                                <tr key={task.id} className="hover:bg-slate-50">
+                                                    <td className="px-4 py-2 font-medium text-slate-700">{task.projectName}</td>
+                                                    <td className="px-4 py-2 text-slate-500">{task.wpName}</td>
+                                                    <td className="px-4 py-2 text-slate-600">{task.taskName}</td>
+                                                    <td className="px-4 py-2 text-slate-500 font-mono">{task.start}</td>
+                                                    <td className="px-4 py-2 text-slate-500 font-mono">{task.end}</td>
+                                                    <td className="px-4 py-2 text-right font-bold text-blue-600">{task.progress}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </>
                     )}
                 </div>
             );
@@ -3708,7 +3967,96 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
                 await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), { publicSideDecor: normalizePublicSideDecor(publicSideDecor) }, { merge: true });
                 alert("活動場次表左右裝飾圖已更新！");
             };
-            const handleSaveCSV = async (newData) => { if(!user || !db) return; setCsvSaveStatus('saving'); setIsSaving(true); try { isEditingRef.current = false; await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), { csvData: newData }, { merge: true }); setCsvInput(newData); setCsvSaveStatus('success'); setTimeout(() => setCsvSaveStatus('idle'), 3000); } catch(e) { console.error(e); setCsvSaveStatus('error'); } finally { setIsSaving(false); } };
+            const normalizeInstructor = (instructor) => (instructor || '').split(/[&,]/).map(s => s.trim()).filter(Boolean).sort().join(' & ');
+            const buildEventKey = (date, eventName, instructor) => `${date || ''}_${eventName || ''}_${normalizeInstructor(instructor)}`.replace(/[\/\\#\?]/g, '-');
+            const buildEventBaseKey = (date, eventName) => `${date || ''}__${eventName || ''}`;
+
+            const mergeEventConfigData = (preferred, fallback) => {
+                const p = preferred || {};
+                const f = fallback || {};
+                const merged = { ...f, ...p };
+                const toList = (v) => Array.isArray(v) ? v.filter(Boolean) : [];
+                const mergedLead = Array.from(new Set([...toList(f.leadInstructors), ...toList(p.leadInstructors)]));
+                const mergedSupport = Array.from(new Set([...toList(f.supportInstructors), ...toList(p.supportInstructors)]));
+                if (mergedLead.length > 0) merged.leadInstructors = mergedLead;
+                if (mergedSupport.length > 0) merged.supportInstructors = mergedSupport;
+                if (!Array.isArray(p.tasks) && Array.isArray(f.tasks)) merged.tasks = f.tasks;
+                if (!Array.isArray(p.statusRules) && Array.isArray(f.statusRules)) merged.statusRules = f.statusRules;
+                merged.tags = { ...(f.tags || {}), ...(p.tags || {}) };
+                return merged;
+            };
+
+            const parseCsvRowsForSync = (rawCsv) => {
+                const txt = String(rawCsv || '').trim();
+                if (!txt) return [];
+                const lines = txt.split('\n');
+                return lines.slice(1).map(line => {
+                    const v = line.split(',');
+                    if (v.length < 2) return null;
+                    return {
+                        date: v[0]?.trim() || '',
+                        eventName: v[1]?.trim() || '',
+                        instructor: v[2]?.trim() || ''
+                    };
+                }).filter(r => r && r.date && r.eventName);
+            };
+
+            const syncEventConfigsByRows = async (oldRows, newRows) => {
+                if (!db) return;
+                const oldBaseMap = {};
+                oldRows.forEach(r => {
+                    const base = buildEventBaseKey(r.date, r.eventName);
+                    const key = buildEventKey(r.date, r.eventName, r.instructor);
+                    if (!oldBaseMap[base]) oldBaseMap[base] = new Set();
+                    oldBaseMap[base].add(key);
+                });
+                const newBaseMap = {};
+                newRows.forEach(r => {
+                    const base = buildEventBaseKey(r.date, r.eventName);
+                    const key = buildEventKey(r.date, r.eventName, r.instructor);
+                    if (!newBaseMap[base]) newBaseMap[base] = new Set();
+                    newBaseMap[base].add(key);
+                });
+
+                const writeJobs = [];
+                Object.entries(newBaseMap).forEach(([base, keySet]) => {
+                    const candidateOldKeys = Array.from(oldBaseMap[base] || []);
+                    Array.from(keySet).forEach(newKey => {
+                        const currentCfg = eventConfigs[newKey] || null;
+                        let mergedCfg = currentCfg ? { ...currentCfg } : null;
+                        candidateOldKeys.forEach(oldKey => {
+                            const oldCfg = eventConfigs[oldKey];
+                            if (!oldCfg) return;
+                            mergedCfg = mergedCfg ? mergeEventConfigData(mergedCfg, oldCfg) : { ...oldCfg };
+                        });
+                        if (mergedCfg) {
+                            writeJobs.push(setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', newKey), mergedCfg, { merge: true }));
+                        }
+                    });
+                });
+                if (writeJobs.length > 0) await Promise.all(writeJobs);
+            };
+
+            const handleSaveCSV = async (newData) => {
+                if(!user || !db) return;
+                setCsvSaveStatus('saving');
+                setIsSaving(true);
+                try {
+                    const oldRows = parsedData.map(r => ({ date: r.date, eventName: r.eventName, instructor: r.instructor }));
+                    const newRowsForSync = parseCsvRowsForSync(newData);
+                    isEditingRef.current = false;
+                    await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), { csvData: newData }, { merge: true });
+                    await syncEventConfigsByRows(oldRows, newRowsForSync);
+                    setCsvInput(newData);
+                    setCsvSaveStatus('success');
+                    setTimeout(() => setCsvSaveStatus('idle'), 3000);
+                } catch(e) {
+                    console.error(e);
+                    setCsvSaveStatus('error');
+                } finally {
+                    setIsSaving(false);
+                }
+            };
             const arrayToCSV = (dataArray) => { let csv = CSV_HEADER + '\n'; dataArray.forEach(row => { const check = row.isCheckedIn ? '1' : '0'; const line = `${row.date||''},${row.eventName||''},${row.instructor||''},${row.customerName||''},${row.price||0},${row.transport||''},${row.idNo||''},${row.birthday||''},${row.email||''},${row.source||''},${row.socialName||''},${toCSVField(row.notes)},${row.orderDate||''},${row.phone||''},${check}`; csv += line + '\n'; }); return csv; };
             const handleUpdateRow = async (newRowData) => { 
                 const newData = parsedData.map(row => row.id === newRowData.id ? newRowData : row); 
@@ -3771,12 +4119,15 @@ const handleCreateEvent = async ({ dates, eventName, instructors, time, link, di
     const finalInstr = newInstructorStr !== undefined ? newInstructorStr : editingEvent.instructor;
     const newKey = `${editingEvent.date}_${finalName}_${finalInstr}`.replace(/[\/\\#\?]/g, '-');
 
+    const oldCfg = eventConfigs[oldEventKey] || {};
+    const editedCfg = mergeEventConfigData(newConfig, oldCfg);
     if (newKey !== oldEventKey) {
-        await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', newKey), newConfig, { merge: true });
-        // 改名後可選擇刪除舊 Config 避免殘留
+        const targetCfg = eventConfigs[newKey] || {};
+        const mergedToNewKey = mergeEventConfigData(targetCfg, editedCfg);
+        await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', newKey), mergedToNewKey, { merge: true });
         await deleteDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', oldEventKey));
     } else {
-        await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', oldEventKey), newConfig, { merge: true }); 
+        await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', oldEventKey), editedCfg, { merge: true }); 
     }
 };
             const handleSaveTemplate = (tpl) => { let newList; if (tpl.id) { newList = customTemplates.map(t => t.id === tpl.id ? tpl : t); } else { newList = [...customTemplates, { ...tpl, id: `custom_${Date.now()}` }]; } setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'templates'), { list: newList }, { merge: true }); };
@@ -4257,8 +4608,8 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
 
             return (
                 <div className="flex min-h-screen">
-                    {mobileMenuOpen && ( <div className="fixed inset-0 z-50 bg-slate-800/50 backdrop-blur-sm md:hidden" onClick={() => setMobileMenuOpen(false)}> <div className="absolute top-0 left-0 w-64 h-full bg-white shadow-xl p-4" onClick={e => e.stopPropagation()}> <div className="flex justify-between items-center mb-6"><Logo className="h-6 w-auto" /><button onClick={() => setMobileMenuOpen(false)} className="p-2 text-slate-500"><Icon name="x" /></button></div> <nav className="space-y-1"> <NavItem id="tasks" icon="check-square" label="任務指揮中心" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="promises" icon="message-square" label="承諾牆" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="projects" icon="briefcase" label="專案進度" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="dashboard" icon="trending-up" label="營運儀表板" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="stats" icon="bar-chart-2" label="成效分析" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="enrollment" icon="pie-chart" label="報名監控" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="crm" icon="users" label="客戶 CRM" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="analytics" icon="activity" label="流量分析" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <div className="border-t border-slate-100 my-2 pt-2"> <NavItem id="events" icon="calendar" label="活動場次表" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="import" icon="database" label="資料庫管理" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <button onClick={() => { setViewMode('public'); setMobileMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-all text-left"><Icon name="eye" size={20} /><span className="font-medium tracking-wide">預覽前台</span></button> </div> </nav> </div> </div> )}
-                    <aside className="w-64 bg-white border-r border-slate-200 flex flex-col p-4 hidden md:flex sticky top-0 h-screen"> <div className="flex items-center space-x-2 px-4 mb-8 mt-2"><Logo className="h-8 w-auto" /></div> <nav className="space-y-1 flex-1"> <NavItem id="tasks" icon="check-square" label="任務指揮中心" activeTab={activeTab} setActiveTab={setActiveTab} /> <NavItem id="promises" icon="message-square" label="承諾牆" activeTab={activeTab} setActiveTab={setActiveTab} /> <NavItem id="projects" icon="briefcase" label="專案進度" activeTab={activeTab} setActiveTab={setActiveTab} /> <NavItem id="dashboard" icon="trending-up" label="營運儀表板" activeTab={activeTab} setActiveTab={setActiveTab} /> <NavItem id="stats" icon="bar-chart-2" label="成效分析" activeTab={activeTab} setActiveTab={setActiveTab} /> <NavItem id="enrollment" icon="pie-chart" label="報名監控" activeTab={activeTab} setActiveTab={setActiveTab} /> <NavItem id="crm" icon="users" label="客戶 CRM" activeTab={activeTab} setActiveTab={setActiveTab} /> <NavItem id="analytics" icon="activity" label="流量分析" activeTab={activeTab} setActiveTab={setActiveTab} /> </nav> <div className="pt-4 border-t border-slate-100 space-y-2"> <NavItem id="events" icon="calendar" label="活動場次表" activeTab={activeTab} setActiveTab={setActiveTab} /> <NavItem id="import" icon="database" label="資料庫管理" activeTab={activeTab} setActiveTab={setActiveTab} /> <button onClick={() => setViewMode('public')} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-all"><Icon name="eye" size={20} /><span className="font-medium tracking-wide">預覽前台</span></button> </div> </aside>
+                    {mobileMenuOpen && ( <div className="fixed inset-0 z-50 bg-slate-800/50 backdrop-blur-sm md:hidden" onClick={() => setMobileMenuOpen(false)}> <div className="absolute top-0 left-0 w-64 h-full bg-white shadow-xl p-4" onClick={e => e.stopPropagation()}> <div className="flex justify-between items-center mb-6"><Logo className="h-6 w-auto" /><button onClick={() => setMobileMenuOpen(false)} className="p-2 text-slate-500"><Icon name="x" /></button></div> <nav className="space-y-1"> <NavItem id="tasks" icon="check-square" label="任務指揮中心" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="promises" icon="message-square" label="承諾牆" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="projects" icon="briefcase" label="專案進度" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="projectOwners" icon="users" label="Owner時程" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="dashboard" icon="trending-up" label="營運儀表板" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="stats" icon="bar-chart-2" label="成效分析" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="enrollment" icon="pie-chart" label="報名監控" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="crm" icon="users" label="客戶 CRM" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="analytics" icon="activity" label="流量分析" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <div className="border-t border-slate-100 my-2 pt-2"> <NavItem id="events" icon="calendar" label="活動場次表" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="import" icon="database" label="資料庫管理" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <button onClick={() => { setViewMode('public'); setMobileMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-all text-left"><Icon name="eye" size={20} /><span className="font-medium tracking-wide">預覽前台</span></button> </div> </nav> </div> </div> )}
+                    <aside className="w-64 bg-white border-r border-slate-200 flex flex-col p-4 hidden md:flex sticky top-0 h-screen"> <div className="flex items-center space-x-2 px-4 mb-8 mt-2"><Logo className="h-8 w-auto" /></div> <nav className="space-y-1 flex-1"> <NavItem id="tasks" icon="check-square" label="任務指揮中心" activeTab={activeTab} setActiveTab={setActiveTab} /> <NavItem id="promises" icon="message-square" label="承諾牆" activeTab={activeTab} setActiveTab={setActiveTab} /> <NavItem id="projects" icon="briefcase" label="專案進度" activeTab={activeTab} setActiveTab={setActiveTab} /> <NavItem id="projectOwners" icon="users" label="Owner時程" activeTab={activeTab} setActiveTab={setActiveTab} /> <NavItem id="dashboard" icon="trending-up" label="營運儀表板" activeTab={activeTab} setActiveTab={setActiveTab} /> <NavItem id="stats" icon="bar-chart-2" label="成效分析" activeTab={activeTab} setActiveTab={setActiveTab} /> <NavItem id="enrollment" icon="pie-chart" label="報名監控" activeTab={activeTab} setActiveTab={setActiveTab} /> <NavItem id="crm" icon="users" label="客戶 CRM" activeTab={activeTab} setActiveTab={setActiveTab} /> <NavItem id="analytics" icon="activity" label="流量分析" activeTab={activeTab} setActiveTab={setActiveTab} /> </nav> <div className="pt-4 border-t border-slate-100 space-y-2"> <NavItem id="events" icon="calendar" label="活動場次表" activeTab={activeTab} setActiveTab={setActiveTab} /> <NavItem id="import" icon="database" label="資料庫管理" activeTab={activeTab} setActiveTab={setActiveTab} /> <button onClick={() => setViewMode('public')} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-all"><Icon name="eye" size={20} /><span className="font-medium tracking-wide">預覽前台</span></button> </div> </aside>
                     <main className="flex-1 p-4 md:p-10 overflow-y-auto bg-slate-50/50 relative h-screen">
                         <div className="md:hidden mb-6 flex justify-between items-center sticky top-0 z-30 bg-slate-50/90 backdrop-blur-sm py-2"><Logo className="h-6 w-auto" /><button onClick={() => setMobileMenuOpen(true)} className="p-2 bg-white rounded-lg shadow-sm text-slate-600 border border-slate-200"><Icon name="menu" /></button></div>
                         {activeTab === 'tasks' && <div className="max-w-6xl mx-auto fade-in pb-20"><header className="mb-8 flex justify-between items-end"><div><h2 className="text-2xl font-bold text-slate-800 mb-1">任務指揮中心</h2><p className="text-slate-500 text-sm">智慧追蹤系統，根據活動日期自動排序</p></div><div className="bg-white px-4 py-2 rounded-full border text-sm font-medium whitespace-nowrap">待處理: <span className="text-blue-600 font-bold ml-1">{tasks.length}</span></div></header>{Object.keys(groupedTasks).length === 0 ? (<div className="text-center py-20"><div className="text-6xl mb-4">🎉</div><h3 className="text-xl font-bold text-slate-700">太棒了！任務已清空</h3></div>) : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{(() => { const fixedOrder = ['辦理保險', '寄送行前信', '寄送花絮信']; const allTaskNames = [...new Set([...fixedOrder, ...Object.keys(groupedTasks)])]; allTaskNames.sort((a, b) => { const idxA = fixedOrder.indexOf(a); const idxB = fixedOrder.indexOf(b); if (idxA !== -1 && idxB !== -1) return idxA - idxB; if (idxA !== -1) return -1; if (idxB !== -1) return 1; return a.localeCompare(b); }); return allTaskNames.map((taskName, index) => { const taskList = groupedTasks[taskName] || []; if (taskList.length === 0 && !fixedOrder.includes(taskName)) return null; const color = TASK_GROUP_COLORS[index % TASK_GROUP_COLORS.length]; return (<div key={taskName} className={`rounded-2xl border ${color.border} ${color.bg} p-4 h-fit`}><h3 className={`font-bold text-lg mb-4 ${color.text} flex items-center gap-2`}><Icon name="layers" className={color.icon} size={20}/>{taskName}<span className="text-sm opacity-75 font-normal ml-auto bg-white/50 px-2 py-0.5 rounded-full">{taskList.length}</span></h3><div className="space-y-3 min-h-[50px]">{taskList.length > 0 ? taskList.map((t, i) => (<div key={`${t.cfgKey}-${t.taskIdx}`} onClick={() => setActiveTaskDetail(t)} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden"><div className={`absolute top-0 left-0 w-1 h-full ${t.style.bg.replace('bg-', 'bg-') === 'bg-white' ? 'bg-slate-200' : t.style.bg.replace('bg', 'bg').replace('50', '400')}`}></div><div className="flex justify-between mb-2 pl-2"><span className="bg-slate-100 text-slate-600 text-xs font-mono px-2 py-0.5 rounded">{t.evtDate}</span>{t.style.label && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${t.style.color} ${t.style.border} ${t.style.bg}`}>{t.style.label}</span>}</div><div className="pl-2"><div className="text-sm font-bold text-slate-800 mb-1 truncate">{t.evtName}</div><button onClick={(e) => { e.stopPropagation(); toggleTask(t.cfgKey, t.taskIdx) }} className="w-full mt-3 py-2 rounded-lg bg-slate-50 text-slate-400 hover:bg-green-500 hover:text-white transition-all flex justify-center gap-2 text-xs font-bold"><Icon name="check-circle-2" size={14} /> 標示完成</button></div></div>)) : <div className="text-center text-xs text-slate-400 py-8 border-2 border-dashed border-slate-200 rounded-xl">目前無待辦事項</div>}</div></div>); }); })()}</div>)}</div>}
@@ -4395,6 +4746,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
 </div>);})}</div></div></div>)}</div>}
                         
                         {activeTab === 'projects' && <ProjectConsoleTab user={user} db={db} dbSource={dbSource} sourceProjects={projects} />}
+                        {activeTab === 'projectOwners' && <ProjectOwnerTimelineTab sourceProjects={projects} />}
 
                         {activeTab === 'dashboard' && <div className="fade-in max-w-6xl mx-auto space-y-8 pb-20"><header className="flex justify-between items-center"><h2 className="text-2xl font-bold">營運儀表板</h2><button onClick={()=>downloadCSV(csvInput, 'full_export.csv')} className="text-sm bg-slate-800 text-white px-4 py-2 rounded-lg flex items-center gap-2"><Icon name="download" size={16}/> 匯出總表 (Excel)</button></header><div className="grid grid-cols-1 md:grid-cols-3 gap-6"><div className="bg-white p-6 rounded-2xl shadow-sm border border-blue-100 relative overflow-hidden"><div className="absolute -right-4 -top-4 text-blue-50 opacity-50"><Icon name="trending-up" size={100}/></div><div className="relative"><div className="text-sm font-bold text-blue-600 mb-1 uppercase tracking-wider">本月營收</div><div className="text-4xl font-bold text-slate-800">${dashboardData.currentMonthRev.toLocaleString()}</div></div></div><div className="bg-white p-6 rounded-2xl shadow-sm border border-indigo-100 relative overflow-hidden"><div className="absolute -right-4 -top-4 text-indigo-50 opacity-50"><Icon name="users" size={100}/></div><div className="relative"><div className="text-sm font-bold text-indigo-600 mb-1 uppercase tracking-wider">本月人次</div><div className="text-4xl font-bold text-slate-800">{dashboardData.currentMonthPax} <span className="text-lg font-normal text-slate-400">人</span></div></div></div><div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><div className="text-sm font-medium text-slate-500 mb-4">歷史總營收</div><div className="text-2xl font-bold text-slate-700">${stats.totalRev.toLocaleString()}</div></div></div><div><h3 className="text-lg font-bold text-slate-700 mb-4">月度營運報表</h3>{Object.entries(dashboardData.monthlyGroups).sort((a,b)=>b[0].localeCompare(a[0])).map(([month, data]) => (<MonthlyReport key={month} month={month} data={data} />))}</div></div>}
                        
