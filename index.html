@@ -3485,21 +3485,20 @@ const removeFormRule = (idx) => {
                                             <Icon name="plus" size={14}/>
                                         </button>
                                     </div>
-                                    <div className="space-y-2 max-h-[720px] overflow-y-auto pr-1">
+                                    <div className="space-y-1.5 max-h-[720px] overflow-y-auto pr-1">
                                         {planning.activityRows.map(row => (
                                             <div
                                                 key={`planning_palette_${row.name}`}
                                                 draggable
                                                 onDragStart={handleDragStart({ type: 'palette', eventName: row.name })}
                                                 onDragEnd={handleDragEnd}
-                                                className={`rounded-xl border bg-white px-3 py-3 shadow-sm cursor-grab active:cursor-grabbing transition ${draggingEventName === row.name ? 'opacity-60 border-violet-200' : 'border-slate-200 hover:border-slate-300'}`}
+                                                className={`rounded-lg border bg-white px-2.5 py-2 shadow-sm cursor-grab active:cursor-grabbing transition ${draggingEventName === row.name ? 'opacity-60 border-violet-200' : 'border-slate-200 hover:border-slate-300'}`}
                                             >
-                                                <div className="font-bold text-slate-700 break-words">{row.name}</div>
-                                                <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-slate-500">
-                                                    <div>正式 {row.actualSessions}</div>
-                                                    <div>拖曳 {row.droppedSessions}</div>
-                                                    <div>模擬 {row.simulatedSessions}</div>
-                                                    <div>合計 {row.totalSessions}</div>
+                                                <div
+                                                    className="text-[11px] font-semibold leading-tight tracking-tight text-slate-700"
+                                                    style={{ wordBreak: 'keep-all', overflowWrap: 'anywhere', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                                                >
+                                                    {row.name}
                                                 </div>
                                             </div>
                                         ))}
