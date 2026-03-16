@@ -105,7 +105,7 @@
 
     <script type="text/babel">
         // --- 1. 安全啟動 React ---
-        const { useState, useMemo, useEffect, useRef } = React;
+        const { useState, useMemo, useEffect, useLayoutEffect, useRef } = React;
 
         // --- 2. Firebase 設定 ---
         const firebaseConfig = {
@@ -3174,6 +3174,10 @@ const removeFormRule = (idx) => {
             const [draggingEventName, setDraggingEventName] = useState('');
             const [dragTargetKey, setDragTargetKey] = useState('');
             const [bulkMetricDraft, setBulkMetricDraft] = useState({ avgPax: '', revenuePerPax: '', costPerPax: '' });
+            const boardRef = useRef(null);
+            const calendarScrollRef = useRef(null);
+            const matrixScrollRef = useRef(null);
+            const pendingScrollSnapshotRef = useRef(null);
             const weekdayLabels = ['日', '一', '二', '三', '四', '五', '六'];
             const weekdayLabelsFull = weekdayLabels.map(label => `週${label}`);
             const dayColumnWidth = 100;
@@ -3181,6 +3185,15 @@ const removeFormRule = (idx) => {
             const buildCellKey = (dateKey, instructorName) => `${String(dateKey || '').trim()}__${String(instructorName || '').trim()}`;
             const formatNumber = (value, digits = 0) => Number(value || 0).toLocaleString('zh-TW', { minimumFractionDigits: digits, maximumFractionDigits: digits });
             const formatCurrency = (value) => `$${Math.round(Number(value || 0)).toLocaleString()}`;
+            const captureScrollSnapshot = () => {
+                const mainScrollEl = boardRef.current?.closest('main');
+                pendingScrollSnapshotRef.current = {
+                    mainTop: mainScrollEl?.scrollTop ?? null,
+                    mainLeft: mainScrollEl?.scrollLeft ?? null,
+                    calendarLeft: calendarScrollRef.current?.scrollLeft ?? null,
+                    matrixLeft: matrixScrollRef.current?.scrollLeft ?? null
+                };
+            };
             const getHeader = (dateKey) => {
                 const [year, month, day] = String(dateKey || '').split('-').map(Number);
                 const dt = new Date(year, (month || 1) - 1, day || 1);
@@ -3364,6 +3377,7 @@ const removeFormRule = (idx) => {
                 const payload = parseDragPayload(event);
                 if (!payload?.eventName) return;
                 event.preventDefault();
+                captureScrollSnapshot();
                 setDragTargetKey('');
                 onAssignPlacement({
                     eventName: payload.eventName,
@@ -3381,8 +3395,28 @@ const removeFormRule = (idx) => {
                 setBulkMetricDraft({ avgPax: '', revenuePerPax: '', costPerPax: '' });
             }, [monthLabel]);
 
+            useLayoutEffect(() => {
+                const snapshot = pendingScrollSnapshotRef.current;
+                if (!snapshot) return undefined;
+                const restoreFrame = requestAnimationFrame(() => {
+                    const mainScrollEl = boardRef.current?.closest('main');
+                    if (mainScrollEl && snapshot.mainTop !== null) {
+                        mainScrollEl.scrollTop = snapshot.mainTop;
+                        if (snapshot.mainLeft !== null) mainScrollEl.scrollLeft = snapshot.mainLeft;
+                    }
+                    if (calendarScrollRef.current && snapshot.calendarLeft !== null) {
+                        calendarScrollRef.current.scrollLeft = snapshot.calendarLeft;
+                    }
+                    if (matrixScrollRef.current && snapshot.matrixLeft !== null) {
+                        matrixScrollRef.current.scrollLeft = snapshot.matrixLeft;
+                    }
+                    pendingScrollSnapshotRef.current = null;
+                });
+                return () => cancelAnimationFrame(restoreFrame);
+            }, [planning]);
+
             return (
-                <div className="fade-in max-w-7xl mx-auto pb-20 space-y-6">
+                <div ref={boardRef} className="fade-in max-w-7xl mx-auto pb-20 space-y-6">
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                         <div className="p-5 border-b border-slate-100 bg-slate-50/80">
                             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
@@ -3488,7 +3522,7 @@ const removeFormRule = (idx) => {
                                             ))}
                                         </div>
                                     </div>
-                                    <div className="overflow-x-auto">
+                                    <div ref={calendarScrollRef} className="overflow-x-auto">
                                         <table className="border-separate border-spacing-0 text-xs" style={{ minWidth: `${instructorColumnWidth + (dayColumnWidth * 7)}px` }}>
                                             <colgroup>
                                                 <col style={{ width: `${instructorColumnWidth}px` }} />
@@ -3567,15 +3601,24 @@ const removeFormRule = (idx) => {
                                                                                             sourceInstructorName: row.name
                                                                                         })}
                                                                                         onDragEnd={handleDragEnd}
-                                                                                        className={`rounded-md border px-2 py-1 leading-tight cursor-grab active:cursor-grabbing ${getEntryTone('simulated')}`}
+                                                                                        className={`relative rounded-md border px-2 py-1.5 pr-5 pb-4 cursor-grab active:cursor-grabbing ${getEntryTone('simulated')}`}
                                                                                     >
-                                                                                        <div className="flex items-start justify-between gap-2">
-                                                                                            <div className="font-bold break-words flex-1">{cell.simulatedPlacement.eventName}</div>
-                                                                                            <button onClick={(event) => { event.stopPropagation(); onRemovePlacement(row.name, cell.dateKey); }} className="text-[10px] text-violet-500 hover:text-violet-700">
-                                                                                                移除
-                                                                                            </button>
+                                                                                        <div
+                                                                                            className="text-[10px] font-semibold leading-[1.2] tracking-tight text-violet-800"
+                                                                                            style={{ wordBreak: 'keep-all', overflowWrap: 'anywhere', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                                                                                        >
+                                                                                            {cell.simulatedPlacement.eventName}
                                                                                         </div>
-                                                                                        <div className="text-[10px] opacity-70 mt-0.5">模擬安排</div>
+                                                                                        <div className="text-[9px] opacity-70 mt-1">模擬安排</div>
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            title="移除模擬安排"
+                                                                                            aria-label="移除模擬安排"
+                                                                                            onClick={(event) => { event.stopPropagation(); captureScrollSnapshot(); onRemovePlacement(row.name, cell.dateKey); }}
+                                                                                            className="absolute bottom-1 right-1 inline-flex h-4 w-4 items-center justify-center rounded-full text-[11px] font-bold leading-none text-violet-500 hover:bg-violet-100/80 hover:text-violet-700"
+                                                                                        >
+                                                                                            ×
+                                                                                        </button>
                                                                                     </div>
                                                                                 )}
                                                                                 {!cell.simulatedPlacement && (!Array.isArray(cell.entries) || cell.entries.length === 0) && (
@@ -3760,7 +3803,7 @@ const removeFormRule = (idx) => {
                                         ))}
                                     </div>
                                 </div>
-                                <div className="overflow-x-auto">
+                                <div ref={matrixScrollRef} className="overflow-x-auto">
                                     <table className="min-w-[1160px] border-separate border-spacing-1 text-xs">
                                         <thead>
                                             <tr>
