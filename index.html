@@ -650,6 +650,64 @@
                 document.body.removeChild(link);
             }
         };
+        const sanitizeFilename = (value, fallback = 'export') => {
+            const cleaned = String(value || '').trim().replace(/[\\/:*?"<>|]/g, '_');
+            return cleaned || fallback;
+        };
+        const escapeSpreadsheetXml = (value) => String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&apos;');
+        const normalizeWorksheetName = (value, fallback = 'Sheet1') => {
+            const cleaned = String(value || '')
+                .replace(/[\\/*?:\[\]]/g, ' ')
+                .trim()
+                .slice(0, 31);
+            return cleaned || fallback;
+        };
+        const buildExcelWorkbookXml = (worksheets = []) => {
+            const worksheetXml = worksheets.map((sheet, sheetIndex) => {
+                const rows = Array.isArray(sheet?.rows) ? sheet.rows : [];
+                const rowsXml = rows.map(row => {
+                    const cells = Array.isArray(row) ? row : [];
+                    const cellsXml = cells.map(cell => {
+                        const isNumber = typeof cell === 'number' && Number.isFinite(cell);
+                        const type = isNumber ? 'Number' : 'String';
+                        const value = isNumber ? String(cell) : escapeSpreadsheetXml(cell);
+                        return `<Cell><Data ss:Type="${type}">${value}</Data></Cell>`;
+                    }).join('');
+                    return `<Row>${cellsXml}</Row>`;
+                }).join('');
+                return `<Worksheet ss:Name="${escapeSpreadsheetXml(normalizeWorksheetName(sheet?.name, `Sheet${sheetIndex + 1}`))}"><Table>${rowsXml}</Table></Worksheet>`;
+            }).join('');
+            return `<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+<DocumentProperties xmlns="urn:schemas-microsoft-com:office:office"><Author>Codex</Author></DocumentProperties>
+<ExcelWorkbook xmlns="urn:schemas-microsoft-com:office:excel"><ProtectStructure>False</ProtectStructure><ProtectWindows>False</ProtectWindows></ExcelWorkbook>
+${worksheetXml}
+</Workbook>`;
+        };
+        const downloadExcelWorkbook = (worksheets, filename = 'export.xls') => {
+            const xmlContent = buildExcelWorkbookXml(worksheets);
+            const blob = new Blob([xmlContent], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+            const link = document.createElement('a');
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', filename);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }
+        };
 
         const NavItem = ({ id, icon, label, activeTab, setActiveTab, onClick, collapsed = false }) => (
             <button title={collapsed ? label : ''} onClick={() => { setActiveTab(id); if(onClick) onClick(); }} className={`flex items-center py-3 rounded-xl transition-all duration-200 w-full ${collapsed ? 'justify-center px-3' : 'space-x-3 px-4 text-left'} ${activeTab === id ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-500 hover:bg-white hover:shadow-sm'}`}>
@@ -3111,14 +3169,15 @@ const removeFormRule = (idx) => {
             );
         };
 
-        const PlanningBoard = ({ monthLabel, planning, availableEventNames, saveStatus, onSave, onPrevMonth, onNextMonth, onAddActivity, onChangeActivityMetric, onAssignPlacement, onRemovePlacement }) => {
+        const PlanningBoard = ({ monthLabel, planning, availableEventNames, saveStatus, onSave, onPrevMonth, onNextMonth, onAddActivity, onChangeActivityMetric, onBulkApplyActivityMetric, onChangeProfitSplit, onAssignPlacement, onRemovePlacement }) => {
             const [selectedActivity, setSelectedActivity] = useState('');
             const [draggingEventName, setDraggingEventName] = useState('');
             const [dragTargetKey, setDragTargetKey] = useState('');
+            const [bulkMetricDraft, setBulkMetricDraft] = useState({ avgPax: '', revenuePerPax: '', costPerPax: '' });
             const weekdayLabels = ['日', '一', '二', '三', '四', '五', '六'];
             const weekdayLabelsFull = weekdayLabels.map(label => `週${label}`);
-            const dayColumnWidth = 176;
-            const instructorColumnWidth = 120;
+            const dayColumnWidth = 100;
+            const instructorColumnWidth = 100;
             const buildCellKey = (dateKey, instructorName) => `${String(dateKey || '').trim()}__${String(instructorName || '').trim()}`;
             const formatNumber = (value, digits = 0) => Number(value || 0).toLocaleString('zh-TW', { minimumFractionDigits: digits, maximumFractionDigits: digits });
             const formatCurrency = (value) => `$${Math.round(Number(value || 0)).toLocaleString()}`;
@@ -3131,10 +3190,10 @@ const removeFormRule = (idx) => {
             const getCellTone = (cell) => {
                 if (cell?.simulatedPlacement) return `bg-violet-50 text-violet-700 border-violet-200${cell?.isPast ? ' opacity-80' : ''}`;
                 const baseTone = ({
-                    available: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                    available: 'bg-emerald-100 text-emerald-800 border-emerald-300',
                     busy: 'bg-sky-50 text-sky-700 border-sky-200',
-                    rest: 'bg-amber-50 text-amber-700 border-amber-200',
-                    companyRest: 'bg-slate-100 text-slate-500 border-slate-200'
+                    rest: 'bg-slate-200 text-slate-500 border-slate-300',
+                    companyRest: 'bg-slate-300 text-slate-600 border-slate-400'
                 }[cell?.state] || 'bg-white text-slate-400 border-slate-200');
                 if (cell?.isPast && cell?.state === 'available') return 'bg-slate-50 text-slate-300 border-slate-100';
                 return `${baseTone}${cell?.isPast ? ' opacity-70' : ''}`;
@@ -3142,11 +3201,18 @@ const removeFormRule = (idx) => {
             const getCalendarCellTone = (cell) => {
                 if (cell?.simulatedPlacement) return `bg-violet-50/70${cell?.isPast ? ' opacity-80' : ''}`;
                 return ({
-                    available: 'bg-white',
+                    available: 'bg-emerald-50/90 ring-1 ring-inset ring-emerald-200',
                     busy: 'bg-slate-50',
-                    rest: 'bg-amber-50/60',
-                    companyRest: 'bg-slate-100'
+                    rest: 'bg-slate-200/90',
+                    companyRest: 'bg-slate-300/80'
                 }[cell?.state] || 'bg-white') + (cell?.isPast ? ' opacity-80' : '');
+            };
+            const getCalendarEmptyLabelTone = (cell) => {
+                if (cell?.state === 'companyRest') return 'text-slate-600 font-semibold';
+                if (cell?.state === 'rest') return 'text-slate-500 font-medium';
+                if (cell?.isPast && cell?.state === 'available') return 'text-slate-300';
+                if (cell?.state === 'busy') return 'text-slate-500';
+                return draggingEventName && cell?.canDrop ? 'text-emerald-700 font-bold' : 'text-emerald-600 font-bold';
             };
             const getEntryTone = (type) => ({
                 main: 'bg-sky-50 border-sky-100 text-sky-800',
@@ -3188,20 +3254,85 @@ const removeFormRule = (idx) => {
                 return weeks;
             }, [planning.matrixDates]);
             const legendItems = [
-                { label: '可排', tone: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                { label: '可排', tone: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
                 { label: '正式已排', tone: 'bg-sky-50 text-sky-700 border-sky-200' },
                 { label: '模擬安排', tone: 'bg-violet-50 text-violet-700 border-violet-200' },
-                { label: '排休', tone: 'bg-amber-50 text-amber-700 border-amber-200' },
-                { label: '公休', tone: 'bg-slate-100 text-slate-500 border-slate-200' }
+                { label: '排休', tone: 'bg-slate-200 text-slate-500 border-slate-300' },
+                { label: '公休', tone: 'bg-slate-300 text-slate-600 border-slate-400' }
             ];
             const remainingEventOptions = (availableEventNames || []).filter(name => !planning.activityRows.some(row => row.name === name));
+            const activityRowNames = useMemo(() => planning.activityRows.map(row => row.name), [planning.activityRows]);
             const actualSessionTotal = planning.activityRows.reduce((sum, row) => sum + (Number(row.actualSessions) || 0), 0);
             const summaryCards = [
                 { label: '可排講師人日', value: `${formatNumber(planning.summary.openInstructorDays)} 人日`, note: '非公司公休、非個人排休、也沒有正式活動的講師人日', tone: 'border-emerald-100 bg-emerald-50', icon: 'calendar-days' },
                 { label: '正式已排占用', value: `${formatNumber(planning.summary.actualBusyInstructorDays)} 人日`, note: `來自正式活動、前置、跨日、場勘`, tone: 'border-sky-100 bg-sky-50', icon: 'briefcase' },
                 { label: '模擬總團數', value: `${formatNumber(planning.summary.simulatedSessions)} 團`, note: `全部來自拖曳模擬 ${formatNumber(planning.summary.droppedSessions)} 團`, tone: 'border-violet-100 bg-violet-50', icon: 'layout-grid' },
-                { label: '預估總毛利', value: formatCurrency(planning.summary.plannedGrossProfit), note: `預估總人數 ${formatNumber(planning.summary.plannedPax, 1)} 人`, tone: 'border-amber-100 bg-amber-50', icon: 'trending-up' }
+                { label: '預估總毛利', value: formatCurrency(planning.summary.plannedGrossProfit), note: `公司 ${planning.profitSplit.companyPct}% / 獎金 ${planning.profitSplit.bonusPct}%`, tone: 'border-amber-100 bg-amber-50', icon: 'trending-up' }
             ];
+            const planningExcelSheets = useMemo(() => {
+                const assumptionRows = [
+                    ['活動名稱', '活動數', '平均人數', '每人營收', '每人成本', '每人毛利', '總毛利'],
+                    ...planning.activityRows.map(row => ([
+                        row.name,
+                        Number(row.activityCount) || 0,
+                        Number(row.avgPax) || 0,
+                        Number(row.revenuePerPax) || 0,
+                        Number(row.costPerPax) || 0,
+                        Number(row.grossProfitPerPax) || 0,
+                        Number(row.projectedGrossProfit) || 0
+                    ])),
+                    [],
+                    ['總人數', Number(planning.summary.plannedPax) || 0],
+                    ['毛利總和', Number(planning.summary.plannedGrossProfit) || 0],
+                    ['公司毛利', Number(planning.summary.companyGrossProfit) || 0],
+                    ['業績獎金', Number(planning.summary.bonusGrossProfit) || 0],
+                    ['公司比例(%)', Number(planning.profitSplit.companyPct) || 0],
+                    ['獎金比例(%)', Number(planning.profitSplit.bonusPct) || 0]
+                ];
+
+                const placementRows = [['日期', '講師', '活動名稱']];
+                calendarRows.forEach(row => {
+                    (planning.matrixDates || []).forEach(dateKey => {
+                        const cell = row.cellMap[dateKey];
+                        if (!cell?.simulatedPlacement?.eventName) return;
+                        placementRows.push([dateKey, row.name, cell.simulatedPlacement.eventName]);
+                    });
+                });
+
+                const calendarMatrixRows = [
+                    ['講師', ...(planning.matrixDates || [])],
+                    ...calendarRows.map(row => ([
+                        row.name,
+                        ...(planning.matrixDates || []).map(dateKey => row.cellMap[dateKey]?.simulatedPlacement?.eventName || '')
+                    ]))
+                ];
+
+                return [
+                    { name: `${monthLabel}模擬月曆`, rows: calendarMatrixRows },
+                    { name: `${monthLabel}排班明細`, rows: placementRows },
+                    { name: `${monthLabel}活動假設`, rows: assumptionRows }
+                ];
+            }, [monthLabel, planning, calendarRows]);
+            const handleExportPlanningExcel = () => {
+                downloadExcelWorkbook(planningExcelSheets, `${sanitizeFilename(monthLabel, '活動模擬')}_活動模擬.xls`);
+            };
+            const bulkMetricConfigs = [
+                { field: 'avgPax', label: '平均人數整欄套用', hint: '一次覆蓋本表全部活動的平均人數', step: '0.1', inputClass: 'w-28 text-center', placeholder: '例如 18.5' },
+                { field: 'revenuePerPax', label: '每人營收整欄套用', hint: '一次覆蓋本表全部活動的每人營收', step: '1', inputClass: 'w-32 text-right', placeholder: '例如 1800' },
+                { field: 'costPerPax', label: '每人成本整欄套用', hint: '一次覆蓋本表全部活動的每人成本', step: '1', inputClass: 'w-32 text-right', placeholder: '例如 450' }
+            ];
+            const updateBulkMetricDraft = (field, value) => {
+                setBulkMetricDraft(prev => ({ ...prev, [field]: value }));
+            };
+            const applyBulkMetric = (field) => {
+                if (activityRowNames.length === 0) return;
+                onBulkApplyActivityMetric(field, bulkMetricDraft[field], activityRowNames);
+            };
+            const clearBulkMetric = (field) => {
+                if (activityRowNames.length === 0) return;
+                onBulkApplyActivityMetric(field, '', activityRowNames);
+                setBulkMetricDraft(prev => ({ ...prev, [field]: '' }));
+            };
             const parseDragPayload = (event) => {
                 const raw = event?.dataTransfer?.getData('application/x-crm-planning') || event?.dataTransfer?.getData('text/plain') || '';
                 if (!raw) return null;
@@ -3247,6 +3378,7 @@ const removeFormRule = (idx) => {
                 setSelectedActivity('');
                 setDraggingEventName('');
                 setDragTargetKey('');
+                setBulkMetricDraft({ avgPax: '', revenuePerPax: '', costPerPax: '' });
             }, [monthLabel]);
 
             return (
@@ -3270,6 +3402,9 @@ const removeFormRule = (idx) => {
                                         {saveStatus === 'error' && '模擬資料儲存失敗'}
                                         {saveStatus === 'idle' && '可按月份分別設定'}
                                     </div>
+                                    <button onClick={handleExportPlanningExcel} className="bg-white hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 border border-slate-200 shadow-sm">
+                                        <Icon name="download" size={16}/> 匯出 Excel
+                                    </button>
                                     <button onClick={onSave} className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-sm">
                                         <Icon name="save" size={16}/> 儲存本月模擬
                                     </button>
@@ -3444,7 +3579,7 @@ const removeFormRule = (idx) => {
                                                                                     </div>
                                                                                 )}
                                                                                 {!cell.simulatedPlacement && (!Array.isArray(cell.entries) || cell.entries.length === 0) && (
-                                                                                    <div className={`text-[11px] leading-tight ${cell.state === 'available' ? 'text-slate-300' : 'text-slate-500'} ${cell.isPast && cell.state === 'available' ? 'text-slate-300' : ''}`}>
+                                                                                    <div className={`text-[11px] leading-tight ${getCalendarEmptyLabelTone(cell)}`}>
                                                                                         {getCalendarEmptyLabel(cell)}
                                                                                     </div>
                                                                                 )}
@@ -3472,49 +3607,145 @@ const removeFormRule = (idx) => {
                                 <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between mb-4">
                                     <div>
                                         <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Icon name="briefcase" size={16}/> 活動模擬假設</h3>
-                                        <p className="text-xs text-slate-400 mt-1">模擬團數直接等於拖曳排入的團數，這裡只要補上平均每團人數與每團毛利即可。</p>
+                                        <p className="text-xs text-slate-400 mt-1">這裡只保留活動數、平均人數、每人營收、每人成本與總毛利。未手動輸入時，會先帶入當月正式活動平均值。</p>
                                     </div>
                                 </div>
+                                <div className="mb-4 grid grid-cols-1 xl:grid-cols-3 gap-3">
+                                    {bulkMetricConfigs.map(item => (
+                                        <div key={`bulk_metric_${item.field}`} className="rounded-xl border border-slate-200 bg-white px-4 py-3 flex flex-col gap-3">
+                                            <div>
+                                                <div className="text-xs font-bold text-slate-600">{item.label}</div>
+                                                <div className="text-[11px] text-slate-400">{item.hint}</div>
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <input
+                                                    type="number"
+                                                    step={item.step}
+                                                    className={`${item.inputClass} px-3 py-2 rounded-lg border border-slate-200 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-200`}
+                                                    value={bulkMetricDraft[item.field]}
+                                                    onChange={e => updateBulkMetricDraft(item.field, e.target.value)}
+                                                    placeholder={item.placeholder}
+                                                />
+                                                <button onClick={() => applyBulkMetric(item.field)} disabled={activityRowNames.length === 0 || bulkMetricDraft[item.field] === ''} className="px-3 py-2 rounded-lg bg-slate-800 text-white text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed">
+                                                    套用全部
+                                                </button>
+                                                <button onClick={() => clearBulkMetric(item.field)} disabled={activityRowNames.length === 0} className="px-3 py-2 rounded-lg border border-slate-200 text-sm font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
+                                                    清空手動
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                                 <div className="overflow-x-auto">
-                                    <table className="w-full min-w-[1080px] text-sm bg-white border border-slate-200 rounded-xl overflow-hidden">
+                                    <table className="w-full min-w-[860px] text-sm bg-white border border-slate-200 rounded-xl overflow-hidden">
                                         <thead className="bg-slate-50 border-b border-slate-100 text-slate-500">
                                             <tr>
                                                 <th className="px-4 py-3 text-left">活動名稱</th>
-                                                <th className="px-4 py-3 text-center">正式已排</th>
-                                                <th className="px-4 py-3 text-center">拖曳排入</th>
-                                                <th className="px-4 py-3 text-center">模擬合計</th>
-                                                <th className="px-4 py-3 text-center">全部合計</th>
-                                                <th className="px-4 py-3 text-center">平均每團人數</th>
-                                                <th className="px-4 py-3 text-right">每團毛利</th>
-                                                <th className="px-4 py-3 text-right">預估總人數</th>
-                                                <th className="px-4 py-3 text-right">預估總毛利</th>
+                                                <th className="px-4 py-3 text-center">活動數</th>
+                                                <th className="px-4 py-3 text-center">平均人數</th>
+                                                <th className="px-4 py-3 text-right">每人營收</th>
+                                                <th className="px-4 py-3 text-right">每人成本</th>
+                                                <th className="px-4 py-3 text-right">總毛利</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
                                             {planning.activityRows.map(row => (
                                                 <tr key={`planning_row_${row.name}`} className="hover:bg-slate-50">
                                                     <td className="px-4 py-3 font-bold text-slate-700">{row.name}</td>
-                                                    <td className="px-4 py-3 text-center font-bold text-sky-700">{row.actualSessions}</td>
-                                                    <td className="px-4 py-3 text-center font-bold text-violet-700">{row.droppedSessions}</td>
-                                                    <td className="px-4 py-3 text-center font-bold text-slate-700">{row.simulatedSessions}</td>
-                                                    <td className="px-4 py-3 text-center font-bold text-slate-700">{row.totalSessions}</td>
+                                                    <td className="px-4 py-3 text-center font-bold text-violet-700">{row.activityCount}</td>
                                                     <td className="px-4 py-3 text-center">
-                                                        <input type="number" step="0.1" className="w-24 px-2 py-1.5 rounded-lg border border-slate-200 text-center font-bold outline-none focus:ring-2 focus:ring-blue-200" value={row.avgPax} onChange={e => onChangeActivityMetric(row.name, 'avgPax', e.target.value)} placeholder="未設定" />
+                                                        <div className="flex flex-col items-center gap-1">
+                                                            <input
+                                                                type="number"
+                                                                step="0.1"
+                                                                title={row.isAutoAvgPax ? '目前使用當月正式活動平均每團人數；直接輸入可改成手動值。' : ''}
+                                                                className={`w-24 px-2 py-1.5 rounded-lg border text-center font-bold outline-none focus:ring-2 focus:ring-blue-200 ${row.isAutoAvgPax ? 'border-emerald-200 bg-emerald-50/70 text-emerald-700' : 'border-slate-200 bg-white text-slate-700'}`}
+                                                                value={row.avgPax}
+                                                                onChange={e => onChangeActivityMetric(row.name, 'avgPax', e.target.value)}
+                                                                placeholder="未設定"
+                                                            />
+                                                            <div className={`text-[10px] ${row.isAutoAvgPax ? 'text-emerald-600' : 'text-slate-300'}`}>{row.isAutoAvgPax ? '自動帶入' : '手動設定'}</div>
+                                                        </div>
                                                     </td>
                                                     <td className="px-4 py-3 text-right">
-                                                        <input type="number" step="1" className="w-28 px-2 py-1.5 rounded-lg border border-slate-200 text-right font-bold outline-none focus:ring-2 focus:ring-blue-200" value={row.grossProfitPerSession} onChange={e => onChangeActivityMetric(row.name, 'grossProfitPerSession', e.target.value)} placeholder="未設定" />
+                                                        <div className="flex flex-col items-end gap-1">
+                                                            <input
+                                                                type="number"
+                                                                step="1"
+                                                                title={row.isAutoRevenuePerPax ? '目前使用當月正式活動平均每人營收；直接輸入可改成手動值。' : ''}
+                                                                className={`w-28 px-2 py-1.5 rounded-lg border text-right font-bold outline-none focus:ring-2 focus:ring-blue-200 ${row.isAutoRevenuePerPax ? 'border-emerald-200 bg-emerald-50/70 text-emerald-700' : 'border-slate-200 bg-white text-slate-700'}`}
+                                                                value={row.revenuePerPax}
+                                                                onChange={e => onChangeActivityMetric(row.name, 'revenuePerPax', e.target.value)}
+                                                                placeholder="未設定"
+                                                            />
+                                                            <div className={`text-[10px] ${row.isAutoRevenuePerPax ? 'text-emerald-600' : 'text-slate-300'}`}>{row.isAutoRevenuePerPax ? '自動帶入' : '手動設定'}</div>
+                                                        </div>
                                                     </td>
-                                                    <td className="px-4 py-3 text-right font-bold text-slate-700">{formatNumber(row.projectedPax, 1)}</td>
-                                                    <td className="px-4 py-3 text-right font-bold text-amber-700">{formatCurrency(row.projectedGrossProfit)}</td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        <div className="flex flex-col items-end gap-1">
+                                                            <input
+                                                                type="number"
+                                                                step="1"
+                                                                title={row.isAutoCostPerPax ? '目前使用當月正式活動平均每人成本；直接輸入可改成手動值。' : ''}
+                                                                className={`w-28 px-2 py-1.5 rounded-lg border text-right font-bold outline-none focus:ring-2 focus:ring-blue-200 ${row.isAutoCostPerPax ? 'border-emerald-200 bg-emerald-50/70 text-emerald-700' : 'border-slate-200 bg-white text-slate-700'}`}
+                                                                value={row.costPerPax}
+                                                                onChange={e => onChangeActivityMetric(row.name, 'costPerPax', e.target.value)}
+                                                                placeholder="未設定"
+                                                            />
+                                                            <div className={`text-[10px] ${row.isAutoCostPerPax ? 'text-emerald-600' : 'text-slate-300'}`}>{row.isAutoCostPerPax ? '自動帶入' : '手動設定'}</div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right font-bold text-amber-700">
+                                                        <div>{formatCurrency(row.projectedGrossProfit)}</div>
+                                                        <div className="text-[10px] text-slate-400 mt-1">每人毛利 {formatCurrency(row.grossProfitPerPax)}</div>
+                                                    </td>
                                                 </tr>
                                             ))}
                                             {planning.activityRows.length === 0 && (
                                                 <tr>
-                                                    <td colSpan="9" className="px-4 py-8 text-center text-slate-400">本月還沒有活動模擬資料。</td>
+                                                    <td colSpan="6" className="px-4 py-8 text-center text-slate-400">本月還沒有活動模擬資料。</td>
                                                 </tr>
                                             )}
                                         </tbody>
                                     </table>
+                                </div>
+                                <div className="mt-4 rounded-xl border border-slate-200 bg-white px-4 py-4">
+                                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                                        <div>
+                                            <div className="text-xs font-bold text-slate-600">毛利拆分比例</div>
+                                            <div className="text-[11px] text-slate-400">公司毛利與業績獎金會依照這個比例自動換算，兩者合計固定為 100%。</div>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-3">
+                                            <label className="text-xs font-bold text-slate-500 flex items-center gap-2">
+                                                公司
+                                                <input type="number" min="0" max="100" step="0.1" className="w-24 px-3 py-2 rounded-lg border border-slate-200 text-right text-sm font-bold outline-none focus:ring-2 focus:ring-blue-200" value={planning.profitSplit.companyPct} onChange={e => onChangeProfitSplit('companyPct', e.target.value)} />
+                                                <span>%</span>
+                                            </label>
+                                            <label className="text-xs font-bold text-slate-500 flex items-center gap-2">
+                                                業績獎金
+                                                <input type="number" min="0" max="100" step="0.1" className="w-24 px-3 py-2 rounded-lg border border-slate-200 text-right text-sm font-bold outline-none focus:ring-2 focus:ring-blue-200" value={planning.profitSplit.bonusPct} onChange={e => onChangeProfitSplit('bonusPct', e.target.value)} />
+                                                <span>%</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                                        <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+                                            <div className="text-xs font-bold text-emerald-700">總人數</div>
+                                            <div className="mt-2 text-2xl font-bold text-emerald-800">{formatNumber(planning.summary.plannedPax, 1)} 人</div>
+                                        </div>
+                                        <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
+                                            <div className="text-xs font-bold text-amber-700">毛利總和</div>
+                                            <div className="mt-2 text-2xl font-bold text-amber-800">{formatCurrency(planning.summary.plannedGrossProfit)}</div>
+                                        </div>
+                                        <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+                                            <div className="text-xs font-bold text-blue-700">公司毛利</div>
+                                            <div className="mt-2 text-2xl font-bold text-blue-800">{formatCurrency(planning.summary.companyGrossProfit)}</div>
+                                        </div>
+                                        <div className="rounded-xl border border-violet-100 bg-violet-50 px-4 py-3">
+                                            <div className="text-xs font-bold text-violet-700">業績獎金</div>
+                                            <div className="mt-2 text-2xl font-bold text-violet-800">{formatCurrency(planning.summary.bonusGrossProfit)}</div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                             <div className="bg-white border border-slate-200 rounded-2xl p-4">
@@ -5352,19 +5583,59 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
                     alert(`❌ KPI 儲存失敗：${formatFirestoreError(e)}`);
                 }
             };
+            const DEFAULT_PLAN_PROFIT_SPLIT = { companyPct: 75, bonusPct: 25 };
+            const normalizePlanMetricValue = (value, digits = null) => {
+                if (value === '' || value === null || value === undefined) return '';
+                const parsed = Number(value);
+                if (!Number.isFinite(parsed)) return '';
+                return digits === null ? parsed : Number(parsed.toFixed(digits));
+            };
+            const normalizePlanActivityInput = (metrics = {}) => {
+                const avgPax = normalizePlanMetricValue(metrics?.avgPax, 1);
+                let revenuePerPax = normalizePlanMetricValue(metrics?.revenuePerPax, 2);
+                const costPerPax = normalizePlanMetricValue(metrics?.costPerPax, 2);
+                const legacyGrossProfitPerSession = normalizePlanMetricValue(metrics?.grossProfitPerSession, 2);
+                if (revenuePerPax === '' && legacyGrossProfitPerSession !== '' && avgPax !== '' && Number(avgPax) !== 0) {
+                    revenuePerPax = Number((legacyGrossProfitPerSession / Number(avgPax)).toFixed(2));
+                }
+                return { avgPax, revenuePerPax, costPerPax };
+            };
+            const normalizePlanProfitSplit = (raw = {}) => {
+                const hasCompany = raw?.companyPct !== '' && raw?.companyPct !== null && raw?.companyPct !== undefined;
+                const hasBonus = raw?.bonusPct !== '' && raw?.bonusPct !== null && raw?.bonusPct !== undefined;
+                if (!hasCompany && !hasBonus) return { ...DEFAULT_PLAN_PROFIT_SPLIT };
+                let companyPct = hasCompany ? Number(raw.companyPct) : NaN;
+                let bonusPct = hasBonus ? Number(raw.bonusPct) : NaN;
+                if (!Number.isFinite(companyPct) && !Number.isFinite(bonusPct)) return { ...DEFAULT_PLAN_PROFIT_SPLIT };
+                if (!Number.isFinite(companyPct)) companyPct = 100 - bonusPct;
+                if (!Number.isFinite(bonusPct)) bonusPct = 100 - companyPct;
+                companyPct = Math.max(0, Math.min(100, companyPct));
+                bonusPct = Math.max(0, Math.min(100, bonusPct));
+                const total = companyPct + bonusPct;
+                if (total <= 0) return { ...DEFAULT_PLAN_PROFIT_SPLIT };
+                if (Math.abs(total - 100) > 0.01) {
+                    companyPct = Number(((companyPct / total) * 100).toFixed(1));
+                    bonusPct = Number((100 - companyPct).toFixed(1));
+                } else {
+                    companyPct = Number(companyPct.toFixed(1));
+                    bonusPct = Number(bonusPct.toFixed(1));
+                }
+                return { companyPct, bonusPct };
+            };
+            const buildDefaultPlanActivityInput = () => ({ avgPax: '', revenuePerPax: '', costPerPax: '' });
             const handleSaveMonthlyPlans = async () => {
                 if (!user || !db) return alert("請先登入");
                 const sanitized = {};
                 Object.entries(monthlyPlans || {}).forEach(([monthKey, raw]) => {
                     const activityInputs = {};
                     const placementMap = {};
+                    const profitSplit = normalizePlanProfitSplit(raw?.profitSplit);
                     Object.entries(raw?.activityInputs || {}).forEach(([eventName, metrics]) => {
                         const cleanName = String(eventName || '').trim();
                         if (!cleanName) return;
-                        const avgPax = metrics?.avgPax === '' || metrics?.avgPax === null || metrics?.avgPax === undefined ? '' : Number(metrics.avgPax) || 0;
-                        const grossProfitPerSession = metrics?.grossProfitPerSession === '' || metrics?.grossProfitPerSession === null || metrics?.grossProfitPerSession === undefined ? '' : Number(metrics.grossProfitPerSession) || 0;
-                        if (avgPax === '' && grossProfitPerSession === '') return;
-                        activityInputs[cleanName] = { avgPax, grossProfitPerSession };
+                        const normalizedMetrics = normalizePlanActivityInput(metrics);
+                        if (normalizedMetrics.avgPax === '' && normalizedMetrics.revenuePerPax === '' && normalizedMetrics.costPerPax === '') return;
+                        activityInputs[cleanName] = normalizedMetrics;
                     });
                     (Array.isArray(raw?.calendarPlacements) ? raw.calendarPlacements : []).forEach((placement, index) => {
                         const eventName = String(placement?.eventName || '').trim();
@@ -5379,8 +5650,9 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
                         };
                     });
                     const calendarPlacements = Object.values(placementMap);
-                    if (Object.keys(activityInputs).length > 0 || calendarPlacements.length > 0) {
-                        sanitized[monthKey] = { activityInputs, calendarPlacements };
+                    const hasCustomProfitSplit = Math.abs((profitSplit.companyPct || 0) - DEFAULT_PLAN_PROFIT_SPLIT.companyPct) > 0.001 || Math.abs((profitSplit.bonusPct || 0) - DEFAULT_PLAN_PROFIT_SPLIT.bonusPct) > 0.001;
+                    if (Object.keys(activityInputs).length > 0 || calendarPlacements.length > 0 || hasCustomProfitSplit) {
+                        sanitized[monthKey] = { activityInputs, calendarPlacements, profitSplit };
                     }
                 });
 
@@ -5780,10 +6052,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                 Object.entries(raw?.activityInputs || {}).forEach(([name, metrics]) => {
                     const cleanName = String(name || '').trim();
                     if (!cleanName) return;
-                    activityInputs[cleanName] = {
-                        avgPax: metrics?.avgPax === '' || metrics?.avgPax === null || metrics?.avgPax === undefined ? '' : Number(metrics.avgPax) || 0,
-                        grossProfitPerSession: metrics?.grossProfitPerSession === '' || metrics?.grossProfitPerSession === null || metrics?.grossProfitPerSession === undefined ? '' : Number(metrics.grossProfitPerSession) || 0
-                    };
+                    activityInputs[cleanName] = normalizePlanActivityInput(metrics);
                 });
                 (Array.isArray(raw?.calendarPlacements) ? raw.calendarPlacements : []).forEach((placement, index) => {
                     const eventName = String(placement?.eventName || '').trim();
@@ -5797,7 +6066,11 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                         dateKey
                     };
                 });
-                return { activityInputs, calendarPlacements: Object.values(placementMap) };
+                return {
+                    activityInputs,
+                    calendarPlacements: Object.values(placementMap),
+                    profitSplit: normalizePlanProfitSplit(raw?.profitSplit)
+                };
             }, [monthlyPlans, currentMonthKey]);
             useEffect(() => {
                 setKpiSaveStatus('idle');
@@ -5911,7 +6184,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     const prepDays = parseInt(cfg.prepDays, 10) || 0;
                     const duration = parseInt(cfg.duration, 10) || 1;
                     const assignedInstructors = getAssignedInstructors(evt, cfg);
-                    const eventTitle = normalizeName(cfg.displayName || evt.eventName) || '未命名活動';
+                    const eventTitle = normalizeName(evt.eventName || cfg.displayName) || '未命名活動';
                     for (let offset = -prepDays; offset < duration; offset += 1) {
                         const occupiedDate = shiftDate(eventDateKey, offset);
                         if (!occupiedDate.startsWith(`${monthKey}-`)) continue;
@@ -5931,6 +6204,11 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     const paxCount = Number.isFinite(Number(evt.count)) ? Number(evt.count) : ((Array.isArray(evt.customers) ? evt.customers.length : 0));
                     const capacity = parseInt(cfg.capacity, 10) || 12;
                     const bucket = eventDateKey < todayKey ? 'completed' : 'upcoming';
+                    const customers = Array.isArray(evt.customers) ? evt.customers : [];
+                    const fallbackUnitPrice = Number(cfg.price) || 0;
+                    const eventRevenue = customers.length > 0
+                        ? customers.reduce((sum, customer) => sum + (Number(customer.price) || fallbackUnitPrice), 0)
+                        : fallbackUnitPrice * paxCount;
 
                     totalSessions += 1;
                     totalPax += paxCount;
@@ -5944,10 +6222,12 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     }
 
                     if (!activityMap[evt.eventName]) {
-                        activityMap[evt.eventName] = { total: 0, completed: 0, upcoming: 0 };
+                        activityMap[evt.eventName] = { total: 0, completed: 0, upcoming: 0, totalPax: 0, totalRevenue: 0 };
                     }
                     activityMap[evt.eventName].total += 1;
                     activityMap[evt.eventName][bucket] += 1;
+                    activityMap[evt.eventName].totalPax += paxCount;
+                    activityMap[evt.eventName].totalRevenue += eventRevenue;
                 });
 
                 let outingDaysCount = 0;
@@ -6042,6 +6322,16 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                 const avgPaxPerSession = totalSessions > 0 ? totalPax / totalSessions : 0;
                 const fillRate = totalCapacity > 0 ? (totalPax / totalCapacity) * 100 : 0;
                 const utilizationRate = availableInstructorDays > 0 ? (busyInstructorDays / availableInstructorDays) * 100 : 0;
+                const normalizedActivityMap = Object.fromEntries(
+                    Object.entries(activityMap).map(([name, data]) => ([
+                        name,
+                        {
+                            ...data,
+                            avgPax: data.total > 0 ? Number((data.totalPax / data.total).toFixed(1)) : '',
+                            avgRevenuePerPax: data.totalPax > 0 && data.totalRevenue > 0 ? Math.round(data.totalRevenue / data.totalPax) : ''
+                        }
+                    ]))
+                );
 
                 return {
                     totalPax,
@@ -6069,7 +6359,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     fillRate,
                     eventBusyDays: eventBusySet.size,
                     outingDaysCount,
-                    activityMap
+                    activityMap: normalizedActivityMap
                 };
             }, [currentDate, stats.events, stats.instrs, eventConfigs, companyRestDates, instructorSchedule, outingDays]);
             const currentMonthKpiRows = useMemo(() => {
@@ -6089,6 +6379,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
             const currentMonthPlanningData = useMemo(() => {
                 const activityInputMap = currentMonthPlan.activityInputs || {};
                 const placementList = Array.isArray(currentMonthPlan.calendarPlacements) ? currentMonthPlan.calendarPlacements : [];
+                const profitSplit = normalizePlanProfitSplit(currentMonthPlan.profitSplit);
                 const placementCountMap = {};
                 const placementByCell = {};
                 placementList.forEach(placement => {
@@ -6105,28 +6396,47 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                 const activityRows = activityNames
                     .map(name => {
                         const isTracked = Object.prototype.hasOwnProperty.call(activityInputMap || {}, name) || Object.prototype.hasOwnProperty.call(placementCountMap || {}, name);
-                        const actualSessions = currentMonthKpiActuals.activityMap[name]?.total || 0;
-                        const droppedSessions = placementCountMap[name] || 0;
-                        const simulatedSessions = droppedSessions;
-                        const avgPax = activityInputMap[name]?.avgPax ?? '';
-                        const grossProfitPerSession = activityInputMap[name]?.grossProfitPerSession ?? '';
-                        const projectedPax = simulatedSessions * (Number(avgPax) || 0);
-                        const projectedGrossProfit = simulatedSessions * (Number(grossProfitPerSession) || 0);
+                        const actualActivity = currentMonthKpiActuals.activityMap[name] || {};
+                        const actualSessions = actualActivity.total || 0;
+                        const simulatedActivityCount = placementCountMap[name] || 0;
+                        const activityCount = actualSessions + simulatedActivityCount;
+                        const manualAvgPax = activityInputMap[name]?.avgPax ?? '';
+                        const manualRevenuePerPax = activityInputMap[name]?.revenuePerPax ?? '';
+                        const manualCostPerPax = activityInputMap[name]?.costPerPax ?? '';
+                        const autoAvgPax = actualActivity.avgPax ?? '';
+                        const autoRevenuePerPax = actualActivity.avgRevenuePerPax ?? '';
+                        const autoCostPerPax = actualActivity.avgCostPerPax ?? '';
+                        const avgPax = manualAvgPax === '' ? autoAvgPax : manualAvgPax;
+                        const revenuePerPax = manualRevenuePerPax === '' ? autoRevenuePerPax : manualRevenuePerPax;
+                        const costPerPax = manualCostPerPax === '' ? autoCostPerPax : manualCostPerPax;
+                        const grossProfitPerPax = (Number(revenuePerPax) || 0) - (Number(costPerPax) || 0);
+                        const projectedGrossProfit = activityCount * (Number(avgPax) || 0) * grossProfitPerPax;
                         return {
                             name,
                             actualSessions,
-                            droppedSessions,
-                            simulatedSessions,
+                            activityCount,
+                            droppedSessions: simulatedActivityCount,
+                            simulatedSessions: simulatedActivityCount,
                             isTracked,
-                            totalSessions: actualSessions + simulatedSessions,
+                            totalSessions: activityCount,
                             avgPax,
-                            grossProfitPerSession,
-                            projectedPax,
+                            revenuePerPax,
+                            costPerPax,
+                            manualAvgPax,
+                            manualRevenuePerPax,
+                            manualCostPerPax,
+                            autoAvgPax,
+                            autoRevenuePerPax,
+                            autoCostPerPax,
+                            isAutoAvgPax: manualAvgPax === '' && autoAvgPax !== '',
+                            isAutoRevenuePerPax: manualRevenuePerPax === '' && autoRevenuePerPax !== '',
+                            isAutoCostPerPax: manualCostPerPax === '' && autoCostPerPax !== '',
+                            grossProfitPerPax,
                             projectedGrossProfit
                         };
                     })
-                    .filter(row => row.actualSessions > 0 || row.droppedSessions > 0 || row.avgPax !== '' || row.grossProfitPerSession !== '' || row.isTracked)
-                    .sort((a, b) => (b.simulatedSessions - a.simulatedSessions) || (b.actualSessions - a.actualSessions) || a.name.localeCompare(b.name, 'zh-Hant'));
+                    .filter(row => row.actualSessions > 0 || row.activityCount > 0 || row.manualAvgPax !== '' || row.manualRevenuePerPax !== '' || row.manualCostPerPax !== '' || row.isTracked)
+                    .sort((a, b) => (b.activityCount - a.activityCount) || (b.simulatedSessions - a.simulatedSessions) || a.name.localeCompare(b.name, 'zh-Hant'));
 
                 const matrixRows = currentMonthKpiActuals.availabilityMatrix.map(row => ({
                     ...row,
@@ -6141,9 +6451,11 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     simulatedCount: row.cells.filter(cell => placementByCell[buildPlanningCellKey(cell.dateKey, row.name)]).length
                 }));
                 const simulatedSessions = activityRows.reduce((sum, row) => sum + row.simulatedSessions, 0);
-                const plannedPax = activityRows.reduce((sum, row) => sum + row.projectedPax, 0);
+                const plannedPax = activityRows.reduce((sum, row) => sum + (row.activityCount * (Number(row.avgPax) || 0)), 0);
                 const plannedGrossProfit = activityRows.reduce((sum, row) => sum + row.projectedGrossProfit, 0);
                 const droppedSessions = activityRows.reduce((sum, row) => sum + row.droppedSessions, 0);
+                const companyGrossProfit = plannedGrossProfit * ((profitSplit.companyPct || 0) / 100);
+                const bonusGrossProfit = plannedGrossProfit * ((profitSplit.bonusPct || 0) / 100);
 
                 return {
                     activityRows,
@@ -6152,6 +6464,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     matrixDates: currentMonthKpiActuals.matrixDates,
                     todayKey: currentMonthKpiActuals.todayKey,
                     placementCount: placementList.length,
+                    profitSplit,
                     summary: {
                         openInstructorDays: currentMonthKpiActuals.inventoryDays,
                         actualBusyInstructorDays: currentMonthKpiActuals.busyInstructorDays,
@@ -6160,7 +6473,9 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                         simulatedSessions,
                         droppedSessions,
                         plannedPax,
-                        plannedGrossProfit
+                        plannedGrossProfit,
+                        companyGrossProfit,
+                        bonusGrossProfit
                     }
                 };
             }, [currentMonthPlan, currentMonthKpiActuals, allEventNames]);
@@ -6183,7 +6498,8 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     const raw = prev[currentMonthKey] || {};
                     const draft = {
                         activityInputs: { ...(raw.activityInputs || {}) },
-                        calendarPlacements: Array.isArray(raw.calendarPlacements) ? raw.calendarPlacements.map(placement => ({ ...placement })) : []
+                        calendarPlacements: Array.isArray(raw.calendarPlacements) ? raw.calendarPlacements.map(placement => ({ ...placement })) : [],
+                        profitSplit: normalizePlanProfitSplit(raw.profitSplit)
                     };
                     return { ...prev, [currentMonthKey]: updater(draft) };
                 });
@@ -6218,7 +6534,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                 const cleanName = String(eventName || '').trim();
                 if (!cleanName) return;
                 updateCurrentMonthPlan(current => {
-                    const currentEntry = current.activityInputs?.[cleanName] || { avgPax: '', grossProfitPerSession: '' };
+                    const currentEntry = current.activityInputs?.[cleanName] || buildDefaultPlanActivityInput();
                     const parsed = value === '' ? '' : parseFloat(value);
                     return {
                         ...current,
@@ -6232,6 +6548,39 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     };
                 });
             };
+            const handleBulkCurrentMonthPlanActivityMetricChange = (field, value, eventNames = []) => {
+                const cleanNames = Array.from(new Set((eventNames || []).map(name => String(name || '').trim()).filter(Boolean)));
+                if (cleanNames.length === 0) return;
+                updateCurrentMonthPlan(current => {
+                    const parsed = value === '' ? '' : parseFloat(value);
+                    const nextInputs = { ...(current.activityInputs || {}) };
+                    cleanNames.forEach(name => {
+                        const currentEntry = nextInputs[name] || buildDefaultPlanActivityInput();
+                        nextInputs[name] = {
+                            ...currentEntry,
+                            [field]: Number.isFinite(parsed) ? parsed : ''
+                        };
+                    });
+                    return {
+                        ...current,
+                        activityInputs: nextInputs
+                    };
+                });
+            };
+            const handleCurrentMonthPlanProfitSplitChange = (field, value) => {
+                const parsed = value === '' ? 0 : parseFloat(value);
+                const safeValue = Number.isFinite(parsed) ? Math.max(0, Math.min(100, parsed)) : 0;
+                updateCurrentMonthPlan(current => {
+                    const currentSplit = normalizePlanProfitSplit(current.profitSplit);
+                    const nextSplit = field === 'companyPct'
+                        ? { companyPct: Number(safeValue.toFixed(1)), bonusPct: Number((100 - safeValue).toFixed(1)) }
+                        : { companyPct: Number((100 - safeValue).toFixed(1)), bonusPct: Number(safeValue.toFixed(1)) };
+                    return {
+                        ...current,
+                        profitSplit: normalizePlanProfitSplit({ ...currentSplit, ...nextSplit })
+                    };
+                });
+            };
             const handleAddCurrentMonthPlanActivity = (eventName) => {
                 const cleanName = String(eventName || '').trim();
                 if (!cleanName) return;
@@ -6239,7 +6588,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     ...current,
                     activityInputs: {
                         ...(current.activityInputs || {}),
-                        [cleanName]: current.activityInputs?.[cleanName] || { avgPax: '', grossProfitPerSession: '' }
+                        [cleanName]: current.activityInputs?.[cleanName] || buildDefaultPlanActivityInput()
                     }
                 }));
             };
@@ -6251,7 +6600,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                 updateCurrentMonthPlan(current => {
                     const nextInputs = {
                         ...(current.activityInputs || {}),
-                        [cleanEventName]: current.activityInputs?.[cleanEventName] || { avgPax: '', grossProfitPerSession: '' }
+                        [cleanEventName]: current.activityInputs?.[cleanEventName] || buildDefaultPlanActivityInput()
                     };
                     const sourceKey = buildPlanningCellKey(sourceDateKey, sourceInstructorName);
                     const targetKey = buildPlanningCellKey(cleanDateKey, cleanInstructorName);
@@ -6703,6 +7052,8 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                                 onNextMonth={nextMonth}
                                 onAddActivity={handleAddCurrentMonthPlanActivity}
                                 onChangeActivityMetric={handleCurrentMonthPlanActivityMetricChange}
+                                onBulkApplyActivityMetric={handleBulkCurrentMonthPlanActivityMetricChange}
+                                onChangeProfitSplit={handleCurrentMonthPlanProfitSplitChange}
                                 onAssignPlacement={handleAssignCurrentMonthPlanPlacement}
                                 onRemovePlacement={handleRemoveCurrentMonthPlanPlacement}
                             />
