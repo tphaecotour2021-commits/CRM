@@ -483,15 +483,6 @@
             { value: 'slate', label: '灰色 (截止)', bg: 'bg-slate-50', border: 'border-slate-200', text: 'text-slate-500', hover: 'hover:bg-slate-100' },
         ];
 
-        const TASK_GROUP_COLORS = [
-            { border: 'border-blue-200', bg: 'bg-blue-50', text: 'text-blue-800', icon: 'text-blue-500' },
-            { border: 'border-emerald-200', bg: 'bg-emerald-50', text: 'text-emerald-800', icon: 'text-emerald-500' },
-            { border: 'border-amber-200', bg: 'bg-amber-50', text: 'text-amber-800', icon: 'text-amber-500' },
-            { border: 'border-purple-200', bg: 'bg-purple-50', text: 'text-purple-800', icon: 'text-purple-500' },
-            { border: 'border-rose-200', bg: 'bg-rose-50', text: 'text-rose-800', icon: 'text-rose-500' },
-            { border: 'border-cyan-200', bg: 'bg-cyan-50', text: 'text-cyan-800', icon: 'text-cyan-500' },
-        ];
-
         const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
         const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
         const getDayOfYear = (dateStr) => {
@@ -2847,7 +2838,10 @@ const removeFormRule = (idx) => {
 
                 lines.push(toCsvLine(['月份', month]));
                 lines.push(toCsvLine(['總營收', stats.rev]));
-                lines.push(toCsvLine(['總人數', stats.pax]));
+                lines.push(toCsvLine(['總人數（已扣除流團）', stats.monthSummary.pax.total]));
+                lines.push(toCsvLine(['總團數（已扣除流團）', stats.monthSummary.sessions.total]));
+                lines.push(toCsvLine(['主講師總出團', stats.monthSummary.leadTrips.total]));
+                lines.push(toCsvLine(['跟團講師總出團', stats.monthSummary.supportTrips.total]));
                 lines.push('');
                 lines.push('月統計概覽（已出 = 日期早於今天，已扣除流團）');
                 lines.push(toCsvLine(['項目', '總數', '已出', '未出']));
@@ -2938,13 +2932,21 @@ const removeFormRule = (idx) => {
 
             return (
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-4 transition-all">
-                    <div className="p-4 flex justify-between items-center cursor-pointer hover:bg-slate-50" onClick={() => setExpanded(!expanded)}>
-                        <div className="flex items-center gap-4">
-                            <div className="text-lg font-bold text-slate-700">{month}</div>
-                            <div className="text-sm text-slate-500 bg-slate-100 px-2 py-0.5 rounded">總收 ${stats.rev.toLocaleString()}</div>
-                            <div className="text-sm text-slate-500">({stats.pax} 人)</div>
+                    <div className="p-4 flex justify-between items-start gap-4 cursor-pointer hover:bg-slate-50" onClick={() => setExpanded(!expanded)}>
+                        <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-3">
+                                <div className="text-lg font-bold text-slate-700">{month}</div>
+                                <div className="text-sm text-slate-500 bg-slate-100 px-2 py-0.5 rounded">總收 ${stats.rev.toLocaleString()}</div>
+                                <div className="text-sm text-slate-500">({stats.monthSummary.pax.total} 人)</div>
+                            </div>
+                            <div className="flex flex-wrap gap-2 mt-3">
+                                <div className="text-xs px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100">總團數 {stats.monthSummary.sessions.total} 團</div>
+                                <div className="text-xs px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">總人數 {stats.monthSummary.pax.total} 人</div>
+                                <div className="text-xs px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">主講 {stats.monthSummary.leadTrips.total} 團</div>
+                                <div className="text-xs px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-100">跟團 {stats.monthSummary.supportTrips.total} 團</div>
+                            </div>
                         </div>
-                        <Icon name={expanded ? 'chevron-up' : 'chevron-down'} className="text-slate-400"/>
+                        <Icon name={expanded ? 'chevron-up' : 'chevron-down'} className="text-slate-400 mt-1 shrink-0"/>
                     </div>
                     {expanded && (
                         <div className="p-4 border-t border-slate-100 bg-slate-50/50 animate-in fade-in space-y-6">
@@ -3105,6 +3107,479 @@ const removeFormRule = (idx) => {
                             </div>
                         </div>
                     )}
+                </div>
+            );
+        };
+
+        const PlanningBoard = ({ monthLabel, planning, availableEventNames, saveStatus, onSave, onPrevMonth, onNextMonth, onAddActivity, onChangeActivityMetric, onAssignPlacement, onRemovePlacement }) => {
+            const [selectedActivity, setSelectedActivity] = useState('');
+            const [draggingEventName, setDraggingEventName] = useState('');
+            const [dragTargetKey, setDragTargetKey] = useState('');
+            const weekdayLabels = ['日', '一', '二', '三', '四', '五', '六'];
+            const weekdayLabelsFull = weekdayLabels.map(label => `週${label}`);
+            const dayColumnWidth = 176;
+            const instructorColumnWidth = 120;
+            const buildCellKey = (dateKey, instructorName) => `${String(dateKey || '').trim()}__${String(instructorName || '').trim()}`;
+            const formatNumber = (value, digits = 0) => Number(value || 0).toLocaleString('zh-TW', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+            const formatCurrency = (value) => `$${Math.round(Number(value || 0)).toLocaleString()}`;
+            const getHeader = (dateKey) => {
+                const [year, month, day] = String(dateKey || '').split('-').map(Number);
+                const dt = new Date(year, (month || 1) - 1, day || 1);
+                if (Number.isNaN(dt.getTime())) return { day: String(dateKey).slice(-2), weekday: '' };
+                return { day, weekday: weekdayLabels[dt.getDay()] };
+            };
+            const getCellTone = (cell) => {
+                if (cell?.simulatedPlacement) return `bg-violet-50 text-violet-700 border-violet-200${cell?.isPast ? ' opacity-80' : ''}`;
+                const baseTone = ({
+                    available: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                    busy: 'bg-sky-50 text-sky-700 border-sky-200',
+                    rest: 'bg-amber-50 text-amber-700 border-amber-200',
+                    companyRest: 'bg-slate-100 text-slate-500 border-slate-200'
+                }[cell?.state] || 'bg-white text-slate-400 border-slate-200');
+                if (cell?.isPast && cell?.state === 'available') return 'bg-slate-50 text-slate-300 border-slate-100';
+                return `${baseTone}${cell?.isPast ? ' opacity-70' : ''}`;
+            };
+            const getCalendarCellTone = (cell) => {
+                if (cell?.simulatedPlacement) return `bg-violet-50/70${cell?.isPast ? ' opacity-80' : ''}`;
+                return ({
+                    available: 'bg-white',
+                    busy: 'bg-slate-50',
+                    rest: 'bg-amber-50/60',
+                    companyRest: 'bg-slate-100'
+                }[cell?.state] || 'bg-white') + (cell?.isPast ? ' opacity-80' : '');
+            };
+            const getEntryTone = (type) => ({
+                main: 'bg-sky-50 border-sky-100 text-sky-800',
+                prep: 'bg-amber-50 border-amber-100 text-amber-800',
+                cont: 'bg-violet-50 border-violet-100 text-violet-800',
+                outing: 'bg-rose-50 border-rose-100 text-rose-800',
+                simulated: 'bg-violet-50 border-violet-200 text-violet-800'
+            }[type] || 'bg-slate-50 border-slate-200 text-slate-700');
+            const getCompactCellLabel = (cell) => {
+                if (cell?.simulatedPlacement) return '模';
+                if (cell?.isPast && cell?.state === 'available') return '過';
+                return ({
+                    available: '可',
+                    busy: '團',
+                    rest: '休',
+                    companyRest: '公'
+                }[cell?.state] || '');
+            };
+            const getCalendarEmptyLabel = (cell) => {
+                if (cell?.state === 'companyRest') return '公休';
+                if (cell?.state === 'rest') return '排休';
+                if (cell?.isPast && cell?.state === 'available') return '已過';
+                if (cell?.state === 'busy') return '正式已排';
+                return draggingEventName && cell?.canDrop ? '拖到這裡' : '可排';
+            };
+            const calendarRows = useMemo(() => planning.matrixRows.map(row => ({
+                ...row,
+                cellMap: Object.fromEntries((row.cells || []).map(cell => [cell.dateKey, cell]))
+            })), [planning.matrixRows]);
+            const calendarWeeks = useMemo(() => {
+                const dates = Array.isArray(planning.matrixDates) ? planning.matrixDates : [];
+                if (dates.length === 0) return [];
+                const [year, month, day] = String(dates[0] || '').split('-').map(Number);
+                const firstWeekday = new Date(year, (month || 1) - 1, day || 1).getDay();
+                const padded = Array(firstWeekday).fill(null).concat(dates);
+                while (padded.length % 7 !== 0) padded.push(null);
+                const weeks = [];
+                for (let i = 0; i < padded.length; i += 7) weeks.push(padded.slice(i, i + 7));
+                return weeks;
+            }, [planning.matrixDates]);
+            const legendItems = [
+                { label: '可排', tone: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                { label: '正式已排', tone: 'bg-sky-50 text-sky-700 border-sky-200' },
+                { label: '模擬安排', tone: 'bg-violet-50 text-violet-700 border-violet-200' },
+                { label: '排休', tone: 'bg-amber-50 text-amber-700 border-amber-200' },
+                { label: '公休', tone: 'bg-slate-100 text-slate-500 border-slate-200' }
+            ];
+            const remainingEventOptions = (availableEventNames || []).filter(name => !planning.activityRows.some(row => row.name === name));
+            const actualSessionTotal = planning.activityRows.reduce((sum, row) => sum + (Number(row.actualSessions) || 0), 0);
+            const summaryCards = [
+                { label: '可排講師人日', value: `${formatNumber(planning.summary.openInstructorDays)} 人日`, note: '非公司公休、非個人排休、也沒有正式活動的講師人日', tone: 'border-emerald-100 bg-emerald-50', icon: 'calendar-days' },
+                { label: '正式已排占用', value: `${formatNumber(planning.summary.actualBusyInstructorDays)} 人日`, note: `來自正式活動、前置、跨日、場勘`, tone: 'border-sky-100 bg-sky-50', icon: 'briefcase' },
+                { label: '模擬總團數', value: `${formatNumber(planning.summary.simulatedSessions)} 團`, note: `全部來自拖曳模擬 ${formatNumber(planning.summary.droppedSessions)} 團`, tone: 'border-violet-100 bg-violet-50', icon: 'layout-grid' },
+                { label: '預估總毛利', value: formatCurrency(planning.summary.plannedGrossProfit), note: `預估總人數 ${formatNumber(planning.summary.plannedPax, 1)} 人`, tone: 'border-amber-100 bg-amber-50', icon: 'trending-up' }
+            ];
+            const parseDragPayload = (event) => {
+                const raw = event?.dataTransfer?.getData('application/x-crm-planning') || event?.dataTransfer?.getData('text/plain') || '';
+                if (!raw) return null;
+                try {
+                    return JSON.parse(raw);
+                } catch (e) {
+                    return { eventName: raw };
+                }
+            };
+            const handleDragStart = (payload) => (event) => {
+                event.dataTransfer.setData('application/x-crm-planning', JSON.stringify(payload));
+                event.dataTransfer.setData('text/plain', payload.eventName || '');
+                event.dataTransfer.effectAllowed = 'move';
+                setDraggingEventName(payload.eventName || '');
+            };
+            const handleDragEnd = () => {
+                setDraggingEventName('');
+                setDragTargetKey('');
+            };
+            const handleCellDragOver = (rowName, cell) => (event) => {
+                if (!cell?.canDrop) return;
+                if (!draggingEventName) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'move';
+                setDragTargetKey(buildCellKey(cell.dateKey, rowName));
+            };
+            const handleCellDrop = (rowName, cell) => (event) => {
+                if (!cell?.canDrop) return;
+                const payload = parseDragPayload(event);
+                if (!payload?.eventName) return;
+                event.preventDefault();
+                setDragTargetKey('');
+                onAssignPlacement({
+                    eventName: payload.eventName,
+                    instructorName: rowName,
+                    dateKey: cell.dateKey,
+                    sourceDateKey: payload.sourceDateKey,
+                    sourceInstructorName: payload.sourceInstructorName
+                });
+            };
+
+            useEffect(() => {
+                setSelectedActivity('');
+                setDraggingEventName('');
+                setDragTargetKey('');
+            }, [monthLabel]);
+
+            return (
+                <div className="fade-in max-w-7xl mx-auto pb-20 space-y-6">
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div className="p-5 border-b border-slate-100 bg-slate-50/80">
+                            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                                <div>
+                                    <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">活動模擬</div>
+                                    <div className="flex items-center gap-2">
+                                        <button onClick={onPrevMonth} className="p-2 rounded-full hover:bg-white border border-slate-200 text-slate-500"><Icon name="chevron-left" size={16}/></button>
+                                        <div className="text-lg font-bold text-slate-800 min-w-[120px] text-center">{monthLabel}</div>
+                                        <button onClick={onNextMonth} className="p-2 rounded-full hover:bg-white border border-slate-200 text-slate-500"><Icon name="chevron-right" size={16}/></button>
+                                    </div>
+                                    <div className="text-[11px] text-slate-400 mt-2">這一頁只做月度活動模擬與損益估算，不會真的建立活動場次。</div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="text-xs text-slate-400">
+                                        {saveStatus === 'saving' && '模擬資料儲存中...'}
+                                        {saveStatus === 'success' && '模擬資料已儲存'}
+                                        {saveStatus === 'error' && '模擬資料儲存失敗'}
+                                        {saveStatus === 'idle' && '可按月份分別設定'}
+                                    </div>
+                                    <button onClick={onSave} className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-sm">
+                                        <Icon name="save" size={16}/> 儲存本月模擬
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-5 space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                                {summaryCards.map(card => (
+                                    <div key={card.label} className={`rounded-2xl border p-4 ${card.tone}`}>
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div className="text-xs font-bold uppercase tracking-wide text-slate-500">{card.label}</div>
+                                            <Icon name={card.icon} size={16} className="text-slate-500"/>
+                                        </div>
+                                        <div className="text-3xl font-bold text-slate-800">{card.value}</div>
+                                        <div className="mt-2 text-xs text-slate-500">{card.note}</div>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {[
+                                    { label: '公司公休', value: `${planning.summary.companyRestDays} 天`, tone: 'text-slate-600 bg-slate-50 border-slate-200' },
+                                    { label: '講師排休', value: `${planning.summary.restInstructorDays} 人日`, tone: 'text-amber-700 bg-amber-50 border-amber-100' },
+                                    { label: '正式已排團數', value: `${actualSessionTotal} 團`, tone: 'text-sky-700 bg-sky-50 border-sky-100' },
+                                    { label: '拖曳模擬', value: `${planning.summary.droppedSessions} 團`, tone: 'text-violet-700 bg-violet-50 border-violet-100' },
+                                    { label: '活動種類', value: `${planning.activityRows.length} 種`, tone: 'text-blue-700 bg-blue-50 border-blue-100' }
+                                ].map(item => (
+                                    <div key={item.label} className={`px-3 py-2 rounded-xl border text-xs font-bold ${item.tone}`}>
+                                        <span className="mr-2 opacity-80">{item.label}</span>
+                                        <span>{item.value}</span>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)] gap-4">
+                                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+                                    <h3 className="text-sm font-bold text-slate-700 mb-2">活動欄位</h3>
+                                    <p className="text-xs text-slate-400 mb-4">先把活動加入欄位，再直接拖到右邊月曆的空白格。拖到已有模擬活動的格子會直接取代。</p>
+                                    <div className="flex gap-2 mb-4">
+                                        <select className="flex-1 px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm" value={selectedActivity} onChange={e => setSelectedActivity(e.target.value)}>
+                                            <option value="">加入活動...</option>
+                                            {remainingEventOptions.map(name => <option key={`plan_add_${name}`} value={name}>{name}</option>)}
+                                        </select>
+                                        <button onClick={() => { if (selectedActivity) { onAddActivity(selectedActivity); setSelectedActivity(''); } }} className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-bold hover:bg-blue-700">
+                                            <Icon name="plus" size={14}/>
+                                        </button>
+                                    </div>
+                                    <div className="space-y-2 max-h-[720px] overflow-y-auto pr-1">
+                                        {planning.activityRows.map(row => (
+                                            <div
+                                                key={`planning_palette_${row.name}`}
+                                                draggable
+                                                onDragStart={handleDragStart({ type: 'palette', eventName: row.name })}
+                                                onDragEnd={handleDragEnd}
+                                                className={`rounded-xl border bg-white px-3 py-3 shadow-sm cursor-grab active:cursor-grabbing transition ${draggingEventName === row.name ? 'opacity-60 border-violet-200' : 'border-slate-200 hover:border-slate-300'}`}
+                                            >
+                                                <div className="font-bold text-slate-700 break-words">{row.name}</div>
+                                                <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-slate-500">
+                                                    <div>正式 {row.actualSessions}</div>
+                                                    <div>拖曳 {row.droppedSessions}</div>
+                                                    <div>模擬 {row.simulatedSessions}</div>
+                                                    <div>合計 {row.totalSessions}</div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {planning.activityRows.length === 0 && (
+                                            <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-400">
+                                                先加入至少一個活動，才可以拖曳安排。
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="bg-white border border-slate-200 rounded-2xl p-4">
+                                    <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between mb-4">
+                                        <div>
+                                            <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Icon name="calendar-days" size={16}/> 講師月曆模式</h3>
+                                            <p className="text-xs text-slate-400 mt-1">每一週分塊呈現，所有日期欄固定等寬。把左邊活動拖到可排空格，就能快速排出本月模擬版。</p>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            {legendItems.map(item => (
+                                                <div key={`calendar_${item.label}`} className={`px-2.5 py-1 rounded-full border text-[11px] font-bold ${item.tone}`}>{item.label}</div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="border-separate border-spacing-0 text-xs" style={{ minWidth: `${instructorColumnWidth + (dayColumnWidth * 7)}px` }}>
+                                            <colgroup>
+                                                <col style={{ width: `${instructorColumnWidth}px` }} />
+                                                {weekdayLabelsFull.map(label => <col key={`planning_col_${label}`} style={{ width: `${dayColumnWidth}px` }} />)}
+                                            </colgroup>
+                                            <thead>
+                                                <tr>
+                                                    <th className="sticky left-0 z-20 bg-white border border-slate-200 px-3 py-2 text-left">
+                                                        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">講師</div>
+                                                    </th>
+                                                    {weekdayLabelsFull.map(label => (
+                                                        <th key={`calendar_weekday_${label}`} className="border border-slate-200 bg-slate-50 px-3 py-2 text-center text-[11px] font-bold text-slate-500">
+                                                            {label}
+                                                        </th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {calendarWeeks.map((week, weekIndex) => (
+                                                    <React.Fragment key={`calendar_week_${weekIndex}`}>
+                                                        <tr>
+                                                            <td className="sticky left-0 z-10 border border-slate-200 bg-slate-50 px-3 py-2 font-bold text-slate-500">
+                                                                {weekIndex === 0 ? monthLabel : ''}
+                                                            </td>
+                                                            {week.map((dateKey, dayIndex) => (
+                                                                <td key={`calendar_date_${weekIndex}_${dayIndex}`} className={`border border-slate-200 px-3 py-2 align-top ${dateKey === planning.todayKey ? 'bg-blue-50' : 'bg-slate-50/60'}`}>
+                                                                    {dateKey ? (
+                                                                        <>
+                                                                            <div className="text-lg font-bold text-slate-800 leading-none">{getHeader(dateKey).day}</div>
+                                                                            <div className="text-[10px] text-slate-400 mt-1">{weekdayLabelsFull[dayIndex]}</div>
+                                                                        </>
+                                                                    ) : (
+                                                                        <div className="h-7"></div>
+                                                                    )}
+                                                                </td>
+                                                            ))}
+                                                        </tr>
+                                                        {calendarRows.map(row => (
+                                                            <tr key={`calendar_row_${weekIndex}_${row.name}`}>
+                                                                <td className="sticky left-0 z-10 border border-slate-200 bg-white px-3 py-2 align-top font-bold text-slate-700">
+                                                                    <div>{row.name}</div>
+                                                                    <div className="text-[10px] font-medium text-slate-400 mt-1">模擬 {row.simulatedCount || 0}</div>
+                                                                </td>
+                                                                {week.map((dateKey, dayIndex) => {
+                                                                    if (!dateKey) {
+                                                                        return <td key={`calendar_blank_${row.name}_${weekIndex}_${dayIndex}`} className="border border-slate-100 bg-slate-50/40 px-2 py-2 align-top"></td>;
+                                                                    }
+                                                                    const cell = row.cellMap[dateKey] || { dateKey, state: 'available', isPast: false, entries: [], canDrop: false, simulatedPlacement: null };
+                                                                    const cellKey = buildCellKey(dateKey, row.name);
+                                                                    const isDropTarget = dragTargetKey === cellKey;
+                                                                    return (
+                                                                        <td
+                                                                            key={`calendar_cell_${row.name}_${dateKey}`}
+                                                                            className={`border border-slate-200 px-2 py-2 align-top min-h-[84px] transition ${getCalendarCellTone(cell)} ${cell.canDrop ? 'cursor-copy' : ''} ${isDropTarget ? 'ring-2 ring-slate-400 ring-inset' : ''}`}
+                                                                            onDragOver={handleCellDragOver(row.name, cell)}
+                                                                            onDrop={handleCellDrop(row.name, cell)}
+                                                                            onDragLeave={() => { if (dragTargetKey === cellKey) setDragTargetKey(''); }}
+                                                                        >
+                                                                            <div className="space-y-1">
+                                                                                {Array.isArray(cell.entries) && cell.entries.slice(0, 2).map((entry, index) => (
+                                                                                    <div key={`${row.name}_${dateKey}_${entry.key || index}`} className={`rounded-md border px-2 py-1 leading-tight ${getEntryTone(entry.type)}`}>
+                                                                                        <div className="font-bold break-words">{entry.title}</div>
+                                                                                        {entry.note && <div className="text-[10px] opacity-70 mt-0.5">{entry.note}</div>}
+                                                                                    </div>
+                                                                                ))}
+                                                                                {Array.isArray(cell.entries) && cell.entries.length > 2 && (
+                                                                                    <div className="text-[10px] text-slate-400">+{cell.entries.length - 2} 項正式安排</div>
+                                                                                )}
+                                                                                {cell.simulatedPlacement && (
+                                                                                    <div
+                                                                                        draggable
+                                                                                        onDragStart={handleDragStart({
+                                                                                            type: 'placement',
+                                                                                            eventName: cell.simulatedPlacement.eventName,
+                                                                                            sourceDateKey: cell.dateKey,
+                                                                                            sourceInstructorName: row.name
+                                                                                        })}
+                                                                                        onDragEnd={handleDragEnd}
+                                                                                        className={`rounded-md border px-2 py-1 leading-tight cursor-grab active:cursor-grabbing ${getEntryTone('simulated')}`}
+                                                                                    >
+                                                                                        <div className="flex items-start justify-between gap-2">
+                                                                                            <div className="font-bold break-words flex-1">{cell.simulatedPlacement.eventName}</div>
+                                                                                            <button onClick={(event) => { event.stopPropagation(); onRemovePlacement(row.name, cell.dateKey); }} className="text-[10px] text-violet-500 hover:text-violet-700">
+                                                                                                移除
+                                                                                            </button>
+                                                                                        </div>
+                                                                                        <div className="text-[10px] opacity-70 mt-0.5">模擬安排</div>
+                                                                                    </div>
+                                                                                )}
+                                                                                {!cell.simulatedPlacement && (!Array.isArray(cell.entries) || cell.entries.length === 0) && (
+                                                                                    <div className={`text-[11px] leading-tight ${cell.state === 'available' ? 'text-slate-300' : 'text-slate-500'} ${cell.isPast && cell.state === 'available' ? 'text-slate-300' : ''}`}>
+                                                                                        {getCalendarEmptyLabel(cell)}
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        </td>
+                                                                    );
+                                                                })}
+                                                            </tr>
+                                                        ))}
+                                                    </React.Fragment>
+                                                ))}
+                                                {calendarRows.length === 0 && (
+                                                    <tr>
+                                                        <td colSpan="8" className="px-4 py-8 text-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                                                            目前尚無可用來模擬的講師資料。
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+                                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between mb-4">
+                                    <div>
+                                        <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Icon name="briefcase" size={16}/> 活動模擬假設</h3>
+                                        <p className="text-xs text-slate-400 mt-1">模擬團數直接等於拖曳排入的團數，這裡只要補上平均每團人數與每團毛利即可。</p>
+                                    </div>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full min-w-[1080px] text-sm bg-white border border-slate-200 rounded-xl overflow-hidden">
+                                        <thead className="bg-slate-50 border-b border-slate-100 text-slate-500">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left">活動名稱</th>
+                                                <th className="px-4 py-3 text-center">正式已排</th>
+                                                <th className="px-4 py-3 text-center">拖曳排入</th>
+                                                <th className="px-4 py-3 text-center">模擬合計</th>
+                                                <th className="px-4 py-3 text-center">全部合計</th>
+                                                <th className="px-4 py-3 text-center">平均每團人數</th>
+                                                <th className="px-4 py-3 text-right">每團毛利</th>
+                                                <th className="px-4 py-3 text-right">預估總人數</th>
+                                                <th className="px-4 py-3 text-right">預估總毛利</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {planning.activityRows.map(row => (
+                                                <tr key={`planning_row_${row.name}`} className="hover:bg-slate-50">
+                                                    <td className="px-4 py-3 font-bold text-slate-700">{row.name}</td>
+                                                    <td className="px-4 py-3 text-center font-bold text-sky-700">{row.actualSessions}</td>
+                                                    <td className="px-4 py-3 text-center font-bold text-violet-700">{row.droppedSessions}</td>
+                                                    <td className="px-4 py-3 text-center font-bold text-slate-700">{row.simulatedSessions}</td>
+                                                    <td className="px-4 py-3 text-center font-bold text-slate-700">{row.totalSessions}</td>
+                                                    <td className="px-4 py-3 text-center">
+                                                        <input type="number" step="0.1" className="w-24 px-2 py-1.5 rounded-lg border border-slate-200 text-center font-bold outline-none focus:ring-2 focus:ring-blue-200" value={row.avgPax} onChange={e => onChangeActivityMetric(row.name, 'avgPax', e.target.value)} placeholder="未設定" />
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        <input type="number" step="1" className="w-28 px-2 py-1.5 rounded-lg border border-slate-200 text-right font-bold outline-none focus:ring-2 focus:ring-blue-200" value={row.grossProfitPerSession} onChange={e => onChangeActivityMetric(row.name, 'grossProfitPerSession', e.target.value)} placeholder="未設定" />
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right font-bold text-slate-700">{formatNumber(row.projectedPax, 1)}</td>
+                                                    <td className="px-4 py-3 text-right font-bold text-amber-700">{formatCurrency(row.projectedGrossProfit)}</td>
+                                                </tr>
+                                            ))}
+                                            {planning.activityRows.length === 0 && (
+                                                <tr>
+                                                    <td colSpan="9" className="px-4 py-8 text-center text-slate-400">本月還沒有活動模擬資料。</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div className="bg-white border border-slate-200 rounded-2xl p-4">
+                                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between mb-4">
+                                    <div>
+                                        <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Icon name="grid-2x2" size={16}/> 講師 x 日期可用矩陣</h3>
+                                        <p className="text-xs text-slate-400 mt-1">保留緊湊版矩陣，方便快速掃一眼整月空檔。若格子顯示 `模`，代表那天已經放了模擬活動。</p>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {legendItems.map(item => (
+                                            <div key={item.label} className={`px-2.5 py-1 rounded-full border text-[11px] font-bold ${item.tone}`}>{item.label}</div>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-[1160px] border-separate border-spacing-1 text-xs">
+                                        <thead>
+                                            <tr>
+                                                <th className="sticky left-0 z-20 bg-white border border-slate-200 rounded-xl px-3 py-2 text-left min-w-[140px]">
+                                                    <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">講師</div>
+                                                </th>
+                                                {planning.matrixDates.map(dateKey => {
+                                                    const header = getHeader(dateKey);
+                                                    const isToday = dateKey === planning.todayKey;
+                                                    return (
+                                                        <th key={`planning_head_${dateKey}`} className={`min-w-[46px] px-0.5 py-1 text-center rounded-xl border ${isToday ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-slate-200 text-slate-500'}`}>
+                                                            <div className="text-[11px] font-bold leading-none">{header.day}</div>
+                                                            <div className="text-[10px] opacity-70 mt-1 leading-none">{header.weekday}</div>
+                                                        </th>
+                                                    );
+                                                })}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {planning.matrixRows.map(row => (
+                                                <tr key={`planning_matrix_${row.name}`}>
+                                                    <td className="sticky left-0 z-10 bg-white border border-slate-200 rounded-xl px-3 py-2 align-middle">
+                                                        <div className="font-bold text-slate-700">{row.name}</div>
+                                                        <div className="text-[10px] text-slate-400 mt-1">空 {row.openCount} / 模 {row.simulatedCount || 0} / 正式 {row.actualBusyCount} / 休 {row.restCount}</div>
+                                                    </td>
+                                                    {row.cells.map(cell => {
+                                                        const isToday = cell.dateKey === planning.todayKey;
+                                                        return (
+                                                            <td key={`${row.name}_${cell.dateKey}`} className="p-0.5">
+                                                                <div title={`${row.name} ${cell.dateKey}`} className={`w-9 h-10 rounded-lg border flex items-center justify-center font-bold ${getCellTone(cell)} ${isToday ? 'ring-1 ring-blue-300' : ''}`}>
+                                                                    {getCompactCellLabel(cell)}
+                                                                </div>
+                                                            </td>
+                                                        );
+                                                    })}
+                                                </tr>
+                                            ))}
+                                            {planning.matrixRows.length === 0 && (
+                                                <tr>
+                                                    <td colSpan={Math.max((planning.matrixDates?.length || 0) + 1, 2)} className="px-4 py-8 text-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                                                        目前尚無可用來模擬的講師資料。
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             );
         };
@@ -4425,6 +4900,7 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
                     return false;
                 }
             });
+            const buildPlanningCellKey = (dateKey, instructorName) => `${String(dateKey || '').trim()}__${String(instructorName || '').trim()}`;
             const [showAddPromise, setShowAddPromise] = useState(false); 
             const [showBulkImport, setShowBulkImport] = useState(false); 
             const [showScheduleModal, setShowScheduleModal] = useState(false); 
@@ -4442,7 +4918,9 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
             const [tagDefinitions, setTagDefinitions] = useState(DEFAULT_TAG_DEFS);
             const [showTagSettings, setShowTagSettings] = useState(false);
             const [monthlyKpis, setMonthlyKpis] = useState({});
+            const [monthlyPlans, setMonthlyPlans] = useState({});
             const [kpiSaveStatus, setKpiSaveStatus] = useState('idle');
+            const [planningSaveStatus, setPlanningSaveStatus] = useState('idle');
             const [publicFilters, setPublicFilters] = useState({ level: [], type: [], location: [] });
             const [dbSource, setDbSource] = useState(() => localStorage.getItem('crm_db_source') || defaultAppId);
             const [isEditingCSV, setIsEditingCSV] = useState(false);
@@ -4465,10 +4943,10 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
             const [viewMode, setViewMode] = useState('public');
             const [showLoginModal, setShowLoginModal] = useState(false);
             const [adminPassword, setAdminPassword] = useState('');
-            const [activeTaskDetail, setActiveTaskDetail] = useState(null);
             const [selectedCustomer, setSelectedCustomer] = useState('');
             const [currentDate, setCurrentDate] = useState(new Date());
             const [crmSearchTerm, setCrmSearchTerm] = useState('');
+            const [crmRankMode, setCrmRankMode] = useState('ltv');
             const [showCrmDropdown, setShowCrmDropdown] = useState(false);
             const [newReg, setNewReg] = useState({ date: new Date().toISOString().split('T')[0], eventName: '', instructor: '', customerName: '', price: '', transport: '', idNo: '', birthday: '', email: '', source: '', orderDate: new Date().toISOString().split('T')[0], phone: '' });
             const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -4721,6 +5199,7 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
                             if (data.globalRules) setGlobalRules(data.globalRules); 
                             if (data.tagDefinitions) setTagDefinitions(data.tagDefinitions); 
                             setMonthlyKpis(data.monthlyKpis || {});
+                            setMonthlyPlans(data.monthlyPlans || {});
                             
                             if (data.latestNews) setLatestNews(data.latestNews);
                             
@@ -4740,6 +5219,7 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
                             } 
                         } else {
                             setMonthlyKpis({});
+                            setMonthlyPlans({});
                         } 
                         setLoading(false); 
                     });
@@ -4870,6 +5350,50 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
                     console.error('Monthly KPI save failed', e);
                     setKpiSaveStatus('error');
                     alert(`❌ KPI 儲存失敗：${formatFirestoreError(e)}`);
+                }
+            };
+            const handleSaveMonthlyPlans = async () => {
+                if (!user || !db) return alert("請先登入");
+                const sanitized = {};
+                Object.entries(monthlyPlans || {}).forEach(([monthKey, raw]) => {
+                    const activityInputs = {};
+                    const placementMap = {};
+                    Object.entries(raw?.activityInputs || {}).forEach(([eventName, metrics]) => {
+                        const cleanName = String(eventName || '').trim();
+                        if (!cleanName) return;
+                        const avgPax = metrics?.avgPax === '' || metrics?.avgPax === null || metrics?.avgPax === undefined ? '' : Number(metrics.avgPax) || 0;
+                        const grossProfitPerSession = metrics?.grossProfitPerSession === '' || metrics?.grossProfitPerSession === null || metrics?.grossProfitPerSession === undefined ? '' : Number(metrics.grossProfitPerSession) || 0;
+                        if (avgPax === '' && grossProfitPerSession === '') return;
+                        activityInputs[cleanName] = { avgPax, grossProfitPerSession };
+                    });
+                    (Array.isArray(raw?.calendarPlacements) ? raw.calendarPlacements : []).forEach((placement, index) => {
+                        const eventName = String(placement?.eventName || '').trim();
+                        const instructorName = String(placement?.instructorName || '').trim();
+                        const dateKey = String(placement?.dateKey || '').trim();
+                        if (!eventName || !instructorName || !dateKey) return;
+                        placementMap[buildPlanningCellKey(dateKey, instructorName)] = {
+                            id: String(placement?.id || `${monthKey}_${index}`),
+                            eventName,
+                            instructorName,
+                            dateKey
+                        };
+                    });
+                    const calendarPlacements = Object.values(placementMap);
+                    if (Object.keys(activityInputs).length > 0 || calendarPlacements.length > 0) {
+                        sanitized[monthKey] = { activityInputs, calendarPlacements };
+                    }
+                });
+
+                setPlanningSaveStatus('saving');
+                try {
+                    await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), { monthlyPlans: sanitized }, { merge: true });
+                    setMonthlyPlans(sanitized);
+                    setPlanningSaveStatus('success');
+                    setTimeout(() => setPlanningSaveStatus('idle'), 2500);
+                } catch (e) {
+                    console.error('Monthly planning save failed', e);
+                    setPlanningSaveStatus('error');
+                    alert(`❌ 模擬資料儲存失敗：${formatFirestoreError(e)}`);
                 }
             };
             const handleSaveCSV = async (newData) => {
@@ -5043,13 +5567,198 @@ const handleCreateEvent = async ({ dates, eventName, instructors, time, link, di
             };
             const stats = useMemo(() => { const totalRev = parsedData.reduce((a,c) => a + c.price, 0); const events = {}; const instrs = {}; parsedData.forEach(c => { const sortedInstr = c.instructor ? c.instructor.split(/[&,]/).map(s=>s.trim()).sort().join(' & ') : '';
 const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-'); if(!events[key]) events[key] = { ...c, count: 0, customers: [], key }; if(c.customerName !== '開放報名中') { events[key].count++; events[key].customers.push(c); } if(c.instructor) c.instructor.split(/[&,]/).forEach(i => { const name = i.trim(); if(name && name !== '未定') instrs[name] = (instrs[name]||0)+1; }); }); return { totalRev, totalPax: parsedData.length, events, instrs }; }, [parsedData]);
-            const dashboardData = useMemo(() => { const now = new Date(); const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`; const monthlyGroups = {}; parsedData.forEach(c => { if (!c.date) return; const m = c.date.substring(0, 7); if (c.customerName === '開放報名中') return; if (!monthlyGroups[m]) monthlyGroups[m] = []; monthlyGroups[m].push(c); }); const currentMonthData = monthlyGroups[currentMonthStr] || []; const currentMonthRev = currentMonthData.reduce((a,c)=>a+c.price,0); const currentMonthPax = currentMonthData.length; return { monthlyGroups, currentMonthRev, currentMonthPax }; }, [parsedData]);
+            const dashboardData = useMemo(() => {
+                const now = new Date();
+                const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                const monthlyGroups = {};
+                const normalizeMonthKey = (value) => {
+                    const raw = String(value || '').trim();
+                    const match = raw.match(/^(\d{4})[\/-](\d{1,2})/);
+                    if (!match) return raw.slice(0, 7);
+                    return `${match[1]}-${String(parseInt(match[2], 10)).padStart(2, '0')}`;
+                };
+
+                parsedData.forEach(c => {
+                    if (!c.date) return;
+                    const m = normalizeMonthKey(c.date);
+                    if (!m || c.customerName === '開放報名中') return;
+                    if (!monthlyGroups[m]) monthlyGroups[m] = [];
+                    monthlyGroups[m].push(c);
+                });
+
+                const validCurrentMonthEvents = Object.values(stats.events || {}).filter(evt => {
+                    if (!evt?.date) return false;
+                    if (normalizeMonthKey(evt.date) !== currentMonthStr) return false;
+                    const cfg = eventConfigs?.[evt.key] || {};
+                    return !cfg.isCancelled;
+                });
+                const currentMonthRev = validCurrentMonthEvents.reduce((sum, evt) => {
+                    const customers = Array.isArray(evt.customers) ? evt.customers : [];
+                    return sum + customers.reduce((customerSum, customer) => customerSum + (Number(customer.price) || 0), 0);
+                }, 0);
+                const currentMonthPax = validCurrentMonthEvents.reduce((sum, evt) => {
+                    const customers = Array.isArray(evt.customers) ? evt.customers : [];
+                    const paxCount = Number.isFinite(Number(evt.count)) ? Number(evt.count) : customers.length;
+                    return sum + paxCount;
+                }, 0);
+                const currentMonthGroups = validCurrentMonthEvents.length;
+
+                return { monthlyGroups, currentMonthRev, currentMonthPax, currentMonthGroups };
+            }, [parsedData, stats.events, eventConfigs]);
             const tasks = useMemo(() => { const list = []; Object.values(stats.events).forEach(evt => { const cfg = eventConfigs[evt.key] || {}; const tList = cfg.tasks || DEFAULT_TASKS_TEMPLATE; tList.forEach((t, i) => { if(!t.completed) list.push({ ...t, taskIdx: i, evtDate: evt.date, evtName: evt.eventName, cfgKey: evt.key, style: getTaskStatusStyle(t.type, evt.date), fullEvent: evt }); }); }); return list.sort((a,b) => new Date(a.evtDate) - new Date(b.evtDate)); }, [stats.events, eventConfigs]);
             const toggleTask = async (key, idx) => { const cfg = eventConfigs[key] || {}; const tList = cfg.tasks || JSON.parse(JSON.stringify(DEFAULT_TASKS_TEMPLATE)); tList[idx].completed = !tList[idx].completed; await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', key), { ...cfg, tasks: tList }, { merge: true }); };
 
             const [ltvTimeframe, setLtvTimeframe] = useState('all'); 
-            const ltvStats = useMemo(() => { const now = new Date(); const map = {}; const countMap = {}; let periodRevenue = 0; let periodPax = 0; parsedData.forEach(d => { const name = d.customerName; if (!name || name === '開放報名中') return; let include = true; if (ltvTimeframe !== 'all') { const date = new Date(d.date); const diffTime = Math.abs(now - date); const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); if (ltvTimeframe === 'year' && diffDays > 365) include = false; if (ltvTimeframe === 'quarter' && diffDays > 90) include = false; if (ltvTimeframe === 'month' && diffDays > 30) include = false; } if (include) { const price = parseInt(d.price) || 0; map[name] = (map[name] || 0) + price; countMap[name] = (countMap[name] || 0) + 1; periodRevenue += price; periodPax++; } }); const sortedCustomers = Object.keys(map).sort((a, b) => map[b] - map[a]); const activeCustomerCount = sortedCustomers.length; const avgLtv = activeCustomerCount > 0 ? Math.round(periodRevenue / activeCustomerCount) : 0; return { map, countMap, sortedCustomers, avgLtv, periodRevenue, activeCustomerCount }; }, [parsedData, ltvTimeframe]);
-            const filteredCrmCustomers = ltvStats.sortedCustomers.filter(c => c.toLowerCase().includes(crmSearchTerm.toLowerCase()));
+            const ltvStats = useMemo(() => {
+                const now = new Date();
+                const customerMetrics = {};
+                let periodRevenue = 0;
+                const normalizeDateKey = (value) => {
+                    const raw = String(value || '').trim();
+                    const match = raw.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})/);
+                    if (!match) return '';
+                    return `${match[1]}-${String(parseInt(match[2], 10)).padStart(2, '0')}-${String(parseInt(match[3], 10)).padStart(2, '0')}`;
+                };
+                const getMonthSpan = (startDate, endDate) => {
+                    if (!startDate || !endDate) return 1;
+                    const [startYear, startMonth] = startDate.split('-').map(Number);
+                    const [endYear, endMonth] = endDate.split('-').map(Number);
+                    if (!startYear || !startMonth || !endYear || !endMonth) return 1;
+                    return Math.max(1, ((endYear - startYear) * 12) + (endMonth - startMonth) + 1);
+                };
+
+                parsedData.forEach(d => {
+                    const name = d.customerName;
+                    if (!name || name === '開放報名中') return;
+
+                    let include = true;
+                    if (ltvTimeframe !== 'all') {
+                        const date = new Date(d.date);
+                        const diffTime = Math.abs(now - date);
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                        if (ltvTimeframe === 'year' && diffDays > 365) include = false;
+                        if (ltvTimeframe === 'quarter' && diffDays > 90) include = false;
+                        if (ltvTimeframe === 'month' && diffDays > 30) include = false;
+                    }
+                    if (!include) return;
+
+                    const price = parseInt(d.price, 10) || 0;
+                    const dateKey = normalizeDateKey(d.date);
+
+                    if (!customerMetrics[name]) {
+                        customerMetrics[name] = {
+                            totalRevenue: 0,
+                            purchaseCount: 0,
+                            firstDate: dateKey,
+                            lastDate: dateKey
+                        };
+                    }
+
+                    const metric = customerMetrics[name];
+                    metric.totalRevenue += price;
+                    metric.purchaseCount += 1;
+                    if (dateKey) {
+                        if (!metric.firstDate || dateKey < metric.firstDate) metric.firstDate = dateKey;
+                        if (!metric.lastDate || dateKey > metric.lastDate) metric.lastDate = dateKey;
+                    }
+                    periodRevenue += price;
+                });
+
+                const finalizedMetrics = {};
+                Object.entries(customerMetrics).forEach(([name, metric]) => {
+                    const activeMonthSpan = getMonthSpan(metric.firstDate, metric.lastDate);
+                    finalizedMetrics[name] = {
+                        totalRevenue: metric.totalRevenue,
+                        purchaseCount: metric.purchaseCount,
+                        activeMonthSpan,
+                        firstDate: metric.firstDate,
+                        lastDate: metric.lastDate,
+                        avgRevenuePerOrder: metric.purchaseCount > 0 ? metric.totalRevenue / metric.purchaseCount : 0,
+                        avgMonthlyPurchaseCount: metric.purchaseCount > 0 ? metric.purchaseCount / activeMonthSpan : 0,
+                        avgMonthlyRevenue: metric.totalRevenue > 0 ? metric.totalRevenue / activeMonthSpan : 0
+                    };
+                });
+
+                const getRankValue = (name, mode) => {
+                    const metric = finalizedMetrics[name];
+                    if (!metric) return 0;
+                    if (mode === 'count') return metric.purchaseCount;
+                    if (mode === 'monthlyCount') return metric.avgMonthlyPurchaseCount;
+                    if (mode === 'monthlyRevenue') return metric.avgMonthlyRevenue;
+                    if (mode === 'avgOrderValue') return metric.avgRevenuePerOrder;
+                    return metric.totalRevenue;
+                };
+
+                const sortCustomers = (mode) => Object.keys(finalizedMetrics).sort((a, b) => {
+                    const diff = getRankValue(b, mode) - getRankValue(a, mode);
+                    if (Math.abs(diff) > 0.0001) return diff;
+                    const purchaseDiff = (finalizedMetrics[b]?.purchaseCount || 0) - (finalizedMetrics[a]?.purchaseCount || 0);
+                    if (purchaseDiff !== 0) return purchaseDiff;
+                    const revenueDiff = (finalizedMetrics[b]?.totalRevenue || 0) - (finalizedMetrics[a]?.totalRevenue || 0);
+                    if (revenueDiff !== 0) return revenueDiff;
+                    return a.localeCompare(b, 'zh-Hant');
+                });
+
+                const customerNames = Object.keys(finalizedMetrics);
+                const activeCustomerCount = customerNames.length;
+                const avgLtv = activeCustomerCount > 0 ? Math.round(periodRevenue / activeCustomerCount) : 0;
+
+                return {
+                    customerMetrics: finalizedMetrics,
+                    sortedCustomersByMode: {
+                        ltv: sortCustomers('ltv'),
+                        count: sortCustomers('count'),
+                        monthlyCount: sortCustomers('monthlyCount'),
+                        monthlyRevenue: sortCustomers('monthlyRevenue'),
+                        avgOrderValue: sortCustomers('avgOrderValue')
+                    },
+                    getRankValue,
+                    avgLtv,
+                    periodRevenue,
+                    activeCustomerCount
+                };
+            }, [parsedData, ltvTimeframe]);
+            const crmRankOptions = [
+                {
+                    id: 'ltv',
+                    label: '總消費',
+                    title: 'LTV 排行榜',
+                    formatValue: (value) => `$${Math.round(value || 0).toLocaleString()}`,
+                    renderMeta: (metric) => `${metric.purchaseCount || 0} 次消費`
+                },
+                {
+                    id: 'count',
+                    label: '消費總次數',
+                    title: '消費總次數排行榜',
+                    formatValue: (value) => `${Math.round(value || 0).toLocaleString()} 次`,
+                    renderMeta: (metric) => `總消費 $${Math.round(metric.totalRevenue || 0).toLocaleString()}`
+                },
+                {
+                    id: 'monthlyCount',
+                    label: '平均每月消費次數',
+                    title: '平均每月消費次數排行榜',
+                    formatValue: (value) => `${Number(value || 0).toLocaleString('zh-TW', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} 次/月`,
+                    renderMeta: (metric) => `${metric.purchaseCount || 0} 次消費 / ${metric.activeMonthSpan || 1} 個月`
+                },
+                {
+                    id: 'monthlyRevenue',
+                    label: '平均每月消費金額',
+                    title: '平均每月消費金額排行榜',
+                    formatValue: (value) => `$${Math.round(value || 0).toLocaleString()}/月`,
+                    renderMeta: (metric) => `總消費 $${Math.round(metric.totalRevenue || 0).toLocaleString()}`
+                },
+                {
+                    id: 'avgOrderValue',
+                    label: '平均每次消費',
+                    title: '平均客單價排行榜',
+                    formatValue: (value) => `$${Math.round(value || 0).toLocaleString()}`,
+                    renderMeta: (metric) => `${metric.purchaseCount || 0} 次消費`
+                }
+            ];
+            const crmRankOptionMap = Object.fromEntries(crmRankOptions.map(option => [option.id, option]));
+            const activeCrmRankOption = crmRankOptionMap[crmRankMode] || crmRankOptionMap.ltv;
+            const crmSortedCustomers = ltvStats.sortedCustomersByMode[crmRankMode] || ltvStats.sortedCustomersByMode.ltv || [];
+            const filteredCrmCustomers = crmSortedCustomers.filter(c => c.toLowerCase().includes(crmSearchTerm.toLowerCase()));
             const customerProfile = useMemo(() => { if (!selectedCustomer) return null; const history = parsedData.filter(d => d.customerName === selectedCustomer); const totalSpend = history.reduce((a,c)=>a+c.price,0); const avgSpend = history.length ? Math.round(totalSpend / history.length) : 0; const lastReg = history[history.length-1]; return { history, totalSpend, avgSpend, email: lastReg?.email, source: lastReg?.source, idNo: lastReg?.idNo, birthday: lastReg?.birthday, transport: lastReg?.transport, phone: lastReg?.phone, socialName: lastReg?.socialName, notes: lastReg?.notes, latestRecord: lastReg }; }, [selectedCustomer, parsedData]);
             const calendarDays = useMemo(() => { const year = currentDate.getFullYear(); const month = currentDate.getMonth(); const daysInMonth = getDaysInMonth(year, month); const firstDay = getFirstDayOfMonth(year, month); return Array(firstDay).fill(null).concat([...Array(daysInMonth).keys()].map(i => i + 1)); }, [currentDate]);
             const currentMonthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
@@ -5064,8 +5773,37 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     activityTargets: { ...(raw.activityTargets || {}) }
                 };
             }, [monthlyKpis, currentMonthKey]);
+            const currentMonthPlan = useMemo(() => {
+                const raw = monthlyPlans[currentMonthKey] || {};
+                const activityInputs = {};
+                const placementMap = {};
+                Object.entries(raw?.activityInputs || {}).forEach(([name, metrics]) => {
+                    const cleanName = String(name || '').trim();
+                    if (!cleanName) return;
+                    activityInputs[cleanName] = {
+                        avgPax: metrics?.avgPax === '' || metrics?.avgPax === null || metrics?.avgPax === undefined ? '' : Number(metrics.avgPax) || 0,
+                        grossProfitPerSession: metrics?.grossProfitPerSession === '' || metrics?.grossProfitPerSession === null || metrics?.grossProfitPerSession === undefined ? '' : Number(metrics.grossProfitPerSession) || 0
+                    };
+                });
+                (Array.isArray(raw?.calendarPlacements) ? raw.calendarPlacements : []).forEach((placement, index) => {
+                    const eventName = String(placement?.eventName || '').trim();
+                    const instructorName = String(placement?.instructorName || '').trim();
+                    const dateKey = String(placement?.dateKey || '').trim();
+                    if (!eventName || !instructorName || !dateKey) return;
+                    placementMap[buildPlanningCellKey(dateKey, instructorName)] = {
+                        id: String(placement?.id || `${currentMonthKey}_${index}`),
+                        eventName,
+                        instructorName,
+                        dateKey
+                    };
+                });
+                return { activityInputs, calendarPlacements: Object.values(placementMap) };
+            }, [monthlyPlans, currentMonthKey]);
             useEffect(() => {
                 setKpiSaveStatus('idle');
+            }, [currentMonthKey]);
+            useEffect(() => {
+                setPlanningSaveStatus('idle');
             }, [currentMonthKey]);
             useEffect(() => {
                 try {
@@ -5086,6 +5824,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                 const eventBusySet = new Set();
                 const occupiedSet = new Set();
                 const busyInstructorByDate = {};
+                const instructorEntryMap = {};
                 const activityMap = {};
                 let totalPax = 0;
                 let completedPax = 0;
@@ -5121,6 +5860,17 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     names.forEach(name => {
                         const clean = normalizeName(name);
                         if (clean && clean !== '未定') busyInstructorByDate[dateKey].add(clean);
+                    });
+                };
+                const addInstructorEntries = (dateKey, names, entry) => {
+                    if (!dateKey || !dateKey.startsWith(`${monthKey}-`) || !Array.isArray(names) || names.length === 0 || !entry) return;
+                    names.forEach(name => {
+                        const clean = normalizeName(name);
+                        if (!clean || clean === '未定') return;
+                        if (!instructorEntryMap[clean]) instructorEntryMap[clean] = {};
+                        if (!instructorEntryMap[clean][dateKey]) instructorEntryMap[clean][dateKey] = [];
+                        const entries = instructorEntryMap[clean][dateKey];
+                        if (!entries.some(item => item.key === entry.key)) entries.push(entry);
                     });
                 };
                 const getAssignedInstructors = (evt, cfg) => {
@@ -5161,11 +5911,18 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     const prepDays = parseInt(cfg.prepDays, 10) || 0;
                     const duration = parseInt(cfg.duration, 10) || 1;
                     const assignedInstructors = getAssignedInstructors(evt, cfg);
+                    const eventTitle = normalizeName(cfg.displayName || evt.eventName) || '未命名活動';
                     for (let offset = -prepDays; offset < duration; offset += 1) {
                         const occupiedDate = shiftDate(eventDateKey, offset);
                         if (!occupiedDate.startsWith(`${monthKey}-`)) continue;
                         occupiedSet.add(occupiedDate);
                         addBusyInstructors(occupiedDate, assignedInstructors);
+                        addInstructorEntries(occupiedDate, assignedInstructors, {
+                            key: `${evt.key}_${offset}`,
+                            title: eventTitle,
+                            note: offset < 0 ? `前置 D${prepDays + offset + 1}` : (offset > 0 ? `跨日 D${offset + 1}` : ''),
+                            type: offset < 0 ? 'prep' : (offset > 0 ? 'cont' : 'main')
+                        });
                         if (offset >= 0) eventBusySet.add(occupiedDate);
                     }
 
@@ -5198,7 +5955,14 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     if (info?.enabled && String(dateKey).startsWith(`${monthKey}-`)) {
                         occupiedSet.add(dateKey);
                         outingDaysCount += 1;
-                        addBusyInstructors(dateKey, normalizeNameList(info.people));
+                        const outingPeople = normalizeNameList(info.people);
+                        addBusyInstructors(dateKey, outingPeople);
+                        addInstructorEntries(dateKey, outingPeople, {
+                            key: `outing_${dateKey}`,
+                            title: normalizeName(info?.label || info?.title || info?.name) || '外出',
+                            note: '場勘 / 取材',
+                            type: 'outing'
+                        });
                     }
                 });
 
@@ -5264,13 +6028,14 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                 const availabilityMatrix = availabilityByInstructor.map(row => ({
                     ...row,
                     cells: monthDates.map(dateKey => {
-                        if (dateKey < todayKey) return { dateKey, state: 'past', label: '過' };
-                        if (companyRestSet.has(dateKey)) return { dateKey, state: 'companyRest', label: '公' };
+                        const entries = instructorEntryMap[row.name]?.[dateKey] || [];
+                        const isPast = dateKey < todayKey;
+                        if (companyRestSet.has(dateKey)) return { dateKey, state: 'companyRest', label: '公', isPast, entries };
                         const busySet = busyInstructorByDate[dateKey] || new Set();
                         const restingSet = new Set(normalizeNameList(instructorSchedule[dateKey]).filter(name => !busySet.has(name)));
-                        if (restingSet.has(row.name)) return { dateKey, state: 'rest', label: '休' };
-                        if (busySet.has(row.name)) return { dateKey, state: 'busy', label: '團' };
-                        return { dateKey, state: 'available', label: '可' };
+                        if (restingSet.has(row.name)) return { dateKey, state: 'rest', label: '休', isPast, entries };
+                        if (busySet.has(row.name)) return { dateKey, state: 'busy', label: '團', isPast, entries };
+                        return { dateKey, state: 'available', label: '可', isPast, entries };
                     })
                 }));
 
@@ -5321,6 +6086,84 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     }))
                     .sort((a, b) => (b.actual.total - a.actual.total) || a.name.localeCompare(b.name));
             }, [currentMonthKpiActuals, currentMonthKpiTarget]);
+            const currentMonthPlanningData = useMemo(() => {
+                const activityInputMap = currentMonthPlan.activityInputs || {};
+                const placementList = Array.isArray(currentMonthPlan.calendarPlacements) ? currentMonthPlan.calendarPlacements : [];
+                const placementCountMap = {};
+                const placementByCell = {};
+                placementList.forEach(placement => {
+                    if (!placement?.eventName || !placement?.instructorName || !placement?.dateKey) return;
+                    placementCountMap[placement.eventName] = (placementCountMap[placement.eventName] || 0) + 1;
+                    placementByCell[buildPlanningCellKey(placement.dateKey, placement.instructorName)] = placement;
+                });
+                const activityNames = Array.from(new Set([
+                    ...allEventNames,
+                    ...Object.keys(currentMonthKpiActuals.activityMap || {}),
+                    ...Object.keys(activityInputMap || {}),
+                    ...Object.keys(placementCountMap || {})
+                ])).filter(Boolean);
+                const activityRows = activityNames
+                    .map(name => {
+                        const isTracked = Object.prototype.hasOwnProperty.call(activityInputMap || {}, name) || Object.prototype.hasOwnProperty.call(placementCountMap || {}, name);
+                        const actualSessions = currentMonthKpiActuals.activityMap[name]?.total || 0;
+                        const droppedSessions = placementCountMap[name] || 0;
+                        const simulatedSessions = droppedSessions;
+                        const avgPax = activityInputMap[name]?.avgPax ?? '';
+                        const grossProfitPerSession = activityInputMap[name]?.grossProfitPerSession ?? '';
+                        const projectedPax = simulatedSessions * (Number(avgPax) || 0);
+                        const projectedGrossProfit = simulatedSessions * (Number(grossProfitPerSession) || 0);
+                        return {
+                            name,
+                            actualSessions,
+                            droppedSessions,
+                            simulatedSessions,
+                            isTracked,
+                            totalSessions: actualSessions + simulatedSessions,
+                            avgPax,
+                            grossProfitPerSession,
+                            projectedPax,
+                            projectedGrossProfit
+                        };
+                    })
+                    .filter(row => row.actualSessions > 0 || row.droppedSessions > 0 || row.avgPax !== '' || row.grossProfitPerSession !== '' || row.isTracked)
+                    .sort((a, b) => (b.simulatedSessions - a.simulatedSessions) || (b.actualSessions - a.actualSessions) || a.name.localeCompare(b.name, 'zh-Hant'));
+
+                const matrixRows = currentMonthKpiActuals.availabilityMatrix.map(row => ({
+                    ...row,
+                    cells: row.cells.map(cell => ({
+                        ...cell,
+                        simulatedPlacement: placementByCell[buildPlanningCellKey(cell.dateKey, row.name)] || null,
+                        canDrop: cell.state === 'available' && !cell.isPast
+                    })),
+                    openCount: row.cells.filter(cell => cell.state === 'available').length,
+                    actualBusyCount: row.cells.filter(cell => cell.state === 'busy').length,
+                    restCount: row.cells.filter(cell => cell.state === 'rest').length,
+                    simulatedCount: row.cells.filter(cell => placementByCell[buildPlanningCellKey(cell.dateKey, row.name)]).length
+                }));
+                const simulatedSessions = activityRows.reduce((sum, row) => sum + row.simulatedSessions, 0);
+                const plannedPax = activityRows.reduce((sum, row) => sum + row.projectedPax, 0);
+                const plannedGrossProfit = activityRows.reduce((sum, row) => sum + row.projectedGrossProfit, 0);
+                const droppedSessions = activityRows.reduce((sum, row) => sum + row.droppedSessions, 0);
+
+                return {
+                    activityRows,
+                    activityInputMap,
+                    matrixRows,
+                    matrixDates: currentMonthKpiActuals.matrixDates,
+                    todayKey: currentMonthKpiActuals.todayKey,
+                    placementCount: placementList.length,
+                    summary: {
+                        openInstructorDays: currentMonthKpiActuals.inventoryDays,
+                        actualBusyInstructorDays: currentMonthKpiActuals.busyInstructorDays,
+                        restInstructorDays: currentMonthKpiActuals.restInstructorDays,
+                        companyRestDays: currentMonthKpiActuals.companyRestDays,
+                        simulatedSessions,
+                        droppedSessions,
+                        plannedPax,
+                        plannedGrossProfit
+                    }
+                };
+            }, [currentMonthPlan, currentMonthKpiActuals, allEventNames]);
             const updateCurrentMonthKpi = (updater) => {
                 setMonthlyKpis(prev => {
                     const raw = prev[currentMonthKey] || {};
@@ -5334,6 +6177,17 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     return { ...prev, [currentMonthKey]: updater(draft) };
                 });
                 setKpiSaveStatus('idle');
+            };
+            const updateCurrentMonthPlan = (updater) => {
+                setMonthlyPlans(prev => {
+                    const raw = prev[currentMonthKey] || {};
+                    const draft = {
+                        activityInputs: { ...(raw.activityInputs || {}) },
+                        calendarPlacements: Array.isArray(raw.calendarPlacements) ? raw.calendarPlacements.map(placement => ({ ...placement })) : []
+                    };
+                    return { ...prev, [currentMonthKey]: updater(draft) };
+                });
+                setPlanningSaveStatus('idle');
             };
             const handleCurrentMonthKpiFieldChange = (field, value, allowFloat = false) => {
                 const normalized = value === '' ? '' : (allowFloat ? parseFloat(value) : parseInt(value, 10));
@@ -5358,6 +6212,74 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                 updateCurrentMonthKpi(current => ({
                     ...current,
                     activityTargets: { ...(current.activityTargets || {}), [eventName]: current.activityTargets?.[eventName] ?? 0 }
+                }));
+            };
+            const handleCurrentMonthPlanActivityMetricChange = (eventName, field, value) => {
+                const cleanName = String(eventName || '').trim();
+                if (!cleanName) return;
+                updateCurrentMonthPlan(current => {
+                    const currentEntry = current.activityInputs?.[cleanName] || { avgPax: '', grossProfitPerSession: '' };
+                    const parsed = value === '' ? '' : parseFloat(value);
+                    return {
+                        ...current,
+                        activityInputs: {
+                            ...(current.activityInputs || {}),
+                            [cleanName]: {
+                                ...currentEntry,
+                                [field]: Number.isFinite(parsed) ? parsed : ''
+                            }
+                        }
+                    };
+                });
+            };
+            const handleAddCurrentMonthPlanActivity = (eventName) => {
+                const cleanName = String(eventName || '').trim();
+                if (!cleanName) return;
+                updateCurrentMonthPlan(current => ({
+                    ...current,
+                    activityInputs: {
+                        ...(current.activityInputs || {}),
+                        [cleanName]: current.activityInputs?.[cleanName] || { avgPax: '', grossProfitPerSession: '' }
+                    }
+                }));
+            };
+            const handleAssignCurrentMonthPlanPlacement = ({ eventName, instructorName, dateKey, sourceDateKey, sourceInstructorName }) => {
+                const cleanEventName = String(eventName || '').trim();
+                const cleanInstructorName = String(instructorName || '').trim();
+                const cleanDateKey = String(dateKey || '').trim();
+                if (!cleanEventName || !cleanInstructorName || !cleanDateKey) return;
+                updateCurrentMonthPlan(current => {
+                    const nextInputs = {
+                        ...(current.activityInputs || {}),
+                        [cleanEventName]: current.activityInputs?.[cleanEventName] || { avgPax: '', grossProfitPerSession: '' }
+                    };
+                    const sourceKey = buildPlanningCellKey(sourceDateKey, sourceInstructorName);
+                    const targetKey = buildPlanningCellKey(cleanDateKey, cleanInstructorName);
+                    const nextPlacements = (Array.isArray(current.calendarPlacements) ? current.calendarPlacements : [])
+                        .filter(placement => {
+                            const key = buildPlanningCellKey(placement?.dateKey, placement?.instructorName);
+                            return key !== sourceKey && key !== targetKey;
+                        });
+                    nextPlacements.push({
+                        id: targetKey,
+                        eventName: cleanEventName,
+                        instructorName: cleanInstructorName,
+                        dateKey: cleanDateKey
+                    });
+                    nextPlacements.sort((a, b) => (a.dateKey || '').localeCompare(b.dateKey || '') || (a.instructorName || '').localeCompare(b.instructorName || '', 'zh-Hant') || (a.eventName || '').localeCompare(b.eventName || '', 'zh-Hant'));
+                    return {
+                        ...current,
+                        activityInputs: nextInputs,
+                        calendarPlacements: nextPlacements
+                    };
+                });
+            };
+            const handleRemoveCurrentMonthPlanPlacement = (instructorName, dateKey) => {
+                const targetKey = buildPlanningCellKey(dateKey, instructorName);
+                updateCurrentMonthPlan(current => ({
+                    ...current,
+                    calendarPlacements: (Array.isArray(current.calendarPlacements) ? current.calendarPlacements : [])
+                        .filter(placement => buildPlanningCellKey(placement?.dateKey, placement?.instructorName) !== targetKey)
                 }));
             };
             
@@ -5417,7 +6339,6 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
 
             const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
             const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
-            const groupedTasks = useMemo(() => { return tasks.reduce((acc, task) => { const groupKey = task.name; if (!acc[groupKey]) acc[groupKey] = []; acc[groupKey].push(task); return acc; }, {}); }, [tasks]);
             const checkEventMatchesFilters = (eventKey, filters = publicFilters) => { if (filters.level.length === 0 && filters.type.length === 0 && filters.location.length === 0) return true; const cfg = eventConfigs[eventKey] || {}; const tags = cfg.tags || {}; const matchLevel = filters.level.length === 0 || filters.level.includes(tags.levels); const matchType = filters.type.length === 0 || filters.type.includes(tags.types); const matchLocation = filters.location.length === 0 || filters.location.includes(tags.locations); return matchLevel && matchType && matchLocation; };
             const availableOptions = useMemo(() => { const result = { levels: new Set(), types: new Set(), locations: new Set() }; const allEvents = Object.values(stats.events); allEvents.forEach(e => { const cfg = eventConfigs[e.key] || {}; const t = cfg.tags || {}; const matchType = publicFilters.type.length === 0 || publicFilters.type.includes(t.types); const matchLocation = publicFilters.location.length === 0 || publicFilters.location.includes(t.locations); if (matchType && matchLocation && t.levels) result.levels.add(t.levels); }); allEvents.forEach(e => { const cfg = eventConfigs[e.key] || {}; const t = cfg.tags || {}; const matchLevel = publicFilters.level.length === 0 || publicFilters.level.includes(t.levels); const matchLocation = publicFilters.location.length === 0 || publicFilters.location.includes(t.locations); if (matchLevel && matchLocation && t.types) result.types.add(t.types); }); allEvents.forEach(e => { const cfg = eventConfigs[e.key] || {}; const t = cfg.tags || {}; const matchLevel = publicFilters.level.length === 0 || publicFilters.level.includes(t.levels); const matchType = publicFilters.type.length === 0 || publicFilters.type.includes(t.types); if (matchLevel && matchType && t.locations) result.locations.add(t.locations); }); return result; }, [stats.events, eventConfigs, publicFilters]);
             const matchingDates = useMemo(() => { const filtersActive = publicFilters.level.length > 0 || publicFilters.type.length > 0 || publicFilters.location.length > 0; if (!publicSearchTerm && !filtersActive) return []; return Object.values(stats.events).filter(e => { const cfg = eventConfigs[e.key] || {}; const nameToCheck = cfg.displayName || e.eventName; if (!checkEventMatchesFilters(e.key)) return false; if (publicSearchTerm) { return nameToCheck.includes(publicSearchTerm) || (e.instructor && e.instructor.includes(publicSearchTerm)); } return true; }).map(e => e.date).sort(); }, [publicSearchTerm, stats.events, eventConfigs, publicFilters]);
@@ -5767,11 +6688,25 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
 
             return (
                 <div className="flex min-h-screen">
-                    {mobileMenuOpen && ( <div className="fixed inset-0 z-50 bg-slate-800/50 backdrop-blur-sm md:hidden" onClick={() => setMobileMenuOpen(false)}> <div className="absolute top-0 left-0 w-64 h-full bg-white shadow-xl p-4" onClick={e => e.stopPropagation()}> <div className="flex justify-between items-center mb-6"><Logo className="h-6 w-auto" /><button onClick={() => setMobileMenuOpen(false)} className="p-2 text-slate-500"><Icon name="x" /></button></div> <nav className="space-y-1"> <NavItem id="tasks" icon="check-square" label="任務指揮中心" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="promises" icon="message-square" label="承諾牆" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="projects" icon="briefcase" label="專案進度" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="dashboard" icon="trending-up" label="營運儀表板" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="stats" icon="bar-chart-2" label="成效分析" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="enrollment" icon="pie-chart" label="報名監控" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="crm" icon="users" label="客戶 CRM" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="analytics" icon="activity" label="流量分析" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <div className="border-t border-slate-100 my-2 pt-2"> <NavItem id="events" icon="calendar" label="活動場次表" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="import" icon="database" label="資料庫管理" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <button onClick={() => { setViewMode('public'); setMobileMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-all text-left"><Icon name="eye" size={20} /><span className="font-medium tracking-wide">預覽前台</span></button> </div> </nav> </div> </div> )}
-                    <aside className={`${sidebarCollapsed ? 'w-24' : 'w-64'} bg-white border-r border-slate-200 flex-col p-4 hidden md:flex sticky top-0 h-screen transition-all duration-300 ease-out`}> <div className={`mb-8 mt-2 ${sidebarCollapsed ? 'flex flex-col items-center gap-3' : 'flex items-center justify-between px-2'}`}><div className={`flex items-center ${sidebarCollapsed ? 'justify-center w-full' : ''}`}><Logo className={`${sidebarCollapsed ? 'h-7' : 'h-8'} w-auto`} /></div><button title={sidebarCollapsed ? '展開側欄' : '收合側欄'} onClick={() => setSidebarCollapsed(prev => !prev)} className="p-2 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-all"><Icon name={sidebarCollapsed ? 'chevron-right' : 'chevron-left'} size={18} /></button></div> <nav className="space-y-1 flex-1"> <NavItem id="tasks" icon="check-square" label="任務指揮中心" activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} /> <NavItem id="promises" icon="message-square" label="承諾牆" activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} /> <NavItem id="projects" icon="briefcase" label="專案進度" activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} /> <NavItem id="dashboard" icon="trending-up" label="營運儀表板" activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} /> <NavItem id="stats" icon="bar-chart-2" label="成效分析" activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} /> <NavItem id="enrollment" icon="pie-chart" label="報名監控" activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} /> <NavItem id="crm" icon="users" label="客戶 CRM" activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} /> <NavItem id="analytics" icon="activity" label="流量分析" activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} /> </nav> <div className="pt-4 border-t border-slate-100 space-y-2"> <NavItem id="events" icon="calendar" label="活動場次表" activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} /> <NavItem id="import" icon="database" label="資料庫管理" activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} /> <button title={sidebarCollapsed ? '預覽前台' : ''} onClick={() => setViewMode('public')} className={`w-full flex items-center py-3 rounded-xl text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-all ${sidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'}`}><Icon name="eye" size={20} />{!sidebarCollapsed && <span className="font-medium tracking-wide">預覽前台</span>}</button> </div> </aside>
+                    {mobileMenuOpen && ( <div className="fixed inset-0 z-50 bg-slate-800/50 backdrop-blur-sm md:hidden" onClick={() => setMobileMenuOpen(false)}> <div className="absolute top-0 left-0 w-64 h-full bg-white shadow-xl p-4" onClick={e => e.stopPropagation()}> <div className="flex justify-between items-center mb-6"><Logo className="h-6 w-auto" /><button onClick={() => setMobileMenuOpen(false)} className="p-2 text-slate-500"><Icon name="x" /></button></div> <nav className="space-y-1"> <NavItem id="planning" icon="layout-grid" label="活動模擬" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="promises" icon="message-square" label="承諾牆" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="projects" icon="briefcase" label="專案進度" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="dashboard" icon="trending-up" label="營運儀表板" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="stats" icon="bar-chart-2" label="成效分析" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="enrollment" icon="pie-chart" label="報名監控" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="crm" icon="users" label="客戶 CRM" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="analytics" icon="activity" label="流量分析" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <div className="border-t border-slate-100 my-2 pt-2"> <NavItem id="events" icon="calendar" label="活動場次表" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <NavItem id="import" icon="database" label="資料庫管理" activeTab={activeTab} setActiveTab={setActiveTab} onClick={() => setMobileMenuOpen(false)} /> <button onClick={() => { setViewMode('public'); setMobileMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-all text-left"><Icon name="eye" size={20} /><span className="font-medium tracking-wide">預覽前台</span></button> </div> </nav> </div> </div> )}
+                    <aside className={`${sidebarCollapsed ? 'w-24' : 'w-64'} bg-white border-r border-slate-200 flex-col p-4 hidden md:flex sticky top-0 h-screen transition-all duration-300 ease-out`}> <div className={`mb-8 mt-2 ${sidebarCollapsed ? 'flex flex-col items-center gap-3' : 'flex items-center justify-between px-2'}`}><div className={`flex items-center ${sidebarCollapsed ? 'justify-center w-full' : ''}`}><Logo className={`${sidebarCollapsed ? 'h-7' : 'h-8'} w-auto`} /></div><button title={sidebarCollapsed ? '展開側欄' : '收合側欄'} onClick={() => setSidebarCollapsed(prev => !prev)} className="p-2 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-all"><Icon name={sidebarCollapsed ? 'chevron-right' : 'chevron-left'} size={18} /></button></div> <nav className="space-y-1 flex-1"> <NavItem id="planning" icon="layout-grid" label="活動模擬" activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} /> <NavItem id="promises" icon="message-square" label="承諾牆" activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} /> <NavItem id="projects" icon="briefcase" label="專案進度" activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} /> <NavItem id="dashboard" icon="trending-up" label="營運儀表板" activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} /> <NavItem id="stats" icon="bar-chart-2" label="成效分析" activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} /> <NavItem id="enrollment" icon="pie-chart" label="報名監控" activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} /> <NavItem id="crm" icon="users" label="客戶 CRM" activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} /> <NavItem id="analytics" icon="activity" label="流量分析" activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} /> </nav> <div className="pt-4 border-t border-slate-100 space-y-2"> <NavItem id="events" icon="calendar" label="活動場次表" activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} /> <NavItem id="import" icon="database" label="資料庫管理" activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} /> <button title={sidebarCollapsed ? '預覽前台' : ''} onClick={() => setViewMode('public')} className={`w-full flex items-center py-3 rounded-xl text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-all ${sidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'}`}><Icon name="eye" size={20} />{!sidebarCollapsed && <span className="font-medium tracking-wide">預覽前台</span>}</button> </div> </aside>
                     <main className="flex-1 p-4 md:p-10 overflow-y-auto bg-slate-50/50 relative h-screen">
                         <div className="md:hidden mb-6 flex justify-between items-center sticky top-0 z-30 bg-slate-50/90 backdrop-blur-sm py-2"><Logo className="h-6 w-auto" /><button onClick={() => setMobileMenuOpen(true)} className="p-2 bg-white rounded-lg shadow-sm text-slate-600 border border-slate-200"><Icon name="menu" /></button></div>
-                        {activeTab === 'tasks' && <div className="max-w-6xl mx-auto fade-in pb-20"><header className="mb-8 flex justify-between items-end"><div><h2 className="text-2xl font-bold text-slate-800 mb-1">任務指揮中心</h2><p className="text-slate-500 text-sm">智慧追蹤系統，根據活動日期自動排序</p></div><div className="bg-white px-4 py-2 rounded-full border text-sm font-medium whitespace-nowrap">待處理: <span className="text-blue-600 font-bold ml-1">{tasks.length}</span></div></header>{Object.keys(groupedTasks).length === 0 ? (<div className="text-center py-20"><div className="text-6xl mb-4">🎉</div><h3 className="text-xl font-bold text-slate-700">太棒了！任務已清空</h3></div>) : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{(() => { const fixedOrder = ['辦理保險', '寄送行前信', '寄送花絮信']; const allTaskNames = [...new Set([...fixedOrder, ...Object.keys(groupedTasks)])]; allTaskNames.sort((a, b) => { const idxA = fixedOrder.indexOf(a); const idxB = fixedOrder.indexOf(b); if (idxA !== -1 && idxB !== -1) return idxA - idxB; if (idxA !== -1) return -1; if (idxB !== -1) return 1; return a.localeCompare(b); }); return allTaskNames.map((taskName, index) => { const taskList = groupedTasks[taskName] || []; if (taskList.length === 0 && !fixedOrder.includes(taskName)) return null; const color = TASK_GROUP_COLORS[index % TASK_GROUP_COLORS.length]; return (<div key={taskName} className={`rounded-2xl border ${color.border} ${color.bg} p-4 h-fit`}><h3 className={`font-bold text-lg mb-4 ${color.text} flex items-center gap-2`}><Icon name="layers" className={color.icon} size={20}/>{taskName}<span className="text-sm opacity-75 font-normal ml-auto bg-white/50 px-2 py-0.5 rounded-full">{taskList.length}</span></h3><div className="space-y-3 min-h-[50px]">{taskList.length > 0 ? taskList.map((t, i) => (<div key={`${t.cfgKey}-${t.taskIdx}`} onClick={() => setActiveTaskDetail(t)} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden"><div className={`absolute top-0 left-0 w-1 h-full ${t.style.bg.replace('bg-', 'bg-') === 'bg-white' ? 'bg-slate-200' : t.style.bg.replace('bg', 'bg').replace('50', '400')}`}></div><div className="flex justify-between mb-2 pl-2"><span className="bg-slate-100 text-slate-600 text-xs font-mono px-2 py-0.5 rounded">{t.evtDate}</span>{t.style.label && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${t.style.color} ${t.style.border} ${t.style.bg}`}>{t.style.label}</span>}</div><div className="pl-2"><div className="text-sm font-bold text-slate-800 mb-1 truncate">{t.evtName}</div><button onClick={(e) => { e.stopPropagation(); toggleTask(t.cfgKey, t.taskIdx) }} className="w-full mt-3 py-2 rounded-lg bg-slate-50 text-slate-400 hover:bg-green-500 hover:text-white transition-all flex justify-center gap-2 text-xs font-bold"><Icon name="check-circle-2" size={14} /> 標示完成</button></div></div>)) : <div className="text-center text-xs text-slate-400 py-8 border-2 border-dashed border-slate-200 rounded-xl">目前無待辦事項</div>}</div></div>); }); })()}</div>)}</div>}
+                        {activeTab === 'planning' && (
+                            <PlanningBoard
+                                monthLabel={currentMonthLabel}
+                                planning={currentMonthPlanningData}
+                                availableEventNames={Array.from(new Set([...allEventNames, ...currentMonthPlanningData.activityRows.map(row => row.name)])).sort((a, b) => a.localeCompare(b, 'zh-Hant'))}
+                                saveStatus={planningSaveStatus}
+                                onSave={handleSaveMonthlyPlans}
+                                onPrevMonth={prevMonth}
+                                onNextMonth={nextMonth}
+                                onAddActivity={handleAddCurrentMonthPlanActivity}
+                                onChangeActivityMetric={handleCurrentMonthPlanActivityMetricChange}
+                                onAssignPlacement={handleAssignCurrentMonthPlanPlacement}
+                                onRemovePlacement={handleRemoveCurrentMonthPlanPlacement}
+                            />
+                        )}
                         {activeTab === 'promises' && <div className="max-w-6xl mx-auto fade-in pb-20"><header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4"><div><h2 className="text-2xl font-bold text-slate-800 mb-1">團隊承諾牆</h2><p className="text-slate-500 text-sm">紀錄那些非正式但重要的約定</p></div><div className="flex gap-3 w-full md:w-auto"><div className="relative flex-1 md:w-64"><Icon name="search" className="absolute left-3 top-2.5 text-slate-400" size={18}/><input type="text" placeholder="搜尋承諾..." className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 transition-all" value={promiseSearch} onChange={e => setPromiseSearch(e.target.value)} /></div><button onClick={()=>setShowAddPromise(true)} className="bg-purple-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 shadow-md hover:bg-purple-700 whitespace-nowrap"><Icon name="plus" size={18}/> <span className="hidden md:inline">新增</span></button></div></header><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{promises.filter(p => !promiseSearch || (p.content && p.content.toLowerCase().includes(promiseSearch.toLowerCase())) || (p.who && p.who.toLowerCase().includes(promiseSearch.toLowerCase()))).map(p => { const st = getPromiseStatus(p.date, p.time); const isDone = p.status === 'done'; return (<div key={p.id} className={`bg-white p-5 rounded-2xl border shadow-sm relative transition-all ${isDone ? 'opacity-50 border-slate-100' : 'border-slate-200 hover:shadow-md'}`}><button onClick={()=>handleDeletePromise(p.id)} className="absolute top-3 right-3 text-slate-300 hover:text-red-400 opacity-0 hover:opacity-100 transition"><Icon name="trash-2" size={16}/></button><div className="flex items-center gap-2 mb-3"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isDone ? 'text-slate-400 border-slate-200 bg-slate-50' : `${st.color} ${st.border} ${st.bg}`}`}>{isDone ? '已完成' : st.label}</span><span className="text-xs text-slate-400 flex items-center gap-1"><Icon name="clock" size={12}/> {p.date} {p.time}</span></div><h4 className={`font-bold text-lg mb-2 ${isDone ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{p.content}</h4>{p.who && <div className="text-sm text-slate-500 mb-4 flex items-center gap-1"><Icon name="user" size={14}/> {p.who}</div>}<button onClick={()=>handleTogglePromise(p.id, p.status)} className={`w-full py-2 rounded-xl border font-bold text-sm flex items-center justify-center gap-2 transition-all ${isDone ? 'bg-slate-50 text-slate-400 border-slate-200' : 'bg-white text-purple-600 border-purple-200 hover:bg-purple-50'}`}>{isDone ? '重啟任務' : '標示完成'}</button></div>);})}</div></div>}
                         {activeTab === 'events' && <div className="fade-in max-w-6xl mx-auto pb-20 flex flex-col">
                             <header className="flex justify-between items-center mb-6">
@@ -5938,7 +6873,49 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                         
                         {activeTab === 'projects' && <ProjectConsoleTab user={user} db={db} dbSource={dbSource} sourceProjects={projects} />}
 
-                        {activeTab === 'dashboard' && <div className="fade-in max-w-6xl mx-auto space-y-8 pb-20"><header className="flex justify-between items-center"><h2 className="text-2xl font-bold">營運儀表板</h2><button onClick={()=>downloadCSV(csvInput, 'full_export.csv')} className="text-sm bg-slate-800 text-white px-4 py-2 rounded-lg flex items-center gap-2"><Icon name="download" size={16}/> 匯出總表 (Excel)</button></header><div className="grid grid-cols-1 md:grid-cols-3 gap-6"><div className="bg-white p-6 rounded-2xl shadow-sm border border-blue-100 relative overflow-hidden"><div className="absolute -right-4 -top-4 text-blue-50 opacity-50"><Icon name="trending-up" size={100}/></div><div className="relative"><div className="text-sm font-bold text-blue-600 mb-1 uppercase tracking-wider">本月營收</div><div className="text-4xl font-bold text-slate-800">${dashboardData.currentMonthRev.toLocaleString()}</div></div></div><div className="bg-white p-6 rounded-2xl shadow-sm border border-indigo-100 relative overflow-hidden"><div className="absolute -right-4 -top-4 text-indigo-50 opacity-50"><Icon name="users" size={100}/></div><div className="relative"><div className="text-sm font-bold text-indigo-600 mb-1 uppercase tracking-wider">本月人次</div><div className="text-4xl font-bold text-slate-800">{dashboardData.currentMonthPax} <span className="text-lg font-normal text-slate-400">人</span></div></div></div><div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><div className="text-sm font-medium text-slate-500 mb-4">歷史總營收</div><div className="text-2xl font-bold text-slate-700">${stats.totalRev.toLocaleString()}</div></div></div><div><h3 className="text-lg font-bold text-slate-700 mb-4">月度營運報表</h3>{Object.entries(dashboardData.monthlyGroups).sort((a,b)=>b[0].localeCompare(a[0])).map(([month, data]) => (<MonthlyReport key={month} month={month} data={data} events={stats.events} eventConfigs={eventConfigs} />))}</div></div>}
+                        {activeTab === 'dashboard' && (
+                            <div className="fade-in max-w-6xl mx-auto space-y-8 pb-20">
+                                <header className="flex justify-between items-center">
+                                    <h2 className="text-2xl font-bold">營運儀表板</h2>
+                                    <button onClick={() => downloadCSV(csvInput, 'full_export.csv')} className="text-sm bg-slate-800 text-white px-4 py-2 rounded-lg flex items-center gap-2">
+                                        <Icon name="download" size={16}/> 匯出總表 (Excel)
+                                    </button>
+                                </header>
+                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-blue-100 relative overflow-hidden">
+                                        <div className="absolute -right-4 -top-4 text-blue-50 opacity-50"><Icon name="trending-up" size={100}/></div>
+                                        <div className="relative">
+                                            <div className="text-sm font-bold text-blue-600 mb-1 uppercase tracking-wider">本月營收</div>
+                                            <div className="text-4xl font-bold text-slate-800">${dashboardData.currentMonthRev.toLocaleString()}</div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-indigo-100 relative overflow-hidden">
+                                        <div className="absolute -right-4 -top-4 text-indigo-50 opacity-50"><Icon name="users" size={100}/></div>
+                                        <div className="relative">
+                                            <div className="text-sm font-bold text-indigo-600 mb-1 uppercase tracking-wider">本月人次</div>
+                                            <div className="text-4xl font-bold text-slate-800">{dashboardData.currentMonthPax} <span className="text-lg font-normal text-slate-400">人</span></div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-emerald-100 relative overflow-hidden">
+                                        <div className="absolute -right-4 -top-4 text-emerald-50 opacity-50"><Icon name="calendar-days" size={100}/></div>
+                                        <div className="relative">
+                                            <div className="text-sm font-bold text-emerald-600 mb-1 uppercase tracking-wider">本月總團數</div>
+                                            <div className="text-4xl font-bold text-slate-800">{dashboardData.currentMonthGroups} <span className="text-lg font-normal text-slate-400">團</span></div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                                        <div className="text-sm font-medium text-slate-500 mb-4">歷史總營收</div>
+                                        <div className="text-2xl font-bold text-slate-700">${stats.totalRev.toLocaleString()}</div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-700 mb-4">月度營運報表</h3>
+                                    {Object.entries(dashboardData.monthlyGroups).sort((a, b) => b[0].localeCompare(a[0])).map(([month, data]) => (
+                                        <MonthlyReport key={month} month={month} data={data} events={stats.events} eventConfigs={eventConfigs} />
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                        
                         {activeTab === 'stats' && <ActivityPerformance parsedData={parsedData} eventConfigs={eventConfigs} />}
 {activeTab === 'enrollment' && (
@@ -5951,7 +6928,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
 
                         {activeTab === 'crm' && (
                             <div className="fade-in max-w-6xl mx-auto pb-20">
-                                <header className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4"><div><h2 className="text-2xl font-bold text-slate-800">客戶價值分析 (CRM)</h2><p className="text-sm text-slate-500">掌握高價值客戶與平均客單表現</p></div><div className="flex bg-slate-100 p-1 rounded-xl">{[{id:'all', label:'全時段'}, {id:'year', label:'近一年'}, {id:'quarter', label:'近一季'}, {id:'month', label:'近一月'}].map(t => (<button key={t.id} onClick={() => setLtvTimeframe(t.id)} className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${ltvTimeframe === t.id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>{t.label}</button>))}</div></header>
+                                <header className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4"><div><h2 className="text-2xl font-bold text-slate-800">客戶價值分析 (CRM)</h2><p className="text-sm text-slate-500">可切換總消費、消費次數、平均每月消費等不同排行方式</p></div><div className="flex bg-slate-100 p-1 rounded-xl">{[{id:'all', label:'全時段'}, {id:'year', label:'近一年'}, {id:'quarter', label:'近一季'}, {id:'month', label:'近一月'}].map(t => (<button key={t.id} onClick={() => setLtvTimeframe(t.id)} className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${ltvTimeframe === t.id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>{t.label}</button>))}</div></header>
                                 <div className="grid grid-cols-3 gap-4 mb-6">
                                     <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-4 text-white shadow-lg shadow-blue-200"><div className="text-blue-100 text-xs font-bold mb-1">區間平均 LTV (人均貢獻)</div><div className="text-2xl font-bold">${ltvStats.avgLtv.toLocaleString()}</div></div>
                                     <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm"><div className="text-slate-400 text-xs font-bold mb-1">區間總營收</div><div className="text-2xl font-bold text-slate-700">${ltvStats.periodRevenue.toLocaleString()}</div></div>
@@ -5959,12 +6936,26 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                                 </div>
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                                     <div className="lg:col-span-1 space-y-4">
+                                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+                                            <div className="text-xs font-bold text-slate-400 mb-3">排行方式</div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {crmRankOptions.map(option => (
+                                                    <button
+                                                        key={option.id}
+                                                        onClick={() => setCrmRankMode(option.id)}
+                                                        className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${crmRankMode === option.id ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700'}`}
+                                                    >
+                                                        {option.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
                                         <div className="relative">
                                             <Icon name="search" className="absolute left-3 top-3 text-slate-400" size={20}/>
                                             <input type="text" className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" placeholder="搜尋客戶姓名..." value={crmSearchTerm} onChange={(e) => { setCrmSearchTerm(e.target.value); setShowCrmDropdown(true); setSelectedCustomer(''); }} onFocus={() => setShowCrmDropdown(true)} onBlur={() => setTimeout(() => setShowCrmDropdown(false), 200)} />
-                                            {showCrmDropdown && crmSearchTerm && (<div className="absolute z-10 w-full bg-white border border-slate-200 rounded-xl shadow-lg mt-1 max-h-60 overflow-y-auto">{filteredCrmCustomers.length > 0 ? (filteredCrmCustomers.map(c => (<div key={c} className="p-3 hover:bg-blue-50 cursor-pointer text-slate-700 flex justify-between items-center" onClick={() => { setSelectedCustomer(c); setCrmSearchTerm(c); setShowCrmDropdown(false); }}><span>{c}</span><span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono">${ltvStats.map[c]?.toLocaleString()}</span></div>))) : (<div className="p-3 text-slate-400 text-sm">無相符客戶</div>)}</div>)}
+                                            {showCrmDropdown && crmSearchTerm && (<div className="absolute z-10 w-full bg-white border border-slate-200 rounded-xl shadow-lg mt-1 max-h-60 overflow-y-auto">{filteredCrmCustomers.length > 0 ? (filteredCrmCustomers.map(c => (<div key={c} className="p-3 hover:bg-blue-50 cursor-pointer text-slate-700 flex justify-between items-center gap-2" onClick={() => { setSelectedCustomer(c); setCrmSearchTerm(c); setShowCrmDropdown(false); }}><span className="truncate">{c}</span><span className="text-[11px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono whitespace-nowrap">{activeCrmRankOption.formatValue(ltvStats.getRankValue(c, crmRankMode))}</span></div>))) : (<div className="p-3 text-slate-400 text-sm">無相符客戶</div>)}</div>)}
                                         </div>
-                                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"><div className="p-4 border-b border-slate-100 bg-slate-50/50 font-bold text-slate-700 flex justify-between items-center"><span>🏆 LTV 排行榜 ({ltvTimeframe === 'all' ? '全時段' : '區間'})</span></div><div className="max-h-[500px] overflow-y-auto">{ltvStats.sortedCustomers.slice(0, 50).map((name, idx) => (<div key={name} onClick={() => { setSelectedCustomer(name); setCrmSearchTerm(name); }} className={`p-3 flex items-center justify-between border-b border-slate-50 cursor-pointer hover:bg-blue-50 transition-colors ${selectedCustomer === name ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''}`}><div className="flex items-center gap-3"><div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${idx < 3 ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-500'}`}>{idx + 1}</div><span className="text-sm font-medium text-slate-700 truncate max-w-[100px]">{name}</span></div><div className="text-right"><div className="text-sm font-bold text-blue-600">${ltvStats.map[name].toLocaleString()}</div><div className="text-[10px] text-slate-400">{ltvStats.countMap[name]} 次消費</div></div></div>))}</div></div>
+                                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"><div className="p-4 border-b border-slate-100 bg-slate-50/50 font-bold text-slate-700 flex justify-between items-center"><span>🏆 {activeCrmRankOption.title} ({ltvTimeframe === 'all' ? '全時段' : '區間'})</span></div><div className="max-h-[500px] overflow-y-auto">{crmSortedCustomers.slice(0, 50).map((name, idx) => { const metric = ltvStats.customerMetrics[name] || {}; return (<div key={name} onClick={() => { setSelectedCustomer(name); setCrmSearchTerm(name); }} className={`p-3 flex items-center justify-between border-b border-slate-50 cursor-pointer hover:bg-blue-50 transition-colors ${selectedCustomer === name ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''}`}><div className="flex items-center gap-3 min-w-0"><div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${idx < 3 ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-500'}`}>{idx + 1}</div><span className="text-sm font-medium text-slate-700 truncate">{name}</span></div><div className="text-right shrink-0 ml-3"><div className="text-sm font-bold text-blue-600">{activeCrmRankOption.formatValue(ltvStats.getRankValue(name, crmRankMode))}</div><div className="text-[10px] text-slate-400">{activeCrmRankOption.renderMeta(metric)}</div></div></div>); })}</div></div>
                                     </div>
                                     <div className="lg:col-span-2">
                                         {customerProfile ? (
@@ -6331,8 +7322,6 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                         onSetOutingPoster={handleSetOutingPoster}
                         onToggleOutingPerson={handleToggleOutingPerson}
                     />}
-                    
-                    {activeTaskDetail && <TaskDetailModal task={activeTaskDetail} eventData={activeTaskDetail.fullEvent} onClose={()=>setActiveTaskDetail(null)} />}
                     
                     {editingEvent && <EventManagerModal 
                         event={activeEditingEvent} 
