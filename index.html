@@ -2457,6 +2457,52 @@ const removeFormRule = (idx) => {
             </div> );
         };
         const TaskDetailModal = ({ task, eventData, onClose }) => { return <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 fade-in backdrop-blur-sm"><div className="bg-white rounded-2xl w-full max-w-lg flex flex-col max-h-[90vh] shadow-2xl"><div className="p-6 border-b flex justify-between items-center"><div><div className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded inline-block mb-1">{eventData.date}</div><h3 className="text-xl font-bold">{task.name}</h3></div><button onClick={onClose}><Icon name="x"/></button></div><div className="p-6 overflow-y-auto"><div className="text-center text-slate-500 py-8">任務詳細內容功能區 (可在此擴充)</div></div></div></div>; };
+        const PLAN_ACTIVITY_TEMPLATES = {
+            theme: { id: 'theme', label: '主題活動', prefix: '', defaultRevenuePerPax: 850, helper: '地名 + 動物，例如：大安鼠' },
+            afterWork: { id: 'afterWork', label: '下班後走走', prefix: '下班走走', defaultRevenuePerPax: 800, helper: '下班走走XX' },
+            special: { id: 'special', label: '特殊活動', prefix: '', defaultRevenuePerPax: '', helper: '其他自訂活動' }
+        };
+        const PLAN_ACTIVITY_TEMPLATE_LIST = Object.values(PLAN_ACTIVITY_TEMPLATES);
+        const PLAN_SPECIAL_ACTIVITY_NAMES = new Set([
+            '北橫蛇'
+        ]);
+        const PLAN_THEME_ANIMAL_SUFFIXES = [
+            '貓頭鷹', '蝙蝠', '飛鼠', '松鼠', '蜥蜴', '蟾蜍', '穿山甲',
+            '水鹿', '梅花鹿', '山羌', '夜鷺', '老鷹', '螢火蟲',
+            '鼠', '兔', '蛇', '龜', '蛙', '蜥', '蟾', '狐', '鹿', '猴', '鳥', '蟬', '螢'
+        ];
+        const normalizePlanActivityTemplateType = (value) => (
+            PLAN_ACTIVITY_TEMPLATES[value] ? value : 'special'
+        );
+        const inferPlanActivityTemplateType = (eventName = '') => {
+            const cleanName = String(eventName || '').trim();
+            if (PLAN_SPECIAL_ACTIVITY_NAMES.has(cleanName)) return 'special';
+            if (cleanName.startsWith('下班走走')) return 'afterWork';
+            if (cleanName.startsWith('夜訪')) return 'theme';
+            if (/^[\u3400-\u9fff]{2,10}$/.test(cleanName) && PLAN_THEME_ANIMAL_SUFFIXES.some(suffix => cleanName.endsWith(suffix))) {
+                return 'theme';
+            }
+            return 'special';
+        };
+        const buildPlanningActivityDraft = (rawName, templateType = 'special') => {
+            const normalizedType = normalizePlanActivityTemplateType(templateType);
+            let cleanName = String(rawName || '').trim();
+            if (!cleanName) {
+                const template = PLAN_ACTIVITY_TEMPLATES[normalizedType];
+                return { name: '', templateType: normalizedType, defaultRevenuePerPax: template.defaultRevenuePerPax };
+            }
+            const inferredType = inferPlanActivityTemplateType(cleanName);
+            const finalType = inferredType === 'special' ? normalizedType : inferredType;
+            const template = PLAN_ACTIVITY_TEMPLATES[finalType];
+            if (template.prefix && inferredType === 'special' && !cleanName.startsWith(template.prefix)) {
+                cleanName = `${template.prefix}${cleanName}`;
+            }
+            return {
+                name: cleanName,
+                templateType: finalType,
+                defaultRevenuePerPax: template.defaultRevenuePerPax
+            };
+        };
         const MonthlyKpiPanel = ({ monthLabel, actuals, target, activityRows, availableEventNames, onChangeTarget, onChangeActivityTarget, onAddActivityTarget, onSave, saveStatus, onPrevMonth, onNextMonth, onMatrixCellClick }) => {
             const [selectedActivity, setSelectedActivity] = useState('');
 
@@ -3171,6 +3217,7 @@ const removeFormRule = (idx) => {
 
         const PlanningBoard = ({ monthLabel, planning, availableEventNames, saveStatus, onSave, onPrevMonth, onNextMonth, onAddActivity, onChangeActivityMetric, onBulkApplyActivityMetric, onChangeProfitSplit, onAssignPlacement, onRemovePlacement }) => {
             const [selectedActivity, setSelectedActivity] = useState('');
+            const [selectedActivityTemplate, setSelectedActivityTemplate] = useState('theme');
             const [draggingEventName, setDraggingEventName] = useState('');
             const [dragTargetKey, setDragTargetKey] = useState('');
             const [bulkMetricDraft, setBulkMetricDraft] = useState({ avgPax: '', revenuePerPax: '', costPerPax: '' });
@@ -3273,11 +3320,40 @@ const removeFormRule = (idx) => {
                 { label: '排休', tone: 'bg-slate-200 text-slate-500 border-slate-300' },
                 { label: '公休', tone: 'bg-slate-300 text-slate-600 border-slate-400' }
             ];
-            const remainingEventOptions = (availableEventNames || []).filter(name => !planning.activityRows.some(row => row.name === name));
+            const activeActivityTemplate = PLAN_ACTIVITY_TEMPLATES[selectedActivityTemplate] || PLAN_ACTIVITY_TEMPLATES.theme;
+            const visibleActivityRows = useMemo(() => planning.activityRows.filter(row => {
+                const rowTemplateType = normalizePlanActivityTemplateType(row.templateType || inferPlanActivityTemplateType(row.name));
+                return rowTemplateType === activeActivityTemplate.id;
+            }), [activeActivityTemplate.id, planning.activityRows]);
+            const remainingEventOptions = useMemo(() => (availableEventNames || []).filter(name => {
+                const cleanName = String(name || '').trim();
+                if (!cleanName) return false;
+                if (planning.activityRows.some(row => row.name === cleanName)) return false;
+                return inferPlanActivityTemplateType(cleanName) === activeActivityTemplate.id;
+            }), [activeActivityTemplate.id, availableEventNames, planning.activityRows]);
             const activityRowNames = useMemo(() => planning.activityRows.map(row => row.name), [planning.activityRows]);
             const actualSessionTotal = planning.activityRows.reduce((sum, row) => sum + (Number(row.actualSessions) || 0), 0);
+            const weeklyMissingActivities = useMemo(() => {
+                const trackedNames = visibleActivityRows.map(row => row.name);
+                return calendarWeeks.map(week => {
+                    const weekDates = week.filter(Boolean);
+                    const scheduledNames = new Set();
+                    weekDates.forEach(dateKey => {
+                        calendarRows.forEach(row => {
+                            const scheduledEventName = row.cellMap[dateKey]?.simulatedPlacement?.eventName;
+                            if (scheduledEventName) scheduledNames.add(scheduledEventName);
+                            (row.cellMap[dateKey]?.entries || []).forEach(entry => {
+                                const entryTitle = String(entry?.title || '').trim();
+                                if (!entryTitle || entry?.type === 'outing') return;
+                                scheduledNames.add(entryTitle);
+                            });
+                        });
+                    });
+                    return trackedNames.filter(name => !scheduledNames.has(name));
+                });
+            }, [calendarRows, calendarWeeks, visibleActivityRows]);
             const summaryCards = [
-                { label: '可排講師人日', value: `${formatNumber(planning.summary.openInstructorDays)} 人日`, note: '非公司公休、非個人排休、也沒有正式活動的講師人日', tone: 'border-emerald-100 bg-emerald-50', icon: 'calendar-days' },
+                { label: '可排講師人日', value: `${formatNumber(planning.summary.openInstructorDays)} 人日`, note: `所有可排 ${formatNumber(planning.summary.totalSchedulableInstructorDays)} - 已確定 ${formatNumber(planning.summary.actualBusyInstructorDays)} - 模擬排 ${formatNumber(planning.summary.simulatedInstructorDays)}`, tone: 'border-emerald-100 bg-emerald-50', icon: 'calendar-days' },
                 { label: '正式已排占用', value: `${formatNumber(planning.summary.actualBusyInstructorDays)} 人日`, note: `來自正式活動、前置、跨日、場勘`, tone: 'border-sky-100 bg-sky-50', icon: 'briefcase' },
                 { label: '模擬總團數', value: `${formatNumber(planning.summary.simulatedSessions)} 團`, note: `全部來自拖曳模擬 ${formatNumber(planning.summary.droppedSessions)} 團`, tone: 'border-violet-100 bg-violet-50', icon: 'layout-grid' },
                 { label: '預估總毛利', value: formatCurrency(planning.summary.plannedGrossProfit), note: `公司 ${planning.profitSplit.companyPct}% / 獎金 ${planning.profitSplit.bonusPct}%`, tone: 'border-amber-100 bg-amber-50', icon: 'trending-up' }
@@ -3347,9 +3423,9 @@ const removeFormRule = (idx) => {
                 setBulkMetricDraft(prev => ({ ...prev, [field]: '' }));
             };
             const addSelectedActivity = () => {
-                const cleanName = String(selectedActivity || '').trim();
-                if (!cleanName) return;
-                onAddActivity(cleanName);
+                const draft = buildPlanningActivityDraft(selectedActivity, selectedActivityTemplate);
+                if (!draft.name) return;
+                onAddActivity(draft);
                 setSelectedActivity('');
             };
             const parseDragPayload = (event) => {
@@ -3396,6 +3472,7 @@ const removeFormRule = (idx) => {
 
             useEffect(() => {
                 setSelectedActivity('');
+                setSelectedActivityTemplate('theme');
                 setDraggingEventName('');
                 setDragTargetKey('');
                 setBulkMetricDraft({ avgPax: '', revenuePerPax: '', costPerPax: '' });
@@ -3482,6 +3559,26 @@ const removeFormRule = (idx) => {
                                 <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 xl:self-start xl:sticky xl:top-6 xl:z-10">
                                     <h3 className="text-sm font-bold text-slate-700 mb-2">活動欄位</h3>
                                     <p className="text-xs text-slate-400 mb-4">先把活動加入欄位，再直接拖到右邊月曆的空白格。拖到已有模擬活動的格子會直接取代。</p>
+                                    <div className="grid grid-cols-1 gap-1.5 mb-3">
+                                        {PLAN_ACTIVITY_TEMPLATE_LIST.map(template => {
+                                            const isActive = selectedActivityTemplate === template.id;
+                                            const priceLabel = template.defaultRevenuePerPax === '' ? '價格自訂' : `$${template.defaultRevenuePerPax}`;
+                                            return (
+                                                <button
+                                                    key={`plan_template_${template.id}`}
+                                                    type="button"
+                                                    onClick={() => setSelectedActivityTemplate(template.id)}
+                                                    className={`rounded-lg border px-2.5 py-1.5 text-left transition ${isActive ? 'border-blue-300 bg-blue-50 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                                                >
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <span className={`text-[11px] font-bold ${isActive ? 'text-blue-700' : 'text-slate-700'}`}>{template.label}</span>
+                                                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${isActive ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>{priceLabel}</span>
+                                                    </div>
+                                                    <div className="mt-0.5 text-[9px] text-slate-400">{template.helper}</div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
                                     <div className="flex gap-2 mb-4">
                                         <input
                                             list="planning-activity-options"
@@ -3489,7 +3586,7 @@ const removeFormRule = (idx) => {
                                             value={selectedActivity}
                                             onChange={e => setSelectedActivity(e.target.value)}
                                             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSelectedActivity(); } }}
-                                            placeholder="輸入或選擇活動名稱..."
+                                            placeholder={`輸入${activeActivityTemplate.label}名稱...`}
                                         />
                                         <datalist id="planning-activity-options">
                                             {remainingEventOptions.map(name => <option key={`plan_add_${name}`} value={name}>{name}</option>)}
@@ -3498,8 +3595,11 @@ const removeFormRule = (idx) => {
                                             <Icon name="plus" size={14}/>
                                         </button>
                                     </div>
-                                    <div className="space-y-1.5 max-h-[720px] overflow-y-auto pr-1 xl:max-h-[calc(100vh-220px)]">
-                                        {planning.activityRows.map(row => (
+                                    <div
+                                        className="space-y-1.5 max-h-[200px] overflow-y-scroll overscroll-contain pr-2"
+                                        style={{ scrollbarGutter: 'stable' }}
+                                    >
+                                        {visibleActivityRows.map(row => (
                                             <div
                                                 key={`planning_palette_${row.name}`}
                                                 draggable
@@ -3513,11 +3613,12 @@ const removeFormRule = (idx) => {
                                                 >
                                                     {row.name}
                                                 </div>
+                                                <div className="mt-1 text-[10px] text-slate-400">本月已排 {formatNumber(row.activityCount)} 場</div>
                                             </div>
                                         ))}
-                                        {planning.activityRows.length === 0 && (
+                                        {visibleActivityRows.length === 0 && (
                                             <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-400">
-                                                先加入至少一個活動，才可以拖曳安排。
+                                                這個分類目前還沒有活動，先新增一個再拖曳安排。
                                             </div>
                                         )}
                                     </div>
@@ -3571,6 +3672,29 @@ const removeFormRule = (idx) => {
                                                                     )}
                                                                 </td>
                                                             ))}
+                                                        </tr>
+                                                        <tr>
+                                                            <td className="sticky left-0 z-10 border border-slate-200 bg-amber-50/80 px-3 py-2 text-[11px] font-bold text-amber-700">
+                                                                本週未排
+                                                            </td>
+                                                            <td colSpan="7" className="border border-slate-200 bg-amber-50/40 px-3 py-2">
+                                                                {weeklyMissingActivities[weekIndex] && weeklyMissingActivities[weekIndex].length > 0 ? (
+                                                                    <div className="flex flex-wrap gap-1.5">
+                                                                        {weeklyMissingActivities[weekIndex].slice(0, 8).map(name => (
+                                                                            <span key={`weekly_missing_${weekIndex}_${name}`} className="rounded-full border border-amber-200 bg-white/80 px-2 py-1 text-[10px] font-bold text-amber-700">
+                                                                                {name}
+                                                                            </span>
+                                                                        ))}
+                                                                        {weeklyMissingActivities[weekIndex].length > 8 && (
+                                                                            <span className="px-2 py-1 text-[10px] font-bold text-amber-700">
+                                                                                +{weeklyMissingActivities[weekIndex].length - 8} 個活動
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="text-[11px] font-medium text-emerald-700">本週左欄活動都有安排</div>
+                                                                )}
+                                                            </td>
                                                         </tr>
                                                         {calendarRows.map(row => (
                                                             <tr key={`calendar_row_${weekIndex}_${row.name}`}>
@@ -4285,6 +4409,16 @@ const removeFormRule = (idx) => {
 
             const processedEvents = useMemo(() => {
                 const today = new Date().toISOString().split('T')[0];
+                const customerVisitDateMap = {};
+                Object.values(stats.events || {}).forEach(eventItem => {
+                    const eventDate = String(eventItem?.date || '').trim();
+                    (Array.isArray(eventItem?.customers) ? eventItem.customers : []).forEach(customer => {
+                        const customerName = String(customer?.customerName || '').trim();
+                        if (!customerName || customerName === '開放報名中' || !eventDate) return;
+                        if (!customerVisitDateMap[customerName]) customerVisitDateMap[customerName] = new Set();
+                        customerVisitDateMap[customerName].add(eventDate);
+                    });
+                });
                 
                 return Object.values(stats.events)
                     .map(e => {
@@ -4293,8 +4427,31 @@ const removeFormRule = (idx) => {
                         const rate = Math.min((e.count / capacity) * 100, 100);
                         const tags = cfg.tags || { levels: '', types: '', locations: '' };
                         const isFull = e.count >= capacity;
-                        
-                        return { ...e, capacity, rate, tags, isFull, cfg };
+                        const bookedCustomers = (Array.isArray(e.customers) ? e.customers : []).filter(customer => {
+                            const customerName = String(customer?.customerName || '').trim();
+                            return customerName && customerName !== '開放報名中';
+                        });
+                        const returningCustomerCount = bookedCustomers.reduce((sum, customer) => {
+                            const customerName = String(customer?.customerName || '').trim();
+                            const historyDates = Array.from(customerVisitDateMap[customerName] || []);
+                            return historyDates.some(date => date < e.date) ? sum + 1 : sum;
+                        }, 0);
+                        const newCustomerCount = Math.max(bookedCustomers.length - returningCustomerCount, 0);
+                        const newCustomerRate = bookedCustomers.length > 0 ? Math.round((newCustomerCount / bookedCustomers.length) * 100) : 0;
+                        const returningCustomerRate = bookedCustomers.length > 0 ? 100 - newCustomerRate : 0;
+
+                        return {
+                            ...e,
+                            capacity,
+                            rate,
+                            tags,
+                            isFull,
+                            cfg,
+                            newCustomerCount,
+                            returningCustomerCount,
+                            newCustomerRate,
+                            returningCustomerRate
+                        };
                     })
                     .filter(e => {
                         if (e.date < today) return false;
@@ -4392,6 +4549,16 @@ const removeFormRule = (idx) => {
                                             className={`h-full rounded-full transition-all duration-500 ${getProgressColor(e.rate, e.isFull)}`} 
                                             style={{ width: `${e.rate}%` }}
                                         ></div>
+                                    </div>
+                                </div>
+
+                                <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
+                                        <span>新客 {e.newCustomerCount} 人</span>
+                                        <span>舊客 {e.returningCustomerCount} 人</span>
+                                    </div>
+                                    <div className="mt-1 text-[10px] text-slate-400">
+                                        新客 {e.newCustomerRate}% / 舊客 {e.returningCustomerRate}%
                                     </div>
                                 </div>
 
@@ -5645,15 +5812,16 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
                 if (!Number.isFinite(parsed)) return '';
                 return digits === null ? parsed : Number(parsed.toFixed(digits));
             };
-            const normalizePlanActivityInput = (metrics = {}) => {
+            const normalizePlanActivityInput = (metrics = {}, fallbackName = '') => {
                 const avgPax = normalizePlanMetricValue(metrics?.avgPax, 1);
                 let revenuePerPax = normalizePlanMetricValue(metrics?.revenuePerPax, 2);
                 const costPerPax = normalizePlanMetricValue(metrics?.costPerPax, 2);
                 const legacyGrossProfitPerSession = normalizePlanMetricValue(metrics?.grossProfitPerSession, 2);
+                const templateType = normalizePlanActivityTemplateType(metrics?.templateType || inferPlanActivityTemplateType(fallbackName));
                 if (revenuePerPax === '' && legacyGrossProfitPerSession !== '' && avgPax !== '' && Number(avgPax) !== 0) {
                     revenuePerPax = Number((legacyGrossProfitPerSession / Number(avgPax)).toFixed(2));
                 }
-                return { avgPax, revenuePerPax, costPerPax };
+                return { avgPax, revenuePerPax, costPerPax, templateType };
             };
             const normalizePlanProfitSplit = (raw = {}) => {
                 const hasCompany = raw?.companyPct !== '' && raw?.companyPct !== null && raw?.companyPct !== undefined;
@@ -5677,7 +5845,16 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
                 }
                 return { companyPct, bonusPct };
             };
-            const buildDefaultPlanActivityInput = () => ({ avgPax: '', revenuePerPax: '', costPerPax: '' });
+            const buildDefaultPlanActivityInput = (templateType = 'special') => {
+                const normalizedType = normalizePlanActivityTemplateType(templateType);
+                const template = PLAN_ACTIVITY_TEMPLATES[normalizedType];
+                return {
+                    avgPax: '',
+                    revenuePerPax: template.defaultRevenuePerPax === '' ? '' : template.defaultRevenuePerPax,
+                    costPerPax: '',
+                    templateType: normalizedType
+                };
+            };
             const handleSaveMonthlyPlans = async () => {
                 if (!user || !db) return alert("請先登入");
                 const sanitized = {};
@@ -5688,7 +5865,7 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
                     Object.entries(raw?.activityInputs || {}).forEach(([eventName, metrics]) => {
                         const cleanName = String(eventName || '').trim();
                         if (!cleanName) return;
-                        const normalizedMetrics = normalizePlanActivityInput(metrics);
+                        const normalizedMetrics = normalizePlanActivityInput(metrics, cleanName);
                         if (normalizedMetrics.avgPax === '' && normalizedMetrics.revenuePerPax === '' && normalizedMetrics.costPerPax === '') return;
                         activityInputs[cleanName] = normalizedMetrics;
                     });
@@ -6107,7 +6284,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                 Object.entries(raw?.activityInputs || {}).forEach(([name, metrics]) => {
                     const cleanName = String(name || '').trim();
                     if (!cleanName) return;
-                    activityInputs[cleanName] = normalizePlanActivityInput(metrics);
+                    activityInputs[cleanName] = normalizePlanActivityInput(metrics, cleanName);
                 });
                 (Array.isArray(raw?.calendarPlacements) ? raw.calendarPlacements : []).forEach((placement, index) => {
                     const eventName = String(placement?.eventName || '').trim();
@@ -6435,13 +6612,17 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                 const activityInputMap = currentMonthPlan.activityInputs || {};
                 const placementList = Array.isArray(currentMonthPlan.calendarPlacements) ? currentMonthPlan.calendarPlacements : [];
                 const profitSplit = normalizePlanProfitSplit(currentMonthPlan.profitSplit);
-                const placementCountMap = {};
+                const placementSessionMap = {};
                 const placementByCell = {};
                 placementList.forEach(placement => {
                     if (!placement?.eventName || !placement?.instructorName || !placement?.dateKey) return;
-                    placementCountMap[placement.eventName] = (placementCountMap[placement.eventName] || 0) + 1;
+                    if (!placementSessionMap[placement.eventName]) placementSessionMap[placement.eventName] = new Set();
+                    placementSessionMap[placement.eventName].add(String(placement.dateKey || '').trim());
                     placementByCell[buildPlanningCellKey(placement.dateKey, placement.instructorName)] = placement;
                 });
+                const placementCountMap = Object.fromEntries(
+                    Object.entries(placementSessionMap).map(([name, dateSet]) => [name, dateSet.size])
+                );
                 const activityNames = Array.from(new Set([
                     ...allEventNames,
                     ...Object.keys(currentMonthKpiActuals.activityMap || {}),
@@ -6458,6 +6639,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                         const manualAvgPax = activityInputMap[name]?.avgPax ?? '';
                         const manualRevenuePerPax = activityInputMap[name]?.revenuePerPax ?? '';
                         const manualCostPerPax = activityInputMap[name]?.costPerPax ?? '';
+                        const templateType = activityInputMap[name]?.templateType || inferPlanActivityTemplateType(name);
                         const autoAvgPax = actualActivity.avgPax ?? '';
                         const autoRevenuePerPax = actualActivity.avgRevenuePerPax ?? '';
                         const autoCostPerPax = actualActivity.avgCostPerPax ?? '';
@@ -6474,6 +6656,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                             simulatedSessions: simulatedActivityCount,
                             isTracked,
                             totalSessions: activityCount,
+                            templateType,
                             avgPax,
                             revenuePerPax,
                             costPerPax,
@@ -6505,12 +6688,19 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     restCount: row.cells.filter(cell => cell.state === 'rest').length,
                     simulatedCount: row.cells.filter(cell => placementByCell[buildPlanningCellKey(cell.dateKey, row.name)]).length
                 }));
+                const simulatedInstructorDays = placementList.length;
                 const simulatedSessions = activityRows.reduce((sum, row) => sum + row.simulatedSessions, 0);
                 const plannedPax = activityRows.reduce((sum, row) => sum + (row.activityCount * (Number(row.avgPax) || 0)), 0);
                 const plannedGrossProfit = activityRows.reduce((sum, row) => sum + row.projectedGrossProfit, 0);
                 const droppedSessions = activityRows.reduce((sum, row) => sum + row.droppedSessions, 0);
                 const companyGrossProfit = plannedGrossProfit * ((profitSplit.companyPct || 0) / 100);
                 const bonusGrossProfit = plannedGrossProfit * ((profitSplit.bonusPct || 0) / 100);
+                const openInstructorDays = Math.max(
+                    0,
+                    (currentMonthKpiActuals.availableInstructorDays || 0)
+                    - (currentMonthKpiActuals.busyInstructorDays || 0)
+                    - simulatedInstructorDays
+                );
 
                 return {
                     activityRows,
@@ -6521,8 +6711,10 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     placementCount: placementList.length,
                     profitSplit,
                     summary: {
-                        openInstructorDays: currentMonthKpiActuals.inventoryDays,
+                        totalSchedulableInstructorDays: currentMonthKpiActuals.availableInstructorDays,
+                        openInstructorDays,
                         actualBusyInstructorDays: currentMonthKpiActuals.busyInstructorDays,
+                        simulatedInstructorDays,
                         restInstructorDays: currentMonthKpiActuals.restInstructorDays,
                         companyRestDays: currentMonthKpiActuals.companyRestDays,
                         simulatedSessions,
@@ -6589,7 +6781,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                 const cleanName = String(eventName || '').trim();
                 if (!cleanName) return;
                 updateCurrentMonthPlan(current => {
-                    const currentEntry = current.activityInputs?.[cleanName] || buildDefaultPlanActivityInput();
+                        const currentEntry = current.activityInputs?.[cleanName] || buildDefaultPlanActivityInput(inferPlanActivityTemplateType(cleanName));
                     const parsed = value === '' ? '' : parseFloat(value);
                     return {
                         ...current,
@@ -6610,7 +6802,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     const parsed = value === '' ? '' : parseFloat(value);
                     const nextInputs = { ...(current.activityInputs || {}) };
                     cleanNames.forEach(name => {
-                        const currentEntry = nextInputs[name] || buildDefaultPlanActivityInput();
+                        const currentEntry = nextInputs[name] || buildDefaultPlanActivityInput(inferPlanActivityTemplateType(name));
                         nextInputs[name] = {
                             ...currentEntry,
                             [field]: Number.isFinite(parsed) ? parsed : ''
@@ -6636,14 +6828,20 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     };
                 });
             };
-            const handleAddCurrentMonthPlanActivity = (eventName) => {
-                const cleanName = String(eventName || '').trim();
-                if (!cleanName) return;
+            const handleAddCurrentMonthPlanActivity = (activityPayload) => {
+                const rawName = typeof activityPayload === 'string'
+                    ? activityPayload
+                    : (activityPayload?.name || activityPayload?.eventName || '');
+                const rawTemplateType = typeof activityPayload === 'string'
+                    ? inferPlanActivityTemplateType(rawName)
+                    : activityPayload?.templateType;
+                const draft = buildPlanningActivityDraft(rawName, rawTemplateType);
+                if (!draft.name) return;
                 updateCurrentMonthPlan(current => ({
                     ...current,
                     activityInputs: {
                         ...(current.activityInputs || {}),
-                        [cleanName]: current.activityInputs?.[cleanName] || buildDefaultPlanActivityInput()
+                        [draft.name]: current.activityInputs?.[draft.name] || buildDefaultPlanActivityInput(draft.templateType)
                     }
                 }));
             };
@@ -6655,7 +6853,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                 updateCurrentMonthPlan(current => {
                     const nextInputs = {
                         ...(current.activityInputs || {}),
-                        [cleanEventName]: current.activityInputs?.[cleanEventName] || buildDefaultPlanActivityInput()
+                        [cleanEventName]: current.activityInputs?.[cleanEventName] || buildDefaultPlanActivityInput(inferPlanActivityTemplateType(cleanEventName))
                     };
                     const sourceKey = buildPlanningCellKey(sourceDateKey, sourceInstructorName);
                     const targetKey = buildPlanningCellKey(cleanDateKey, cleanInstructorName);
