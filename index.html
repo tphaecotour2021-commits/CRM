@@ -49,7 +49,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@300;400;500;600;700&family=Noto+Serif+TC:wght@600;700;900&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; -webkit-tap-highlight-color: transparent; }
         .fade-in { animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -80,7 +80,6 @@
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; border: 2px solid transparent; background-clip: content-box; }
-        
         /* 像素風圖片修正 */
         .pixel-art { image-rendering: pixelated; }
         .schedule-title-wrap { overflow: visible; }
@@ -312,14 +311,17 @@
         const APP_BUILD = '2026-03-03 23:45';
         const readFlag = (key, defaultValue = false) => {
             try {
-                return localStorage.getItem(key) === '1';
+                const raw = localStorage.getItem(key);
+                if (raw === null) return defaultValue;
+                return raw === '1';
             } catch (_) {
                 return defaultValue;
             }
         };
-        // Emergency quota guard: analytics writes are OFF by default on Spark plan.
-        const ANALYTICS_WRITE_ENABLED = readFlag('crm_enable_analytics_write', false);
-        const MASCOT_WRITE_ENABLED = readFlag('crm_enable_mascot_write', false);
+        // Analytics writes are enabled by default; set localStorage crm_enable_analytics_write=0 to disable.
+        const ANALYTICS_WRITE_ENABLED = readFlag('crm_enable_analytics_write', true);
+        // Mascot writes are enabled by default; set localStorage crm_enable_mascot_write=0 to disable.
+        const MASCOT_WRITE_ENABLED = readFlag('crm_enable_mascot_write', true);
         const CSV_HEADER = "日期,活動名稱,講師,客戶姓名,金額,交通方式,身分證字號,生日,Email,報名管道,社群暱稱,備註,訂購日,手機,報到狀態";
        
         // --- Utils & Constants ---
@@ -464,6 +466,21 @@
             { filename: 'climbing.gif', label: '山林取材', weight: 35 },
             { filename: 'frog_jumping.gif', label: '野外觀察', weight: 25 }
         ];
+        const DEFAULT_CARPOOL_CAPACITY = 4;
+        const DEFAULT_MASCOT_THEMES = [
+            {
+                id: 'default_flying_squirrel',
+                name: '飛鼠系列',
+                keywords: '飛鼠,滑翔',
+                gifs: [
+                    { filename: 'eating.gif', action: '吃東西', weight: 20 },
+                    { filename: 'cleaning.gif', action: '打掃', weight: 35 },
+                    { filename: 'climbing.gif', action: '攀岩', weight: 35 },
+                    { filename: 'sliding.gif', action: '滑行', weight: 8 },
+                    { filename: 'milking.gif', action: '喝奶', weight: 2 }
+                ]
+            }
+        ];
 
         const normalizePublicSideDecor = (decor) => ({
             ...DEFAULT_PUBLIC_SIDE_DECOR,
@@ -473,7 +490,6 @@
             offsetX: Number((decor && decor.offsetX) ?? DEFAULT_PUBLIC_SIDE_DECOR.offsetX),
             mobileWidth: Number((decor && decor.mobileWidth) ?? DEFAULT_PUBLIC_SIDE_DECOR.mobileWidth)
         });
-
         const COLOR_OPTIONS = [
             { value: 'blue', label: '藍色 (正常)', bg: 'bg-blue-50', border: 'border-blue-100', text: 'text-blue-600', hover: 'hover:bg-blue-100' },
             { value: 'green', label: '綠色 (充足)', bg: 'bg-green-50', border: 'border-green-100', text: 'text-green-600', hover: 'hover:bg-green-100' },
@@ -1295,22 +1311,8 @@ ${worksheetXml}
         };
 
         const EventMascot = ({ eventName, db, dbSource, dailyStats, config }) => {
-            const defaultThemes = [
-                { 
-                    id: 'default',
-                    keywords: '飛鼠,滑翔', 
-                    gifs: [
-                        { filename: 'eating.gif', action: '吃東西', weight: 20 },
-                        { filename: 'cleaning.gif', action: '打掃', weight: 35 },
-                        { filename: 'climbing.gif', action: '攀岩', weight: 35 },
-                        { filename: 'sliding.gif', action: '滑行', weight: 8 },
-                        { filename: 'milking.gif', action: '喝奶', weight: 2 }
-                    ]
-                }
-            ];
-
-            const themes = Array.isArray(config) && config.length > 0 ? config : defaultThemes;
-            const hasCounted = useRef(false);
+            const themes = Array.isArray(config) && config.length > 0 ? config : DEFAULT_MASCOT_THEMES;
+            const countedMascotKeyRef = useRef('');
 
             const matchedTheme = useMemo(() => {
                 if (!eventName) return null;
@@ -1320,6 +1322,10 @@ ${worksheetXml}
                     return keywords.some(k => String(eventName || '').includes(k));
                 });
             }, [eventName, themes]);
+
+            const matchedThemeSignature = matchedTheme
+                ? `${matchedTheme.id || matchedTheme.name || matchedTheme.keywords || 'theme'}__${(matchedTheme.gifs || []).map(item => `${item.filename}:${item.action}:${item.weight}`).join('|')}`
+                : '';
 
             const selectedItem = useMemo(() => {
                 if (!matchedTheme) return null;
@@ -1333,33 +1339,41 @@ ${worksheetXml}
                     random -= (Number(item.weight) || 0);
                 }
                 return gifList[0];
-            }, [matchedTheme]);
+            }, [matchedThemeSignature]);
 
             const gifSrc = selectedItem?.filename || '';
             const actionName = selectedItem?.action || '';
+            const mascotCounterKey = useMemo(() => {
+                if (!matchedTheme) return '';
+                const rawKey = String(matchedTheme.id || matchedTheme.name || matchedTheme.keywords || gifSrc || 'mascot');
+                return rawKey
+                    .replace(/[.\s/\\#?%]+/g, '_')
+                    .replace(/_+/g, '_')
+                    .replace(/^_+|_+$/g, '')
+                    .toLowerCase();
+            }, [matchedTheme, gifSrc]);
 
             useEffect(() => {
-                if (!MASCOT_WRITE_ENABLED || !db || !dbSource || hasCounted.current || !gifSrc) return;
-                hasCounted.current = true; 
+                if (!MASCOT_WRITE_ENABLED || !db || !dbSource || !gifSrc || !mascotCounterKey) return;
+                if (countedMascotKeyRef.current === mascotCounterKey) return;
+                countedMascotKeyRef.current = mascotCounterKey;
 
                 const todayStr = getLocalDateStr();
                 const docRef = doc(db, `artifacts/${dbSource}/analytics`, 'stats', 'daily', todayStr);
-                const safeKey = gifSrc.replace(/\./g, '_');
                 
                 // Safety check for Firestore increment
                 if (firebase && firebase.firestore && firebase.firestore.FieldValue) {
                     setDoc(docRef, {
                         mascots: {
-                            [safeKey]: firebase.firestore.FieldValue.increment(1)
+                            [mascotCounterKey]: firebase.firestore.FieldValue.increment(1)
                         }
                     }, { merge: true }).catch(console.error);
                 }
-            }, [db, dbSource, gifSrc]);
+            }, [db, dbSource, gifSrc, mascotCounterKey]);
 
             if (!gifSrc) return null;
 
-            const safeKey = gifSrc.replace(/\./g, '_');
-            const luckyNumber = (dailyStats && dailyStats.mascots && dailyStats.mascots[safeKey]) ? dailyStats.mascots[safeKey] : 1;
+            const luckyNumber = (dailyStats && dailyStats.mascots && dailyStats.mascots[mascotCounterKey]) ? dailyStats.mascots[mascotCounterKey] : 1;
 
             return (
                 <div className="absolute bottom-0 right-0 z-10 pointer-events-none flex flex-row items-end">
@@ -6948,7 +6962,6 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
             const toggleFilter = (type, value) => { setPublicFilters(prev => { const list = prev[type]; if (list.includes(value)) { return { ...prev, [type]: list.filter(item => item !== value) }; } else { return { ...prev, [type]: [...list, value] }; } }); };
             const clearFilters = () => setPublicFilters({ level: [], type: [], location: [] });
             const hasActiveFilters = publicFilters.level.length > 0 || publicFilters.type.length > 0 || publicFilters.location.length > 0;
-
             useEffect(() => {
                 const selectedOuting = outingDays[selectedPublicDate];
                 if (!selectedOuting?.enabled || selectedOuting?.posterFilename) {
@@ -6977,7 +6990,6 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     const currentMonthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}`;
                     const appliedTheme = normalizePublicTheme(publicTheme);
                     const appliedSideDecor = normalizePublicSideDecor(publicSideDecor);
-                    
                     return (
                     <div className="min-h-screen pb-20 relative" style={{ background: `linear-gradient(180deg, ${appliedTheme.pageBg} 0%, ${appliedTheme.pageBgAlt} 100%)`, color: appliedTheme.textColor }}>
                         <nav className="glass-nav sticky top-0 z-50 px-6 py-4 flex justify-between items-center relative" style={{ backgroundColor: `${appliedTheme.surfaceBg}f2`, borderBottomColor: appliedTheme.surfaceBorder }}><Logo className="h-8 w-auto" /><button onClick={() => setShowLoginModal(true)} className="text-sm flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors" style={{ color: appliedTheme.textColor, backgroundColor: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.color = appliedTheme.accentColor} onMouseLeave={(e) => e.currentTarget.style.color = appliedTheme.textColor}><Icon name="lock" size={14}/> 管理員登入</button></nav>
@@ -7208,6 +7220,11 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
     
     const statusBadgeClass = status.isFull ? "bg-slate-600 text-white" : `${status.colorObj?.bg || 'bg-blue-50'} ${status.colorObj?.text || 'text-blue-600'}`;
     const tags = cfg.tags || {};
+    const carpoolCount = Array.isArray(e.customers) ? e.customers.filter(customer => customer && customer.transport === '共乘').length : 0;
+    const remainingCarpoolSeats = Math.max(DEFAULT_CARPOOL_CAPACITY - carpoolCount, 0);
+    const carpoolHint = remainingCarpoolSeats > 0
+        ? `付費共乘剩餘 ${remainingCarpoolSeats} 位`
+        : '付費共乘基本已滿，可洽詢粉專客服';
 
     return (
         // --- [新增 3] 加入 data-analytics-event 屬性 ---
@@ -7228,7 +7245,14 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
     </div>
                 <div className="flex flex-col items-end gap-1">
                     <span className={`text-xs px-2 py-1 rounded-lg font-bold ${statusBadgeClass}`}>{status.label}</span>
-                    {!status.isEnded && (<span className="text-[10px] text-slate-500 font-bold bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">目前: <span className="text-blue-600">{e.count}</span> 人</span>)}
+                    {!status.isEnded && (
+                        <div className="flex flex-col items-end gap-1">
+                            <span className="text-[10px] text-slate-500 font-bold bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">目前: <span className="text-blue-600">{e.count}</span> 人</span>
+                            <span className={`max-w-[160px] text-right text-[10px] font-bold leading-4 ${remainingCarpoolSeats > 0 ? 'text-orange-500' : 'text-rose-500'}`}>
+                                {carpoolHint}
+                            </span>
+                        </div>
+                    )}
                 </div>
             </div>
 
