@@ -467,6 +467,19 @@
             { filename: 'frog_jumping.gif', label: '野外觀察', weight: 25 }
         ];
         const DEFAULT_CARPOOL_CAPACITY = 4;
+        const CARPOOL_DISPLAY_MODE_OPTIONS = [
+            { value: 'normal', label: '顯示剩餘名額', helper: '前台顯示付費共乘剩餘名額' },
+            { value: 'none', label: '顯示無共乘', helper: '前台固定顯示本活動無共乘' }
+        ];
+        const DEFAULT_NO_CARPOOL_EVENT_NAMES = new Set(['大安鼠', '新店鼠']);
+        const getDefaultCarpoolDisplayModeForEventName = (eventName = '') => (
+            DEFAULT_NO_CARPOOL_EVENT_NAMES.has(String(eventName || '').trim()) ? 'none' : 'normal'
+        );
+        const resolveCarpoolDisplayMode = (value, eventName = '') => (
+            value === 'none' || value === 'normal'
+                ? value
+                : getDefaultCarpoolDisplayModeForEventName(eventName)
+        );
         const DEFAULT_MASCOT_THEMES = [
             {
                 id: 'default_flying_squirrel',
@@ -1528,6 +1541,7 @@ ${worksheetXml}
             const [backendColor, setBackendColor] = useState(config?.backendColor || '#eff6ff'); 
             const [displayName, setDisplayName] = useState(config?.displayName || '');
             const [activityCategory, setActivityCategory] = useState(config?.activityCategory || '');
+            const [carpoolDisplayMode, setCarpoolDisplayMode] = useState(resolveCarpoolDisplayMode(config?.carpoolDisplayMode, event.eventName));
             const [tasks, setTasks] = useState(config?.tasks || JSON.parse(JSON.stringify(DEFAULT_TASKS_TEMPLATE)));
             const [leadInstructors, setLeadInstructors] = useState(
                 config?.leadInstructors && config.leadInstructors.length > 0
@@ -1562,6 +1576,7 @@ ${worksheetXml}
                     backendColor !== (config?.backendColor || '#eff6ff') ||
                     displayName !== (config?.displayName || '') ||
                     activityCategory !== (config?.activityCategory || '') ||
+                    carpoolDisplayMode !== resolveCarpoolDisplayMode(config?.carpoolDisplayMode, event.eventName) ||
                     currentInstr !== originalInstr ||
                     JSON.stringify(leadInstructors) !== JSON.stringify(originalLeadInstructors) ||
                     JSON.stringify(supportInstructors) !== JSON.stringify(originalSupportInstructors) ||
@@ -1570,7 +1585,7 @@ ${worksheetXml}
                     JSON.stringify(statusRules) !== JSON.stringify(config?.statusRules || globalRules || DEFAULT_STATUS_RULES) ||
                     isCancelled !== !!config?.isCancelled
                 );
-            }, [internalName, capacity, eventNote, eventTime, eventLink, backendColor, displayName, activityCategory, leadInstructors, supportInstructors, tasks, tags, statusRules, isCancelled, event, config]);
+            }, [internalName, capacity, eventNote, eventTime, eventLink, backendColor, displayName, activityCategory, carpoolDisplayMode, leadInstructors, supportInstructors, tasks, tags, statusRules, isCancelled, event, config]);
 
             // 攔截關閉請求
             const handleRequestClose = () => {
@@ -1620,7 +1635,7 @@ ${worksheetXml}
 
             const handleSave = () => { 
                 const newInstructorStr = Array.from(new Set([...leadInstructors, ...supportInstructors])).sort().join(' & ');
-                onSaveConfig({ capacity: parseInt(capacity), tasks, note: eventNote, time: eventTime, link: eventLink, statusRules, displayName, activityCategory, tags, backendColor, isCancelled, leadInstructors, supportInstructors }, newInstructorStr, internalName);    
+                onSaveConfig({ capacity: parseInt(capacity), tasks, note: eventNote, time: eventTime, link: eventLink, statusRules, displayName, activityCategory, carpoolDisplayMode, tags, backendColor, isCancelled, leadInstructors, supportInstructors }, newInstructorStr, internalName);    
                 onClose(); 
             };
             
@@ -1785,6 +1800,26 @@ ${worksheetXml}
                                         <label className="text-xs font-bold text-indigo-600 mb-1 block flex items-center gap-1"><Icon name="bar-chart-2" size={12}/> 活動性質名稱 (成效分析用)</label>
                                         <input type="text" className="w-full px-3 py-2 text-sm border border-indigo-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 bg-indigo-50/30" placeholder="例如: 象山夜間導覽 (將合併多場次分析)" value={activityCategory} onChange={e=>setActivityCategory(e.target.value)} />
                                         <p className="text-[10px] text-slate-400 mt-1">若填寫此欄位，在成效分析頁面將以此名稱合併計算不同日期的同性質活動。</p>
+                                    </div>
+
+                                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                                        <label className="text-xs font-bold text-amber-700 mb-2 block">前台共乘顯示</label>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            {CARPOOL_DISPLAY_MODE_OPTIONS.map(option => {
+                                                const isActive = carpoolDisplayMode === option.value;
+                                                return (
+                                                    <button
+                                                        key={option.value}
+                                                        type="button"
+                                                        onClick={() => setCarpoolDisplayMode(option.value)}
+                                                        className={`rounded-lg border px-3 py-2 text-left transition-all ${isActive ? 'border-amber-500 bg-white shadow-sm' : 'border-amber-100 bg-white/70 hover:border-amber-300'}`}
+                                                    >
+                                                        <div className={`text-xs font-bold ${isActive ? 'text-amber-700' : 'text-slate-600'}`}>{option.label}</div>
+                                                        <div className="text-[10px] text-slate-400 mt-1">{option.helper}</div>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
 
                                     <div className="bg-white p-3 rounded-lg border border-slate-200">
@@ -2135,9 +2170,15 @@ ${worksheetXml}
                 eventName: '', 
                 instructors: normalizedInitialInstructors, 
                 time: '', 
+                duration: 1,
+                prepDays: 0,
+                prepTime: '',
                 link: '', 
+                note: '',
                 displayName: '', 
                 activityCategory: '', 
+                carpoolDisplayMode: '',
+                isCancelled: false,
                 capacity: 12, 
                 price: '', // 新增價格
                 tags: { levels: '', types: '', locations: '' }, 
@@ -2154,9 +2195,15 @@ ${worksheetXml}
                 eventName: '', 
                 instructor: '', 
                 time: '', 
+                duration: 1,
+                prepDays: 0,
+                prepTime: '',
                 link: '', 
+                note: '',
                 displayName: '', 
                 activityCategory: '', 
+                carpoolDisplayMode: '',
+                isCancelled: false,
                 capacity: 12, 
                 price: '', // 新增價格
                 tags: { levels: '', types: '', locations: '' }, 
@@ -2217,9 +2264,15 @@ const removeFormRule = (idx) => {
                     eventName: tpl.eventName, 
                     instructors: nextInstructors, 
                     time: tpl.time || '', 
+                    duration: parseInt(tpl.duration, 10) || 1,
+                    prepDays: parseInt(tpl.prepDays, 10) || 0,
+                    prepTime: tpl.prepTime || '',
                     link: tpl.link || '', 
+                    note: tpl.note || '',
                     displayName: tpl.displayName || '',
                     activityCategory: tpl.activityCategory || '',
+                    carpoolDisplayMode: resolveCarpoolDisplayMode(tpl.carpoolDisplayMode, tpl.eventName),
+                    isCancelled: !!tpl.isCancelled,
                     capacity: tpl.capacity || 12, 
                     price: tpl.price || '', // 載入價格
                     tags: tpl.tags || { levels: '', types: '', locations: '' },
@@ -2236,9 +2289,15 @@ const removeFormRule = (idx) => {
                     eventName: tpl.eventName, 
                     instructor: tpl.instructor, 
                     time: tpl.time || '', 
+                    duration: parseInt(tpl.duration, 10) || 1,
+                    prepDays: parseInt(tpl.prepDays, 10) || 0,
+                    prepTime: tpl.prepTime || '',
                     link: tpl.link || '', 
+                    note: tpl.note || '',
                     displayName: tpl.displayName || '',
                     activityCategory: tpl.activityCategory || '',
+                    carpoolDisplayMode: resolveCarpoolDisplayMode(tpl.carpoolDisplayMode, tpl.eventName),
+                    isCancelled: !!tpl.isCancelled,
                     capacity: tpl.capacity || 12, 
                     price: tpl.price || '', // 載入價格
                     tags: tpl.tags || { levels: '', types: '', locations: '' },
@@ -2258,7 +2317,7 @@ const removeFormRule = (idx) => {
                 if (!newTemplateData.name) { alert("請輸入模板名稱"); return; } 
                 onSaveTemplate(newTemplateData); 
                 setIsCreatingTemplate(false); 
-                setNewTemplateData({ id: null, name: '', eventName: '', instructor: '', time: '', link: '', displayName: '', activityCategory: '', capacity: 12, price: '', tags: { levels: '', types: '', locations: '' }, backendColor: '#eff6ff', statusRules: [] }); 
+                setNewTemplateData({ id: null, name: '', eventName: '', instructor: '', time: '', duration: 1, prepDays: 0, prepTime: '', link: '', note: '', displayName: '', activityCategory: '', carpoolDisplayMode: '', isCancelled: false, capacity: 12, price: '', tags: { levels: '', types: '', locations: '' }, backendColor: '#eff6ff', statusRules: [] }); 
             };
             
             const renderCalendar = () => {
@@ -2334,6 +2393,11 @@ const removeFormRule = (idx) => {
                                         <div><label className="block text-sm font-medium text-slate-700 mb-1">4. 活動時間</label><input type="time" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" value={formData.time} onChange={e=>setFormData({...formData, time: e.target.value})}/></div> 
                                         <div><label className="block text-sm font-medium text-slate-700 mb-1">人數上限</label><input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" value={formData.capacity} onChange={e=>setFormData({...formData, capacity: e.target.value})}/></div> 
                                     </div>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <div><label className="block text-sm font-medium text-slate-700 mb-1">持續天數</label><input type="number" min="1" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" value={formData.duration} onChange={e=>setFormData({...formData, duration: e.target.value})}/></div>
+                                        <div><label className="block text-sm font-medium text-slate-700 mb-1">前置天數</label><input type="number" min="0" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" value={formData.prepDays} onChange={e=>setFormData({...formData, prepDays: e.target.value})}/></div>
+                                        <div><label className="block text-sm font-medium text-slate-700 mb-1">前置時間</label><input type="time" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" value={formData.prepTime} onChange={e=>setFormData({...formData, prepTime: e.target.value})}/></div>
+                                    </div>
                                     <div className="grid grid-cols-2 gap-3">
                                         <div><label className="block text-sm font-medium text-slate-700 mb-1">5. 預設價格</label><input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" placeholder="0" value={formData.price} onChange={e=>setFormData({...formData, price: e.target.value})}/></div>
                                         <div><label className="block text-sm font-medium text-slate-700 mb-1">後台顏色</label><input type="color" className="w-full h-[40px] p-1 border border-slate-300 rounded-lg cursor-pointer" value={formData.backendColor} onChange={e=>setFormData({...formData, backendColor: e.target.value})} title="此顏色僅在後台可見"/></div>
@@ -2341,16 +2405,25 @@ const removeFormRule = (idx) => {
                                     <div><label className="block text-sm font-medium text-slate-700 mb-1">6. 活動網址</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" placeholder="https://..." value={formData.link} onChange={e=>setFormData({...formData, link: e.target.value})}/></div> 
                                     <div><label className="block text-sm font-medium text-slate-700 mb-1">7. 前台顯示名稱 (選填)</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" placeholder="例如: 冬季夜訪蛙類" value={formData.displayName} onChange={e=>setFormData({...formData, displayName: e.target.value})}/></div>
                                     <div><label className="block text-sm font-medium text-indigo-600 mb-1">8. 活動性質名稱 (選填)</label><input type="text" className="w-full px-3 py-2 border border-indigo-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 bg-indigo-50/20" placeholder="例如: 象山夜間導覽" value={formData.activityCategory} onChange={e=>setFormData({...formData, activityCategory: e.target.value})}/></div>
+                                    <div><label className="block text-sm font-medium text-slate-700 mb-1">9. 前台共乘顯示</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" value={resolveCarpoolDisplayMode(formData.carpoolDisplayMode, formData.eventName)} onChange={e=>setFormData({...formData, carpoolDisplayMode: e.target.value})}>{CARPOOL_DISPLAY_MODE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
+                                    <div><label className="block text-sm font-medium text-slate-700 mb-1">10. 活動專屬備註</label><textarea className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 h-20 resize-none" placeholder="例如：集合提醒、裝備說明..." value={formData.note} onChange={e=>setFormData({...formData, note: e.target.value})}></textarea></div>
+                                    <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 flex items-center justify-between">
+                                        <div>
+                                            <div className="text-sm font-medium text-rose-700">11. 預設標記流團</div>
+                                            <div className="text-[10px] text-rose-500 mt-0.5">建立活動時直接帶入流團標記</div>
+                                        </div>
+                                        <button type="button" onClick={()=>setFormData({...formData, isCancelled: !formData.isCancelled})} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${formData.isCancelled ? 'bg-rose-600 text-white border-rose-700' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}>{formData.isCancelled ? '已標記流團' : '標記為流團'}</button>
+                                    </div>
                                     
                                     <div className="bg-slate-50 p-2 rounded-lg border border-slate-200">
-    <label className="text-xs font-bold text-slate-500 mb-2 block">9. 預設活動標籤</label>
+    <label className="text-xs font-bold text-slate-500 mb-2 block">12. 預設活動標籤</label>
     <TagSelector definitions={tagDefinitions} value={formData.tags} onChange={(type, val) => setFormData({...formData, tags: {...formData.tags, [type]: val}})} onAddTag={onAddTag} />
 </div>
 
 {/* --- 新增：快速開團介面顯示狀態規則 (UI) --- */}
 <div className="bg-white border border-slate-200 rounded-lg p-3">
     <label className="text-xs font-bold text-slate-500 mb-2 block flex justify-between">
-        <span>10. 自定義狀態規則 (依照人數顯示)</span>
+        <span>13. 自定義狀態規則 (依照人數顯示)</span>
         <span className="text-[10px] bg-slate-100 px-1 rounded font-normal">從上到下匹配</span>
     </label>
     <div className="space-y-2 mb-3">
@@ -2414,7 +2487,7 @@ const removeFormRule = (idx) => {
                         </> 
                         ) : ( 
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3"> 
-                            <div className="flex justify-between"><h4 className="font-bold">{newTemplateData.id ? '編輯模板' : '建立新模板'}</h4><button onClick={()=>{setIsCreatingTemplate(false);setNewTemplateData({id:null,name:'',eventName:'',instructor:'',time:'',link:'',displayName:'', activityCategory: '', capacity: 12, price: '', tags: { levels: '', types: '', locations: '' }, backendColor: '#eff6ff', statusRules: []})}} className="text-sm text-slate-500">取消</button></div> 
+                            <div className="flex justify-between"><h4 className="font-bold">{newTemplateData.id ? '編輯模板' : '建立新模板'}</h4><button onClick={()=>{setIsCreatingTemplate(false);setNewTemplateData({id:null,name:'',eventName:'',instructor:'',time:'',duration:1,prepDays:0,prepTime:'',link:'',note:'',displayName:'', activityCategory: '', carpoolDisplayMode: '', isCancelled:false, capacity: 12, price: '', tags: { levels: '', types: '', locations: '' }, backendColor: '#eff6ff', statusRules: []})}} className="text-sm text-slate-500">取消</button></div> 
                             <input type="text" className="w-full px-3 py-2 text-sm border rounded-lg" placeholder="模板名稱 (如: 豪華團)" value={newTemplateData.name} onChange={e=>setNewTemplateData({...newTemplateData, name: e.target.value})}/> 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"> 
                                 <input type="text" className="w-full px-3 py-2 text-sm border rounded-lg" placeholder="預設活動名稱" value={newTemplateData.eventName} onChange={e=>setNewTemplateData({...newTemplateData, eventName: e.target.value})}/> 
@@ -2424,13 +2497,27 @@ const removeFormRule = (idx) => {
                                 <div><label className="block text-xs font-bold text-slate-500 mb-1">預設時間</label><input type="time" className="w-full px-3 py-2 text-sm border rounded-lg" value={newTemplateData.time} onChange={e=>setNewTemplateData({...newTemplateData, time: e.target.value})}/></div>
                                 <div><label className="block text-xs font-bold text-slate-500 mb-1">預設人數</label><input type="number" className="w-full px-3 py-2 text-sm border rounded-lg" value={newTemplateData.capacity} onChange={e=>setNewTemplateData({...newTemplateData, capacity: e.target.value})}/></div>
                             </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div><label className="block text-xs font-bold text-slate-500 mb-1">持續天數</label><input type="number" min="1" className="w-full px-3 py-2 text-sm border rounded-lg" value={newTemplateData.duration} onChange={e=>setNewTemplateData({...newTemplateData, duration: e.target.value})}/></div>
+                                <div><label className="block text-xs font-bold text-slate-500 mb-1">前置天數</label><input type="number" min="0" className="w-full px-3 py-2 text-sm border rounded-lg" value={newTemplateData.prepDays} onChange={e=>setNewTemplateData({...newTemplateData, prepDays: e.target.value})}/></div>
+                                <div><label className="block text-xs font-bold text-slate-500 mb-1">前置時間</label><input type="time" className="w-full px-3 py-2 text-sm border rounded-lg" value={newTemplateData.prepTime} onChange={e=>setNewTemplateData({...newTemplateData, prepTime: e.target.value})}/></div>
+                            </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div><label className="block text-xs font-bold text-slate-500 mb-1">預設價格 (R欄)</label><input type="number" className="w-full px-3 py-2 text-sm border rounded-lg" placeholder="900" value={newTemplateData.price} onChange={e=>setNewTemplateData({...newTemplateData, price: e.target.value})}/></div>
                                 <div><label className="block text-xs font-bold text-slate-500 mb-1">後台顏色</label><input type="color" className="w-full h-[36px] p-1 border rounded-lg cursor-pointer" value={newTemplateData.backendColor} onChange={e=>setNewTemplateData({...newTemplateData, backendColor: e.target.value})}/></div>
                             </div>
                             <div><label className="block text-xs font-bold text-slate-500 mb-1">預設網址</label><input type="text" className="w-full px-3 py-2 text-sm border rounded-lg" placeholder="https://..." value={newTemplateData.link} onChange={e=>setNewTemplateData({...newTemplateData, link: e.target.value})}/></div>
+                            <div><label className="block text-xs font-bold text-slate-500 mb-1">預設備註</label><textarea className="w-full px-3 py-2 text-sm border rounded-lg h-20 resize-none" placeholder="例如：集合地點提醒、裝備提醒..." value={newTemplateData.note} onChange={e=>setNewTemplateData({...newTemplateData, note: e.target.value})}></textarea></div>
                             <div><label className="block text-xs font-bold text-slate-500 mb-1">預設前台名稱</label><input type="text" className="w-full px-3 py-2 text-sm border rounded-lg" placeholder="例如: 冬季夜訪蛙類" value={newTemplateData.displayName} onChange={e=>setNewTemplateData({...newTemplateData, displayName: e.target.value})}/></div>
                             <div><label className="block text-xs font-bold text-indigo-600 mb-1">預設性質名稱</label><input type="text" className="w-full px-3 py-2 text-sm border rounded-lg border-indigo-200 bg-indigo-50/20" placeholder="例如: 象山夜間導覽" value={newTemplateData.activityCategory} onChange={e=>setNewTemplateData({...newTemplateData, activityCategory: e.target.value})}/></div>
+                            <div><label className="block text-xs font-bold text-slate-500 mb-1">預設共乘顯示</label><select className="w-full px-3 py-2 text-sm border rounded-lg" value={resolveCarpoolDisplayMode(newTemplateData.carpoolDisplayMode, newTemplateData.eventName)} onChange={e=>setNewTemplateData({...newTemplateData, carpoolDisplayMode: e.target.value})}>{CARPOOL_DISPLAY_MODE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
+                            <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 flex items-center justify-between">
+                                <div>
+                                    <div className="text-xs font-bold text-rose-700">預設標記流團</div>
+                                    <div className="text-[10px] text-rose-500 mt-0.5">使用模板開團時自動帶入</div>
+                                </div>
+                                <button type="button" onClick={()=>setNewTemplateData({...newTemplateData, isCancelled: !newTemplateData.isCancelled})} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${newTemplateData.isCancelled ? 'bg-rose-600 text-white border-rose-700' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}>{newTemplateData.isCancelled ? '已標記流團' : '標記為流團'}</button>
+                            </div>
                             
                             <div className="bg-white p-2 rounded-lg border border-slate-200">
                                 <label className="text-xs font-bold text-slate-500 mb-2 block">預設活動標籤</label>
@@ -2462,7 +2549,7 @@ const removeFormRule = (idx) => {
                             </div>
                             {/* ---------------------------- */}
 
-                            <div className="flex gap-2">{newTemplateData.id && <button onClick={()=>{if(confirm("確定刪除?")){onDeleteTemplate(newTemplateData.id);setIsCreatingTemplate(false);setNewTemplateData({id:null,name:'',eventName:'',instructor:'',time:'',link:'',displayName:'', activityCategory: '', capacity: 12, price: '', tags: { levels: '', types: '', locations: '' }, backendColor: '#eff6ff', statusRules: []})}}} className="flex-1 py-2 bg-red-100 text-red-600 rounded-lg text-sm">刪除</button>}<button onClick={handleSaveNewTemplate} className="flex-[2] py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">儲存模板</button></div> 
+                            <div className="flex gap-2">{newTemplateData.id && <button onClick={()=>{if(confirm("確定刪除?")){onDeleteTemplate(newTemplateData.id);setIsCreatingTemplate(false);setNewTemplateData({id:null,name:'',eventName:'',instructor:'',time:'',duration:1,prepDays:0,prepTime:'',link:'',note:'',displayName:'', activityCategory: '', carpoolDisplayMode: '', isCancelled:false, capacity: 12, price: '', tags: { levels: '', types: '', locations: '' }, backendColor: '#eff6ff', statusRules: []})}}} className="flex-1 py-2 bg-red-100 text-red-600 rounded-lg text-sm">刪除</button>}<button onClick={handleSaveNewTemplate} className="flex-[2] py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">儲存模板</button></div> 
                         </div> 
                         )} 
                     </div> 
@@ -5389,6 +5476,7 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
             const [kpiSaveStatus, setKpiSaveStatus] = useState('idle');
             const [planningSaveStatus, setPlanningSaveStatus] = useState('idle');
             const [publicFilters, setPublicFilters] = useState({ level: [], type: [], location: [] });
+            const [publicFiltersExpanded, setPublicFiltersExpanded] = useState(false);
             const [dbSource, setDbSource] = useState(() => localStorage.getItem('crm_db_source') || defaultAppId);
             const [isEditingCSV, setIsEditingCSV] = useState(false);
             const isEditingRef = useRef(false);
@@ -5948,7 +6036,7 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
             const handleAddManualReg = async () => { if(!newReg.date || !newReg.eventName || !newReg.customerName) { return; } setAddRegStatus('saving'); let currentData = csvInput.trim(); if (!currentData || !currentData.startsWith("日期")) { currentData = CSV_HEADER + "\n" + currentData; } const newRow = `\n${newReg.date},${newReg.eventName},${newReg.instructor},${newReg.customerName},${newReg.price},${newReg.transport},${newReg.idNo},${newReg.birthday},${newReg.email},${newReg.source},,${newReg.orderDate},${newReg.phone},0`; const updatedCSV = currentData + newRow; await handleSaveCSV(updatedCSV); setNewReg({ date: '', eventName: '', instructor: '', customerName: '', price: '', transport: '', idNo: '', birthday: '', email: '', source: '', orderDate: new Date().toISOString().split('T')[0], phone: '' }); setAddRegStatus('success'); setTimeout(() => setAddRegStatus('idle'), 2000); };
             const handleAddDirectReg = async (eventInfo, customerData) => { let currentData = csvInput.trim(); if (!currentData || !currentData.startsWith("日期")) { currentData = CSV_HEADER + "\n" + currentData; } const newRow = `\n${eventInfo.date},${eventInfo.eventName},${eventInfo.instructor},${customerData.customerName},${customerData.price},${customerData.transport},${customerData.idNo},${customerData.birthday},${customerData.email},${customerData.source},,${toCSVField(customerData.notes)},${customerData.orderDate},${customerData.phone},0`; const updatedCSV = currentData + newRow; await handleSaveCSV(updatedCSV); };
             // 找到原有的 handleCreateEvent，並更新解構與儲存邏輯
-const handleCreateEvent = async ({ dates, eventName, instructors, time, link, displayName, activityCategory, tags, capacity, backendColor, statusRules, price }) => { // 這裡加入 price
+const handleCreateEvent = async ({ dates, eventName, instructors, time, duration, prepDays, prepTime, link, note, displayName, activityCategory, carpoolDisplayMode, isCancelled, tags, capacity, backendColor, statusRules, price }) => { // 這裡加入 price
     let rows = ''; 
     const instr = [...instructors].sort().join(' & ');
     dates.forEach(d => rows += `\n${d},${eventName},${instr},開放報名中,0,,,,,,,,,0`); 
@@ -5959,9 +6047,14 @@ const handleCreateEvent = async ({ dates, eventName, instructors, time, link, di
         const ref = doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', key); 
         setDoc(ref, { 
             time: time || '', 
+            duration: parseInt(duration, 10) || 1,
+            prepDays: parseInt(prepDays, 10) || 0,
+            prepTime: prepTime || '',
             link: link || '', 
+            note: note || '',
             displayName: displayName || '', 
             activityCategory: activityCategory || '', 
+            carpoolDisplayMode: resolveCarpoolDisplayMode(carpoolDisplayMode, eventName),
             capacity: parseInt(capacity) || 12, 
             price: parseInt(price) || 0, // 儲存價格
             tags: tags || { levels: '', types: '', locations: '' },
@@ -5969,7 +6062,7 @@ const handleCreateEvent = async ({ dates, eventName, instructors, time, link, di
             statusRules: statusRules || [],
             leadInstructors: instructors || [],
             supportInstructors: [],
-            isCancelled: false
+            isCancelled: !!isCancelled
         }, { merge: true }); 
     }); 
     await batch.commit(); 
@@ -6962,6 +7055,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
             const toggleFilter = (type, value) => { setPublicFilters(prev => { const list = prev[type]; if (list.includes(value)) { return { ...prev, [type]: list.filter(item => item !== value) }; } else { return { ...prev, [type]: [...list, value] }; } }); };
             const clearFilters = () => setPublicFilters({ level: [], type: [], location: [] });
             const hasActiveFilters = publicFilters.level.length > 0 || publicFilters.type.length > 0 || publicFilters.location.length > 0;
+            const activeFilterCount = publicFilters.level.length + publicFilters.type.length + publicFilters.location.length;
             useEffect(() => {
                 const selectedOuting = outingDays[selectedPublicDate];
                 if (!selectedOuting?.enabled || selectedOuting?.posterFilename) {
@@ -7039,7 +7133,90 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                             </div>
                             <div className="relative mb-2"><Icon name="search" className="absolute left-4 top-3 text-slate-400" size={20}/><input type="text" placeholder="搜尋活動關鍵字..." className="w-full pl-12 pr-4 py-3 border-none rounded-2xl outline-none focus:ring-2 transition-all" style={{ backgroundColor: `${appliedTheme.surfaceBg}`, color: appliedTheme.textColor, boxShadow: `0 0 0 1px ${appliedTheme.surfaceBorder} inset`, '--tw-ring-color': appliedTheme.accentColor }} value={publicSearchTerm} onChange={e => setPublicSearchTerm(e.target.value)} /></div>
                             
-                            <div className="mb-6 p-5 rounded-2xl border shadow-sm" style={{ backgroundColor: appliedTheme.surfaceBg, borderColor: appliedTheme.surfaceBorder }}><div className="flex justify-between items-center mb-4"><h3 className="text-sm font-bold flex items-center gap-2" style={{ color: appliedTheme.titleColor }}><Icon name="filter" size={18} className="text-blue-500"/> 活動篩選</h3>{hasActiveFilters && (<button onClick={clearFilters} className="text-xs text-red-500 hover:bg-red-50 px-2 py-1 rounded-lg transition-colors flex items-center gap-1"><Icon name="x" size={14}/> 重置條件</button>)}</div><div className="space-y-4"><div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4"><span className="text-xs font-bold text-slate-400 w-12 shrink-0 flex items-center gap-1"><Icon name="bar-chart-2" size={12}/> 等級</span><div className="flex flex-wrap gap-2">{(tagDefinitions.levels || []).map(t => { const isActive = publicFilters.level.includes(t); const isAvailable = availableOptions.levels.has(t); return ( <button key={t} onClick={() => toggleFilter('level', t)} disabled={!isAvailable && !isActive} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${ isActive ? 'bg-blue-600 text-white border-blue-600 shadow-md ring-2 ring-blue-100' : !isAvailable ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-blue-300' }`} > {t} </button> ); })}</div></div><div className="border-t border-slate-50 my-2"></div><div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4"><span className="text-xs font-bold text-slate-400 w-12 shrink-0 flex items-center gap-1"><Icon name="tag" size={12}/> 種類</span><div className="flex flex-wrap gap-2">{(tagDefinitions.types || []).map(t => { const isActive = publicFilters.type.includes(t); const isAvailable = availableOptions.types.has(t); return ( <button key={t} onClick={() => toggleFilter('type', t)} disabled={!isAvailable && !isActive} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${ isActive ? 'bg-emerald-600 text-white border-emerald-600 shadow-md ring-2 ring-emerald-100' : !isAvailable ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-emerald-300' }`} > {t} </button> ); })}</div></div><div className="border-t border-slate-50 my-2"></div><div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4"><span className="text-xs font-bold text-slate-400 w-12 shrink-0 flex items-center gap-1"><Icon name="map-pin" size={12}/> 地點</span><div className="flex flex-wrap gap-2">{(tagDefinitions.locations || []).map(t => { const isActive = publicFilters.location.includes(t); const isAvailable = availableOptions.locations.has(t); return ( <button key={t} onClick={() => toggleFilter('location', t)} disabled={!isAvailable && !isActive} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${ isActive ? 'bg-purple-600 text-white border-purple-600 shadow-md ring-2 ring-purple-100' : !isAvailable ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-purple-300' }`} > {t} </button> ); })}</div></div></div></div>
+                            <div className="mb-6 p-5 rounded-2xl border shadow-sm" style={{ backgroundColor: appliedTheme.surfaceBg, borderColor: appliedTheme.surfaceBorder }}>
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <h3 className="text-sm font-bold flex items-center gap-2" style={{ color: appliedTheme.titleColor }}>
+                                                <Icon name="filter" size={18} className="text-blue-500"/> 活動篩選
+                                            </h3>
+                                            {hasActiveFilters && (
+                                                <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-blue-50 text-blue-600 border border-blue-100">
+                                                    已套用 {activeFilterCount} 個條件
+                                                </span>
+                                            )}
+                                        </div>
+                                        {!publicFiltersExpanded && (
+                                            <p className="text-xs text-slate-400 mt-2">
+                                                可展開篩選，更快搜尋到你想找的活動。
+                                            </p>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {hasActiveFilters && (
+                                            <button onClick={clearFilters} className="text-xs text-red-500 hover:bg-red-50 px-2 py-1 rounded-lg transition-colors flex items-center gap-1">
+                                                <Icon name="x" size={14}/> 重置條件
+                                            </button>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => setPublicFiltersExpanded(prev => !prev)}
+                                            className="text-xs font-bold text-slate-600 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 border border-slate-200"
+                                        >
+                                            <Icon name={publicFiltersExpanded ? "chevron-up" : "chevron-down"} size={14}/>
+                                            {publicFiltersExpanded ? '收起篩選' : '展開篩選'}
+                                        </button>
+                                    </div>
+                                </div>
+                                {publicFiltersExpanded && (
+                                    <div className="space-y-4 mt-4 animate-in fade-in slide-in-from-top-2">
+                                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                                            <span className="text-xs font-bold text-slate-400 w-12 shrink-0 flex items-center gap-1"><Icon name="bar-chart-2" size={12}/> 等級</span>
+                                            <div className="flex flex-wrap gap-2">
+                                                {(tagDefinitions.levels || []).map(t => {
+                                                    const isActive = publicFilters.level.includes(t);
+                                                    const isAvailable = availableOptions.levels.has(t);
+                                                    return (
+                                                        <button key={t} onClick={() => toggleFilter('level', t)} disabled={!isAvailable && !isActive} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${ isActive ? 'bg-blue-600 text-white border-blue-600 shadow-md ring-2 ring-blue-100' : !isAvailable ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-blue-300' }`}>
+                                                            {t}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                        <div className="border-t border-slate-50 my-2"></div>
+                                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                                            <span className="text-xs font-bold text-slate-400 w-12 shrink-0 flex items-center gap-1"><Icon name="tag" size={12}/> 種類</span>
+                                            <div className="flex flex-wrap gap-2">
+                                                {(tagDefinitions.types || []).map(t => {
+                                                    const isActive = publicFilters.type.includes(t);
+                                                    const isAvailable = availableOptions.types.has(t);
+                                                    return (
+                                                        <button key={t} onClick={() => toggleFilter('type', t)} disabled={!isAvailable && !isActive} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${ isActive ? 'bg-emerald-600 text-white border-emerald-600 shadow-md ring-2 ring-emerald-100' : !isAvailable ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-emerald-300' }`}>
+                                                            {t}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                        <div className="border-t border-slate-50 my-2"></div>
+                                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                                            <span className="text-xs font-bold text-slate-400 w-12 shrink-0 flex items-center gap-1"><Icon name="map-pin" size={12}/> 地點</span>
+                                            <div className="flex flex-wrap gap-2">
+                                                {(tagDefinitions.locations || []).map(t => {
+                                                    const isActive = publicFilters.location.includes(t);
+                                                    const isAvailable = availableOptions.locations.has(t);
+                                                    return (
+                                                        <button key={t} onClick={() => toggleFilter('location', t)} disabled={!isAvailable && !isActive} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${ isActive ? 'bg-purple-600 text-white border-purple-600 shadow-md ring-2 ring-purple-100' : !isAvailable ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-purple-300' }`}>
+                                                            {t}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
 
                             {/* 月曆搜尋結果提示 (保持原樣) */}
                             {(publicSearchTerm || hasActiveFilters) && matchingMonths.length > 0 && (<div className="mb-6 flex flex-wrap gap-2 animate-in fade-in slide-in-from-top-2"><span className="text-xs text-slate-400 py-1.5 flex items-center"><Icon name="search" size={12} className="mr-1"/> 符合條件的月份：</span>{matchingMonths.sort().map(m => { const isCurrentView = m === currentMonthStr; return (<button key={m} onClick={() => { const [y, mon] = m.split('-'); setCurrentDate(new Date(parseInt(y), parseInt(mon)-1, 1)); }} className={`text-xs px-3 py-1.5 rounded-full font-bold transition-all flex items-center gap-1 ${isCurrentView ? 'bg-slate-800 text-white shadow-md ring-2 ring-slate-200' : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'}`} >{m} {!isCurrentView && <Icon name="arrow-right" size={12}/>}</button>); })}</div>)}
@@ -7220,11 +7397,14 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
     
     const statusBadgeClass = status.isFull ? "bg-slate-600 text-white" : `${status.colorObj?.bg || 'bg-blue-50'} ${status.colorObj?.text || 'text-blue-600'}`;
     const tags = cfg.tags || {};
+    const carpoolDisplayMode = resolveCarpoolDisplayMode(cfg.carpoolDisplayMode, e.eventName);
     const carpoolCount = Array.isArray(e.customers) ? e.customers.filter(customer => customer && customer.transport === '共乘').length : 0;
     const remainingCarpoolSeats = Math.max(DEFAULT_CARPOOL_CAPACITY - carpoolCount, 0);
-    const carpoolHint = remainingCarpoolSeats > 0
-        ? `付費共乘剩餘 ${remainingCarpoolSeats} 位`
-        : '付費共乘基本已滿，可洽詢粉專客服';
+    const carpoolHint = carpoolDisplayMode === 'none'
+        ? '本活動無共乘'
+        : remainingCarpoolSeats > 0
+            ? `付費共乘剩餘 ${remainingCarpoolSeats} 位`
+            : '付費共乘基本已滿，可洽詢粉專客服';
 
     return (
         // --- [新增 3] 加入 data-analytics-event 屬性 ---
@@ -7248,7 +7428,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     {!status.isEnded && (
                         <div className="flex flex-col items-end gap-1">
                             <span className="text-[10px] text-slate-500 font-bold bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">目前: <span className="text-blue-600">{e.count}</span> 人</span>
-                            <span className={`max-w-[160px] text-right text-[10px] font-bold leading-4 ${remainingCarpoolSeats > 0 ? 'text-orange-500' : 'text-rose-500'}`}>
+                            <span className={`max-w-[160px] text-right text-[10px] font-bold leading-4 ${carpoolDisplayMode === 'none' ? 'text-slate-400' : remainingCarpoolSeats > 0 ? 'text-orange-500' : 'text-rose-500'}`}>
                                 {carpoolHint}
                             </span>
                         </div>
