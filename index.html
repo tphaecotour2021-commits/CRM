@@ -4318,40 +4318,69 @@ const removeFormRule = (idx) => {
         };
         const ActivityPerformance = ({ parsedData, eventConfigs }) => {
             const [dimension, setDimension] = useState('category');
-            const [analysisData, setAnalysisData] = useState(null); 
+            const [analysisData, setAnalysisData] = useState(null);
+            const [sectionExpanded, setSectionExpanded] = useState({ past: true, future: false });
 
-    const loyaltyMetrics = useMemo(() => {
-        if (!parsedData || parsedData.length === 0) return { rate: "0.0", heavyRate: "0.0", total: 0 };
-        const counts = {};
-        parsedData.forEach((r) => {
-            const name = r.customerName || r['姓名'];
-            if(name && name !== '開放報名中') {
-                counts[name] = (counts[name] || 0) + 1;
-            }
-        });
-        const total = Object.keys(counts).length;
-        const repeat = Object.values(counts).filter((c) => c > 1).length;
-        const heavy = Object.values(counts).filter((c) => c >= 3).length;
-        
-        return {
-            rate: total > 0 ? ((repeat / total) * 100).toFixed(1) : "0.0",
-            heavyRate: total > 0 ? ((heavy / total) * 100).toFixed(1) : "0.0",
-            total: total
-        };
-    }, [parsedData]);
+            const getDateKey = (value) => {
+                if (!value) return '';
+                if (value instanceof Date) {
+                    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+                }
+                const raw = String(value).trim();
+                const match = raw.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})/);
+                if (!match) return raw;
+                return `${match[1]}-${String(parseInt(match[2], 10)).padStart(2, '0')}-${String(parseInt(match[3], 10)).padStart(2, '0')}`;
+            };
 
-            const activityStats = useMemo(() => {
+            const todayKey = useMemo(() => getDateKey(new Date()), []);
+
+            const validRows = useMemo(
+                () => (parsedData || []).filter(row => row.customerName !== '開放報名中'),
+                [parsedData]
+            );
+
+            const segmentedRows = useMemo(() => {
+                const past = [];
+                const future = [];
+                validRows.forEach(row => {
+                    const dateKey = getDateKey(row.date);
+                    if (dateKey && dateKey >= todayKey) {
+                        future.push(row);
+                    } else {
+                        past.push(row);
+                    }
+                });
+                return { past, future };
+            }, [validRows, todayKey]);
+
+            const buildLoyaltyMetrics = (rows) => {
+                if (!rows || rows.length === 0) return { rate: '0.0', heavyRate: '0.0', total: 0 };
+                const counts = {};
+                rows.forEach(row => {
+                    const name = row.customerName || row['姓名'];
+                    if (name && name !== '開放報名中') {
+                        counts[name] = (counts[name] || 0) + 1;
+                    }
+                });
+                const total = Object.keys(counts).length;
+                const repeat = Object.values(counts).filter(count => count > 1).length;
+                const heavy = Object.values(counts).filter(count => count >= 3).length;
+                return {
+                    rate: total > 0 ? ((repeat / total) * 100).toFixed(1) : '0.0',
+                    heavyRate: total > 0 ? ((heavy / total) * 100).toFixed(1) : '0.0',
+                    total
+                };
+            };
+
+            const buildActivityStats = (rows) => {
                 const stats = {};
-                parsedData.forEach(row => {
-                    if (row.customerName === '開放報名中') return;
-                    
-                    const sortedInstr = row.instructor ? row.instructor.split(/[&,]/).map(s=>s.trim()).sort().join(' & ') : '';
+                rows.forEach(row => {
+                    const sortedInstr = row.instructor ? row.instructor.split(/[&,]/).map(s => s.trim()).sort().join(' & ') : '';
                     const rowKey = `${row.date}_${row.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-');
                     const config = eventConfigs[rowKey] || {};
                     const tags = config.tags || {};
-                    
-                    let groupName = '未分類';
 
+                    let groupName = '未分類';
                     if (dimension === 'category') {
                         groupName = config.activityCategory || row.eventName || '未分類';
                     } else if (dimension === 'name') {
@@ -4368,7 +4397,7 @@ const removeFormRule = (idx) => {
                     stats[groupName].revenue += (row.price || 0);
                     stats[groupName].pax += 1;
                     stats[groupName].sessions.add(row.date + row.instructor);
-                    stats[groupName].rawRows.push(row); 
+                    stats[groupName].rawRows.push(row);
                 });
 
                 return Object.entries(stats).map(([name, data]) => ({
@@ -4381,7 +4410,18 @@ const removeFormRule = (idx) => {
                     arpu: data.pax > 0 ? Math.round(data.revenue / data.pax) : 0,
                     rawRows: data.rawRows
                 })).sort((a, b) => b.revenue - a.revenue);
-            }, [parsedData, eventConfigs, dimension]);
+            };
+
+            const pastActivityStats = useMemo(
+                () => buildActivityStats(segmentedRows.past),
+                [segmentedRows.past, eventConfigs, dimension]
+            );
+            const futureActivityStats = useMemo(
+                () => buildActivityStats(segmentedRows.future),
+                [segmentedRows.future, eventConfigs, dimension]
+            );
+            const pastLoyaltyMetrics = useMemo(() => buildLoyaltyMetrics(segmentedRows.past), [segmentedRows.past]);
+            const futureLoyaltyMetrics = useMemo(() => buildLoyaltyMetrics(segmentedRows.future), [segmentedRows.future]);
 
             const dimensionLabels = {
                 category: '依活動性質 (合併分析)',
@@ -4391,108 +4431,213 @@ const removeFormRule = (idx) => {
                 location: '依活動地點 (標籤)'
             };
 
-            const handleGlobalAnalysis = () => {
-                const validRows = parsedData.filter(row => row.customerName !== '開放報名中');
+            const handleGlobalAnalysis = (title, rows) => {
                 setAnalysisData({
-                    title: '所有活動總體分析',
-                    data: validRows
+                    title,
+                    data: rows
                 });
             };
 
-            const handleItemAnalysis = (item) => {
+            const handleItemAnalysis = (item, scopeLabel) => {
                 setAnalysisData({
-                    title: `分析項目: ${item.name}`,
+                    title: `${scopeLabel}｜分析項目: ${item.name}`,
                     data: item.rawRows
                 });
             };
 
+            const toggleSection = (key) => {
+                setSectionExpanded(prev => ({ ...prev, [key]: !prev[key] }));
+            };
+
+            const renderSection = ({ key, title, description, badgeTone, rows, activityStats, loyaltyMetrics, emptyText, globalAnalysisTitle }) => {
+                const avgRev = activityStats.length > 0
+                    ? Math.round(activityStats.reduce((sum, item) => sum + item.avgRev, 0) / activityStats.length)
+                    : 0;
+                const avgPax = activityStats.length > 0
+                    ? (activityStats.reduce((sum, item) => sum + parseFloat(item.avgPax), 0) / activityStats.length).toFixed(1)
+                    : '0.0';
+                const avgArpu = activityStats.length > 0
+                    ? Math.round(activityStats.reduce((sum, item) => sum + item.arpu, 0) / activityStats.length)
+                    : 0;
+                const topItem = activityStats[0];
+                const isExpanded = sectionExpanded[key];
+
+                return (
+                    <section className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                        <button
+                            type="button"
+                            onClick={() => toggleSection(key)}
+                            className="w-full px-6 py-5 bg-slate-50/70 hover:bg-slate-50 transition-colors flex flex-col gap-3 md:flex-row md:items-center md:justify-between text-left"
+                        >
+                            <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <h3 className="text-lg font-bold text-slate-800">{title}</h3>
+                                    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${badgeTone}`}>
+                                        報名 {rows.length} 筆
+                                    </span>
+                                    <span className="text-[11px] font-bold px-2.5 py-1 rounded-full border border-slate-200 bg-white text-slate-600">
+                                        {activityStats.length} 個分析項目
+                                    </span>
+                                </div>
+                                <p className="text-sm text-slate-500 mt-2">{description}</p>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-slate-500">
+                                <span>{isExpanded ? '收起區塊' : '展開區塊'}</span>
+                                <Icon name={isExpanded ? 'chevron-up' : 'chevron-down'} size={18} className="text-slate-400" />
+                            </div>
+                        </button>
+
+                        {isExpanded && (
+                            <div className="p-6 space-y-6 animate-in fade-in slide-in-from-top-2">
+                                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                                    <div className="text-xs text-slate-400">
+                                        {key === 'past' ? '這一區只計入日期早於今天的已執行活動。' : '這一區獨立顯示今天起尚未執行的未來活動，不會混進過去成效。'}
+                                    </div>
+                                    <button
+                                        onClick={() => handleGlobalAnalysis(globalAnalysisTitle, rows)}
+                                        disabled={rows.length === 0}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 shadow-sm transition-colors ${
+                                            rows.length === 0
+                                                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                                : 'bg-slate-800 text-white hover:bg-slate-700'
+                                        }`}
+                                    >
+                                        <Icon name="pie-chart" size={14} />
+                                        總體時間分析
+                                    </button>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                                    <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                                        <div className="text-xs text-slate-400 font-bold uppercase mb-1">
+                                            {key === 'past' ? '最高總營收項目' : '最高預估營收項目'}
+                                        </div>
+                                        <div className="text-lg font-bold text-blue-600 truncate" title={topItem?.name}>{topItem?.name || '-'}</div>
+                                        <div className="text-xs text-slate-500 mt-1">${Number(topItem?.revenue || 0).toLocaleString()}</div>
+                                    </div>
+                                    <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                                        <div className="text-xs text-slate-400 font-bold uppercase mb-1">平均每場營收</div>
+                                        <div className="text-2xl font-bold text-slate-800">${avgRev.toLocaleString()}</div>
+                                    </div>
+                                    <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                                        <div className="text-xs text-slate-400 font-bold uppercase mb-1">平均每場人數</div>
+                                        <div className="text-2xl font-bold text-slate-800">{avgPax} <span className="text-sm font-normal text-slate-400">人</span></div>
+                                    </div>
+                                    <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                                        <div className="text-xs text-slate-400 font-bold uppercase mb-1">平均客單價 (ARPU)</div>
+                                        <div className="text-2xl font-bold text-emerald-600">${avgArpu.toLocaleString()}</div>
+                                    </div>
+                                    <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow border-l-4 border-l-purple-500 relative group">
+                                        <div className="text-xs text-slate-400 font-bold uppercase mb-1 flex justify-between items-center">
+                                            <span>客戶黏著度</span>
+                                            <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium" title="消費3次以上的高頻客比例">
+                                                鐵粉: {loyaltyMetrics.heavyRate}%
+                                            </span>
+                                        </div>
+                                        <div className="flex items-baseline gap-2 mt-1">
+                                            <div className="text-2xl font-bold text-purple-600">{loyaltyMetrics.rate}%</div>
+                                            <div className="text-xs text-slate-400 font-medium">(基數: {loyaltyMetrics.total}人)</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden table-container">
+                                    <div className="p-4 bg-slate-50/50 border-b border-slate-100 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{dimensionLabels[dimension]}</span>
+                                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">{activityStats.length} 項</span>
+                                    </div>
+                                    <table className="w-full text-left text-sm">
+                                        <thead className="bg-slate-50 border-b border-slate-100 text-slate-500">
+                                            <tr>
+                                                <th className="px-6 py-4 font-bold">項目名稱</th>
+                                                <th className="px-6 py-4 font-bold text-right">舉辦場次</th>
+                                                <th className="px-6 py-4 font-bold text-right">總人數</th>
+                                                <th className="px-6 py-4 font-bold text-right">平均人數</th>
+                                                <th className="px-6 py-4 font-bold text-right">總營收</th>
+                                                <th className="px-6 py-4 font-bold text-right">操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {activityStats.map((stat, idx) => (
+                                                <tr key={`${key}-${stat.name}`} className="hover:bg-slate-50 transition-colors group">
+                                                    <td className="px-6 py-4 font-bold text-slate-700 flex items-center gap-2">
+                                                        <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs shrink-0">{idx + 1}</span>
+                                                        {stat.name}
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right text-slate-600">{stat.sessions}</td>
+                                                    <td className="px-6 py-4 text-right text-slate-600">{stat.pax}</td>
+                                                    <td className="px-6 py-4 text-right">
+                                                        <span className={`px-2 py-1 rounded text-xs font-bold ${Number(stat.avgPax) >= 15 ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
+                                                            {stat.avgPax}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right font-mono font-bold text-blue-600 bg-blue-50/30 group-hover:bg-blue-50/50">${stat.revenue.toLocaleString()}</td>
+                                                    <td className="px-6 py-4 text-right">
+                                                        <button
+                                                            onClick={() => handleItemAnalysis(stat, title)}
+                                                            className="text-xs bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-300 px-3 py-1 rounded-lg shadow-sm transition-all flex items-center gap-1 ml-auto"
+                                                        >
+                                                            <Icon name="bar-chart-2" size={14} /> 時間分析
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                            {activityStats.length === 0 && (
+                                                <tr>
+                                                    <td colSpan="6" className="p-8 text-center text-slate-400">{emptyText}</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+                    </section>
+                );
+            };
+
             return (
                 <div className="fade-in max-w-6xl mx-auto space-y-8 pb-20">
-                    <header className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <header className="mb-2 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                         <div>
                             <h2 className="text-2xl font-bold text-slate-800">活動成效分析</h2>
-                            <p className="text-sm text-slate-500">深入了解各項活動的市場表現與轉換率</p>
+                            <p className="text-sm text-slate-500">過去與未來活動分開呈現，避免未來場次混進已執行成效。</p>
                         </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                             <button onClick={handleGlobalAnalysis} className="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-slate-700 shadow-sm"><Icon name="pie-chart" size={14}/> 總體時間分析</button>
-                             <div className="flex items-center gap-2 bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
-                                <span className="text-xs font-bold text-slate-500 px-2">分析維度:</span>
-                                <select className="text-sm bg-slate-50 border-none rounded-md py-1.5 pl-2 pr-8 focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700 cursor-pointer" value={dimension} onChange={e => setDimension(e.target.value)}>
-                                    <option value="category">依活動性質 (推薦)</option>
-                                    <option value="name">依後台名稱</option>
-                                    <option value="type">依種類標籤 (如: 蛇類、夜間)</option>
-                                    <option value="level">依等級標籤 (如: 包團、親子)</option>
-                                    <option value="location">依地點標籤</option>
-                                </select>
-                            </div>
+                        <div className="flex items-center gap-2 bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
+                            <span className="text-xs font-bold text-slate-500 px-2">分析維度:</span>
+                            <select className="text-sm bg-slate-50 border-none rounded-md py-1.5 pl-2 pr-8 focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700 cursor-pointer" value={dimension} onChange={e => setDimension(e.target.value)}>
+                                <option value="category">依活動性質 (推薦)</option>
+                                <option value="name">依後台名稱</option>
+                                <option value="type">依種類標籤 (如: 蛇類、夜間)</option>
+                                <option value="level">依等級標籤 (如: 包團、親子)</option>
+                                <option value="location">依地點標籤</option>
+                            </select>
                         </div>
                     </header>
 
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
-                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                            <div className="text-xs text-slate-400 font-bold uppercase mb-1">最高總營收項目</div>
-                            <div className="text-lg font-bold text-blue-600 truncate" title={activityStats[0]?.name}>{activityStats[0]?.name || '-'}</div>
-                            <div className="text-xs text-slate-500 mt-1">${activityStats[0]?.revenue.toLocaleString() || 0}</div>
-                        </div>
-                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                            <div className="text-xs text-slate-400 font-bold uppercase mb-1">平均每場營收</div>
-                            <div className="text-2xl font-bold text-slate-800">${Math.round(activityStats.reduce((a,c)=>a+c.avgRev,0)/Math.max(1, activityStats.length)).toLocaleString()}</div>
-                        </div>
-                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                            <div className="text-xs text-slate-400 font-bold uppercase mb-1">平均每場人數</div>
-                            <div className="text-2xl font-bold text-slate-800">{(activityStats.reduce((a,c)=>a+parseFloat(c.avgPax),0)/Math.max(1, activityStats.length)).toFixed(1)} <span className="text-sm font-normal text-slate-400">人</span></div>
-                        </div>
-                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                            <div className="text-xs text-slate-400 font-bold uppercase mb-1">平均客單價 (ARPU)</div>
-                            <div className="text-2xl font-bold text-emerald-600">${Math.round(activityStats.reduce((a,c)=>a+c.arpu,0)/Math.max(1, activityStats.length)).toLocaleString()}</div>
-                        </div>
-                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow border-l-4 border-l-purple-500 relative group">
-                            <div className="text-xs text-slate-400 font-bold uppercase mb-1 flex justify-between items-center">
-                                <span>客戶黏著度</span>
-                                <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium" title="消費3次以上的高頻客比例">鐵粉: {loyaltyMetrics.heavyRate}%</span>
-                            </div>
-                            <div className="flex items-baseline gap-2 mt-1">
-                                <div className="text-2xl font-bold text-purple-600">{loyaltyMetrics.rate}%</div>
-                                <div className="text-xs text-slate-400 font-medium">(基數: {loyaltyMetrics.total}人)</div>
-                            </div>
-                        </div>
-                    </div> 
+                    {renderSection({
+                        key: 'past',
+                        title: '已執行活動成效',
+                        description: '這一區只統計過去活動，適合看真實成效表現。',
+                        badgeTone: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+                        rows: segmentedRows.past,
+                        activityStats: pastActivityStats,
+                        loyaltyMetrics: pastLoyaltyMetrics,
+                        emptyText: '目前沒有可分析的已執行活動資料',
+                        globalAnalysisTitle: '已執行活動總體分析'
+                    })}
 
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden table-container">
-                         <div className="p-4 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
-                            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{dimensionLabels[dimension]}</span>
-                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">{activityStats.length} 項</span>
-                        </div>
-                        <table className="w-full text-left text-sm">
-                            <thead className="bg-slate-50 border-b border-slate-100 text-slate-500">
-                                <tr>
-                                    <th className="px-6 py-4 font-bold">項目名稱</th>
-                                    <th className="px-6 py-4 font-bold text-right">舉辦場次</th>
-                                    <th className="px-6 py-4 font-bold text-right">總人數</th>
-                                    <th className="px-6 py-4 font-bold text-right">平均人數</th>
-                                    <th className="px-6 py-4 font-bold text-right">總營收</th>
-                                    <th className="px-6 py-4 font-bold text-right">操作</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {activityStats.map((stat, idx) => (
-                                    <tr key={idx} className="hover:bg-slate-50 transition-colors group">
-                                        <td className="px-6 py-4 font-bold text-slate-700 flex items-center gap-2"><span className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs shrink-0">{idx + 1}</span>{stat.name}</td>
-                                        <td className="px-6 py-4 text-right text-slate-600">{stat.sessions}</td>
-                                        <td className="px-6 py-4 text-right text-slate-600">{stat.pax}</td>
-                                        <td className="px-6 py-4 text-right"><span className={`px-2 py-1 rounded text-xs font-bold ${stat.avgPax >= 15 ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>{stat.avgPax}</span></td>
-                                        <td className="px-6 py-4 text-right font-mono font-bold text-blue-600 bg-blue-50/30 group-hover:bg-blue-50/50">${stat.revenue.toLocaleString()}</td>
-                                        <td className="px-6 py-4 text-right">
-                                            <button onClick={() => handleItemAnalysis(stat)} className="text-xs bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-300 px-3 py-1 rounded-lg shadow-sm transition-all flex items-center gap-1 ml-auto">
-                                                <Icon name="bar-chart-2" size={14}/> 時間分析
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                                {activityStats.length === 0 && (<tr><td colSpan="7" className="p-8 text-center text-slate-400">目前無數據</td></tr>)}
-                            </tbody>
-                        </table>
-                    </div>
+                    {renderSection({
+                        key: 'future',
+                        title: '未來活動預覽',
+                        description: '未來活動獨立收在這裡，方便看預售與排程，但不納入已執行成效。',
+                        badgeTone: 'border-amber-200 bg-amber-50 text-amber-700',
+                        rows: segmentedRows.future,
+                        activityStats: futureActivityStats,
+                        loyaltyMetrics: futureLoyaltyMetrics,
+                        emptyText: '目前沒有未來活動資料',
+                        globalAnalysisTitle: '未來活動總體分析'
+                    })}
 
                     {analysisData && (
                         <TimeAnalysisModal 
