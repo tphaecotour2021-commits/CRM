@@ -480,6 +480,20 @@
                 ? value
                 : getDefaultCarpoolDisplayModeForEventName(eventName)
         );
+        const PERFORMANCE_BUCKET_OPTIONS = [
+            { value: 'theme', label: '主題活動' },
+            { value: 'afterwork', label: '下班後走走' },
+            { value: 'special', label: '特別活動' }
+        ];
+        const PERFORMANCE_BUCKET_LABELS = PERFORMANCE_BUCKET_OPTIONS.reduce((acc, item) => {
+            acc[item.value] = item.label;
+            return acc;
+        }, {});
+        const inferPerformanceBucket = (name = '') => {
+            const normalized = String(name || '').trim();
+            if (/^下班走走/.test(normalized) || normalized.includes('下班後走走')) return 'afterwork';
+            return 'theme';
+        };
         const DEFAULT_MASCOT_THEMES = [
             {
                 id: 'default_flying_squirrel',
@@ -4316,10 +4330,13 @@ const removeFormRule = (idx) => {
                 </div>
             );
         };
-        const ActivityPerformance = ({ parsedData, eventConfigs }) => {
+        const ActivityPerformance = ({ parsedData, eventConfigs, productPerformanceSettings = {}, onSaveProductPerformanceSettings }) => {
             const [dimension, setDimension] = useState('category');
             const [analysisData, setAnalysisData] = useState(null);
             const [sectionExpanded, setSectionExpanded] = useState({ past: true, future: false });
+            const [showProductSettings, setShowProductSettings] = useState(false);
+            const [productSettingsDraft, setProductSettingsDraft] = useState({});
+            const [productSettingsSaveStatus, setProductSettingsSaveStatus] = useState('idle');
 
             const getDateKey = (value) => {
                 if (!value) return '';
@@ -4333,6 +4350,37 @@ const removeFormRule = (idx) => {
             };
 
             const todayKey = useMemo(() => getDateKey(new Date()), []);
+
+            const getRowConfig = (row) => {
+                const sortedInstr = row.instructor ? row.instructor.split(/[&,]/).map(s => s.trim()).sort().join(' & ') : '';
+                const rowKey = `${row.date}_${row.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-');
+                return eventConfigs[rowKey] || {};
+            };
+
+            const getProductName = (row) => {
+                const config = getRowConfig(row);
+                return String(config.activityCategory || row.eventName || '未分類').trim() || '未分類';
+            };
+
+            const getResolvedProductSetting = (productName) => {
+                const saved = productPerformanceSettings?.[productName] || {};
+                const resolvedBucket = PERFORMANCE_BUCKET_OPTIONS.some(option => option.value === saved?.bucket)
+                    ? saved.bucket
+                    : inferPerformanceBucket(productName);
+                const legacyCost = saved?.cost === '' || saved?.cost === null || saved?.cost === undefined
+                    ? ''
+                    : Number(saved.cost) || 0;
+                return {
+                    bucket: resolvedBucket,
+                    trait: String(saved?.trait || '').trim(),
+                    costPerPax: saved?.costPerPax === '' || saved?.costPerPax === null || saved?.costPerPax === undefined
+                        ? legacyCost
+                        : Number(saved.costPerPax) || 0,
+                    costPerSession: saved?.costPerSession === '' || saved?.costPerSession === null || saved?.costPerSession === undefined
+                        ? ''
+                        : Number(saved.costPerSession) || 0
+                };
+            };
 
             const validRows = useMemo(
                 () => (parsedData || []).filter(row => row.customerName !== '開放報名中'),
@@ -4352,6 +4400,30 @@ const removeFormRule = (idx) => {
                 });
                 return { past, future };
             }, [validRows, todayKey]);
+
+            const productNames = useMemo(() => {
+                const nameSet = new Set();
+                validRows.forEach(row => nameSet.add(getProductName(row)));
+                Object.keys(productPerformanceSettings || {}).forEach(name => nameSet.add(String(name || '').trim()));
+                return Array.from(nameSet)
+                    .filter(Boolean)
+                    .sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+            }, [validRows, eventConfigs, productPerformanceSettings]);
+
+            useEffect(() => {
+                const nextDraft = {};
+                productNames.forEach(name => {
+                    const resolved = getResolvedProductSetting(name);
+                    nextDraft[name] = {
+                        bucket: resolved.bucket,
+                        trait: resolved.trait,
+                        costPerPax: resolved.costPerPax,
+                        costPerSession: resolved.costPerSession
+                    };
+                });
+                setProductSettingsDraft(nextDraft);
+                setProductSettingsSaveStatus('idle');
+            }, [productNames, productPerformanceSettings]);
 
             const buildLoyaltyMetrics = (rows) => {
                 if (!rows || rows.length === 0) return { rate: '0.0', heavyRate: '0.0', total: 0 };
@@ -4375,9 +4447,7 @@ const removeFormRule = (idx) => {
             const buildActivityStats = (rows) => {
                 const stats = {};
                 rows.forEach(row => {
-                    const sortedInstr = row.instructor ? row.instructor.split(/[&,]/).map(s => s.trim()).sort().join(' & ') : '';
-                    const rowKey = `${row.date}_${row.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-');
-                    const config = eventConfigs[rowKey] || {};
+                    const config = getRowConfig(row);
                     const tags = config.tags || {};
 
                     let groupName = '未分類';
@@ -4396,7 +4466,7 @@ const removeFormRule = (idx) => {
                     if (!stats[groupName]) stats[groupName] = { revenue: 0, pax: 0, sessions: new Set(), rawRows: [] };
                     stats[groupName].revenue += (row.price || 0);
                     stats[groupName].pax += 1;
-                    stats[groupName].sessions.add(row.date + row.instructor);
+                    stats[groupName].sessions.add(`${row.date}_${row.instructor || ''}`);
                     stats[groupName].rawRows.push(row);
                 });
 
@@ -4412,6 +4482,55 @@ const removeFormRule = (idx) => {
                 })).sort((a, b) => b.revenue - a.revenue);
             };
 
+            const buildProductReportSections = (rows) => {
+                const grouped = PERFORMANCE_BUCKET_OPTIONS.reduce((acc, option) => {
+                    acc[option.value] = {};
+                    return acc;
+                }, {});
+
+                rows.forEach(row => {
+                    const productName = getProductName(row);
+                    const resolved = getResolvedProductSetting(productName);
+                    const bucket = PERFORMANCE_BUCKET_OPTIONS.some(option => option.value === resolved.bucket)
+                        ? resolved.bucket
+                        : 'theme';
+                    if (!grouped[bucket][productName]) {
+                        grouped[bucket][productName] = {
+                            name: productName,
+                            trait: resolved.trait,
+                            costPerPax: resolved.costPerPax,
+                            costPerSession: resolved.costPerSession,
+                            revenue: 0,
+                            pax: 0,
+                            sessions: new Set()
+                        };
+                    }
+                    grouped[bucket][productName].revenue += Number(row.price) || 0;
+                    grouped[bucket][productName].pax += 1;
+                    grouped[bucket][productName].sessions.add(`${row.date}_${row.instructor || ''}`);
+                });
+
+                return PERFORMANCE_BUCKET_OPTIONS.map(option => {
+                    const rowsForBucket = Object.values(grouped[option.value] || {})
+                        .map(item => ({
+                            ...item,
+                            sessionCount: item.sessions.size,
+                            avgPax: item.sessions.size > 0 ? Number((item.pax / item.sessions.size).toFixed(1)) : 0,
+                            avgRevenue: item.sessions.size > 0 ? Math.round(item.revenue / item.sessions.size) : 0,
+                            avgGrossProfit: item.sessions.size > 0
+                                ? Math.round((item.revenue - ((Number(item.costPerPax) || 0) * item.pax) - ((Number(item.costPerSession) || 0) * item.sessions.size)) / item.sessions.size)
+                                : 0
+                        }))
+                        .sort((a, b) => (b.revenue - a.revenue) || a.name.localeCompare(b.name, 'zh-Hant'));
+                    return {
+                        ...option,
+                        rows: rowsForBucket,
+                        totalRevenue: rowsForBucket.reduce((sum, item) => sum + item.revenue, 0),
+                        totalPax: rowsForBucket.reduce((sum, item) => sum + item.pax, 0)
+                    };
+                });
+            };
+
             const pastActivityStats = useMemo(
                 () => buildActivityStats(segmentedRows.past),
                 [segmentedRows.past, eventConfigs, dimension]
@@ -4422,6 +4541,14 @@ const removeFormRule = (idx) => {
             );
             const pastLoyaltyMetrics = useMemo(() => buildLoyaltyMetrics(segmentedRows.past), [segmentedRows.past]);
             const futureLoyaltyMetrics = useMemo(() => buildLoyaltyMetrics(segmentedRows.future), [segmentedRows.future]);
+            const pastProductReportSections = useMemo(
+                () => buildProductReportSections(segmentedRows.past),
+                [segmentedRows.past, eventConfigs, productPerformanceSettings]
+            );
+            const futureProductReportSections = useMemo(
+                () => buildProductReportSections(segmentedRows.future),
+                [segmentedRows.future, eventConfigs, productPerformanceSettings]
+            );
 
             const dimensionLabels = {
                 category: '依活動性質 (合併分析)',
@@ -4449,7 +4576,77 @@ const removeFormRule = (idx) => {
                 setSectionExpanded(prev => ({ ...prev, [key]: !prev[key] }));
             };
 
-            const renderSection = ({ key, title, description, badgeTone, rows, activityStats, loyaltyMetrics, emptyText, globalAnalysisTitle }) => {
+            const handleProductSettingChange = (name, field, value) => {
+                setProductSettingsDraft(prev => ({
+                    ...prev,
+                    [name]: {
+                        ...(prev[name] || { bucket: inferPerformanceBucket(name), trait: '', costPerPax: '', costPerSession: '' }),
+                        [field]: value
+                    }
+                }));
+                setProductSettingsSaveStatus('idle');
+            };
+
+            const handleSaveProductSettings = async () => {
+                if (!onSaveProductPerformanceSettings) return;
+                setProductSettingsSaveStatus('saving');
+                try {
+                    await onSaveProductPerformanceSettings(productSettingsDraft);
+                    setProductSettingsSaveStatus('success');
+                    setTimeout(() => setProductSettingsSaveStatus('idle'), 2000);
+                } catch (e) {
+                    console.error('Save performance product settings failed', e);
+                    setProductSettingsSaveStatus('error');
+                    alert(`❌ 產品分類設定儲存失敗：${e?.message || e}`);
+                }
+            };
+
+            const handleExportProductReport = (filePrefix, sections) => {
+                const exportDate = todayKey ? todayKey.replace(/-/g, '') : getDateKey(new Date()).replace(/-/g, '');
+                const rows = [[Number(exportDate) || exportDate]];
+                sections.forEach((section, idx) => {
+                    if (idx > 0) rows.push([]);
+                    rows.push([section.label, '特性', '總營收', '總人數', '總場次', '平均人數', '成本（每人)', '成本（每場）', '平均營收', '平均毛利']);
+                    if (section.rows.length === 0) {
+                        rows.push(['(無資料)', '', 0, 0, 0, 0, '', '', 0, 0]);
+                        return;
+                    }
+                    section.rows.forEach(item => {
+                        rows.push([
+                            item.name,
+                            item.trait || '',
+                            item.revenue,
+                            item.pax,
+                            item.sessionCount,
+                            item.avgPax,
+                            item.costPerPax === '' ? '' : item.costPerPax,
+                            item.costPerSession === '' ? '' : item.costPerSession,
+                            item.avgRevenue,
+                            item.avgGrossProfit
+                        ]);
+                    });
+                });
+                downloadExcelWorkbook(
+                    [{ name: `${filePrefix}_${exportDate}`, rows }],
+                    `${filePrefix}_${exportDate}.xls`
+                );
+            };
+
+            const renderSection = ({
+                key,
+                title,
+                description,
+                badgeTone,
+                rows,
+                activityStats,
+                loyaltyMetrics,
+                emptyText,
+                globalAnalysisTitle,
+                productReportSections,
+                productReportDescription,
+                productReportEmptyText,
+                exportFilePrefix
+            }) => {
                 const avgRev = activityStats.length > 0
                     ? Math.round(activityStats.reduce((sum, item) => sum + item.avgRev, 0) / activityStats.length)
                     : 0;
@@ -4590,6 +4787,78 @@ const removeFormRule = (idx) => {
                                         </tbody>
                                     </table>
                                 </div>
+
+                                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden table-container">
+                                    <div className="p-4 bg-slate-50/50 border-b border-slate-100 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">產品成效表</div>
+                                            <div className="text-sm text-slate-500 mt-1">{productReportDescription}</div>
+                                        </div>
+                                        <button
+                                            onClick={() => handleExportProductReport(exportFilePrefix, productReportSections)}
+                                            className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-emerald-700 shadow-sm self-start sm:self-auto"
+                                        >
+                                            <Icon name="download" size={14} /> 匯出產品成效表
+                                        </button>
+                                    </div>
+                                    <div className="space-y-6 p-4">
+                                        {productReportSections.map(section => (
+                                            <div key={`${key}-${section.value}`} className="border border-slate-200 rounded-2xl overflow-hidden">
+                                                <div className="px-4 py-3 bg-white border-b border-slate-100 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-sm font-bold text-slate-800">{section.label}</span>
+                                                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200 text-slate-600">
+                                                            {section.rows.length} 項
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-2 text-xs">
+                                                        <span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">總營收 ${section.totalRevenue.toLocaleString()}</span>
+                                                        <span className="px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100">總人數 {section.totalPax} 人</span>
+                                                    </div>
+                                                </div>
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full min-w-[1200px] text-sm">
+                                                        <thead className="bg-slate-50 border-b border-slate-100 text-slate-500">
+                                                            <tr>
+                                                                <th className="px-4 py-3 text-left font-bold">活動名稱</th>
+                                                                <th className="px-4 py-3 text-left font-bold">特性</th>
+                                                                <th className="px-4 py-3 text-right font-bold">總營收</th>
+                                                                <th className="px-4 py-3 text-right font-bold">總人數</th>
+                                                                <th className="px-4 py-3 text-right font-bold">總場次</th>
+                                                                <th className="px-4 py-3 text-right font-bold">平均人數</th>
+                                                                <th className="px-4 py-3 text-right font-bold">成本（每人)</th>
+                                                                <th className="px-4 py-3 text-right font-bold">成本（每場）</th>
+                                                                <th className="px-4 py-3 text-right font-bold">平均營收</th>
+                                                                <th className="px-4 py-3 text-right font-bold">平均毛利</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-slate-100 bg-white">
+                                                            {section.rows.map(item => (
+                                                                <tr key={`${key}-${section.value}-${item.name}`} className="hover:bg-slate-50">
+                                                                    <td className="px-4 py-3 font-medium text-slate-700">{item.name}</td>
+                                                                    <td className="px-4 py-3 text-slate-500">{item.trait || '-'}</td>
+                                                                    <td className="px-4 py-3 text-right font-mono font-bold text-blue-600">${item.revenue.toLocaleString()}</td>
+                                                                    <td className="px-4 py-3 text-right font-bold text-slate-700">{item.pax}</td>
+                                                                    <td className="px-4 py-3 text-right font-bold text-slate-700">{item.sessionCount}</td>
+                                                                    <td className="px-4 py-3 text-right text-slate-600">{item.avgPax}</td>
+                                                                    <td className="px-4 py-3 text-right text-slate-500">{item.costPerPax === '' ? '-' : item.costPerPax}</td>
+                                                                    <td className="px-4 py-3 text-right text-slate-500">{item.costPerSession === '' ? '-' : item.costPerSession}</td>
+                                                                    <td className="px-4 py-3 text-right font-mono text-slate-600">${item.avgRevenue.toLocaleString()}</td>
+                                                                    <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">${item.avgGrossProfit.toLocaleString()}</td>
+                                                                </tr>
+                                                            ))}
+                                                            {section.rows.length === 0 && (
+                                                                <tr>
+                                                                    <td colSpan="10" className="px-4 py-8 text-center text-slate-400">{productReportEmptyText}</td>
+                                                                </tr>
+                                                            )}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
                         )}
                     </section>
@@ -4603,17 +4872,111 @@ const removeFormRule = (idx) => {
                             <h2 className="text-2xl font-bold text-slate-800">活動成效分析</h2>
                             <p className="text-sm text-slate-500">過去與未來活動分開呈現，避免未來場次混進已執行成效。</p>
                         </div>
-                        <div className="flex items-center gap-2 bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
-                            <span className="text-xs font-bold text-slate-500 px-2">分析維度:</span>
-                            <select className="text-sm bg-slate-50 border-none rounded-md py-1.5 pl-2 pr-8 focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700 cursor-pointer" value={dimension} onChange={e => setDimension(e.target.value)}>
-                                <option value="category">依活動性質 (推薦)</option>
-                                <option value="name">依後台名稱</option>
-                                <option value="type">依種類標籤 (如: 蛇類、夜間)</option>
-                                <option value="level">依等級標籤 (如: 包團、親子)</option>
-                                <option value="location">依地點標籤</option>
-                            </select>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <button
+                                onClick={() => setShowProductSettings(prev => !prev)}
+                                className="bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-slate-50 shadow-sm"
+                            >
+                                <Icon name="settings" size={14} /> {showProductSettings ? '收起分類設定' : '設定活動分類'}
+                            </button>
+                            <div className="flex items-center gap-2 bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
+                                <span className="text-xs font-bold text-slate-500 px-2">分析維度:</span>
+                                <select className="text-sm bg-slate-50 border-none rounded-md py-1.5 pl-2 pr-8 focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700 cursor-pointer" value={dimension} onChange={e => setDimension(e.target.value)}>
+                                    <option value="category">依活動性質 (推薦)</option>
+                                    <option value="name">依後台名稱</option>
+                                    <option value="type">依種類標籤 (如: 蛇類、夜間)</option>
+                                    <option value="level">依等級標籤 (如: 包團、親子)</option>
+                                    <option value="location">依地點標籤</option>
+                                </select>
+                            </div>
                         </div>
                     </header>
+
+                    {showProductSettings && (
+                        <section className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/70">
+                                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                    <div>
+                                        <h3 className="text-lg font-bold text-slate-800">產品分類設定</h3>
+                                        <p className="text-sm text-slate-500 mt-1">在這裡指定每個活動屬於主題活動、下班後走走或特別活動，並可填寫特性、每人成本、每場成本。</p>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-xs">
+                                        {productSettingsSaveStatus === 'saving' && <span className="text-blue-600 font-bold">儲存中...</span>}
+                                        {productSettingsSaveStatus === 'success' && <span className="text-emerald-600 font-bold">已儲存</span>}
+                                        {productSettingsSaveStatus === 'error' && <span className="text-rose-600 font-bold">儲存失敗</span>}
+                                        <button onClick={handleSaveProductSettings} className="bg-slate-800 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-slate-700 shadow-sm">
+                                            儲存分類設定
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="p-6 table-container">
+                                <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                                    <table className="w-full min-w-[980px] text-sm">
+                                        <thead className="bg-slate-50 border-b border-slate-100 text-slate-500">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left font-bold">活動名稱</th>
+                                                <th className="px-4 py-3 text-left font-bold">分類</th>
+                                                <th className="px-4 py-3 text-left font-bold">特性</th>
+                                                <th className="px-4 py-3 text-left font-bold">成本（每人)</th>
+                                                <th className="px-4 py-3 text-left font-bold">成本（每場）</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100 bg-white">
+                                            {productNames.map(name => (
+                                                <tr key={name} className="hover:bg-slate-50">
+                                                    <td className="px-4 py-3 font-medium text-slate-700">{name}</td>
+                                                    <td className="px-4 py-3">
+                                                        <select
+                                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                                                            value={productSettingsDraft[name]?.bucket || inferPerformanceBucket(name)}
+                                                            onChange={e => handleProductSettingChange(name, 'bucket', e.target.value)}
+                                                        >
+                                                            {PERFORMANCE_BUCKET_OPTIONS.map(option => (
+                                                                <option key={option.value} value={option.value}>{option.label}</option>
+                                                            ))}
+                                                        </select>
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <input
+                                                            type="text"
+                                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                                                            placeholder="例如：夏季限定、外包講師"
+                                                            value={productSettingsDraft[name]?.trait || ''}
+                                                            onChange={e => handleProductSettingChange(name, 'trait', e.target.value)}
+                                                        />
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <input
+                                                            type="number"
+                                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                                                            placeholder="例如：100"
+                                                            value={productSettingsDraft[name]?.costPerPax ?? ''}
+                                                            onChange={e => handleProductSettingChange(name, 'costPerPax', e.target.value)}
+                                                        />
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <input
+                                                            type="number"
+                                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                                                            placeholder="例如：800"
+                                                            value={productSettingsDraft[name]?.costPerSession ?? ''}
+                                                            onChange={e => handleProductSettingChange(name, 'costPerSession', e.target.value)}
+                                                        />
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                            {productNames.length === 0 && (
+                                                <tr>
+                                                    <td colSpan="5" className="px-4 py-10 text-center text-slate-400">目前還沒有可設定的活動資料</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </section>
+                    )}
 
                     {renderSection({
                         key: 'past',
@@ -4624,7 +4987,11 @@ const removeFormRule = (idx) => {
                         activityStats: pastActivityStats,
                         loyaltyMetrics: pastLoyaltyMetrics,
                         emptyText: '目前沒有可分析的已執行活動資料',
-                        globalAnalysisTitle: '已執行活動總體分析'
+                        globalAnalysisTitle: '已執行活動總體分析',
+                        productReportSections: pastProductReportSections,
+                        productReportDescription: '格式參考你提供的損益表，這裡只採用已執行活動資料，並固定拆成三種活動類型。',
+                        productReportEmptyText: '目前沒有這一類的已執行活動資料',
+                        exportFilePrefix: '已執行產品成效表'
                     })}
 
                     {renderSection({
@@ -4636,7 +5003,11 @@ const removeFormRule = (idx) => {
                         activityStats: futureActivityStats,
                         loyaltyMetrics: futureLoyaltyMetrics,
                         emptyText: '目前沒有未來活動資料',
-                        globalAnalysisTitle: '未來活動總體分析'
+                        globalAnalysisTitle: '未來活動總體分析',
+                        productReportSections: futureProductReportSections,
+                        productReportDescription: '這裡用未來活動目前的報名與營收資料，方便你先看不同產品類型的預售狀況。',
+                        productReportEmptyText: '目前沒有這一類的未來活動資料',
+                        exportFilePrefix: '未來活動產品成效表'
                     })}
 
                     {analysisData && (
@@ -5616,6 +5987,7 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
             const [editingProject, setEditingProject] = useState(null);
             const [tagDefinitions, setTagDefinitions] = useState(DEFAULT_TAG_DEFS);
             const [showTagSettings, setShowTagSettings] = useState(false);
+            const [performanceProductSettings, setPerformanceProductSettings] = useState({});
             const [monthlyKpis, setMonthlyKpis] = useState({});
             const [monthlyPlans, setMonthlyPlans] = useState({});
             const [kpiSaveStatus, setKpiSaveStatus] = useState('idle');
@@ -5898,6 +6270,7 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
                             const d = data.csvData || ''; 
                             if (data.globalRules) setGlobalRules(data.globalRules); 
                             if (data.tagDefinitions) setTagDefinitions(data.tagDefinitions); 
+                            setPerformanceProductSettings(data.performanceProductSettings || {});
                             setMonthlyKpis(data.monthlyKpis || {});
                             setMonthlyPlans(data.monthlyPlans || {});
                             
@@ -5918,6 +6291,7 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
                                 updateParsedData(d); 
                             } 
                         } else {
+                            setPerformanceProductSettings({});
                             setMonthlyKpis({});
                             setMonthlyPlans({});
                         } 
@@ -6002,6 +6376,31 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
                 if (!user || !db) return alert("請先登入");
                 await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), { publicSideDecor: normalizePublicSideDecor(publicSideDecor) }, { merge: true });
                 alert("活動場次表左右裝飾圖已更新！");
+            };
+            const handleSavePerformanceProductSettings = async (nextSettings) => {
+                if (!user || !db) return alert("請先登入");
+                const normalized = {};
+                Object.entries(nextSettings || {}).forEach(([name, setting]) => {
+                    const cleanName = String(name || '').trim();
+                    if (!cleanName) return;
+                    const normalizedCostPerPax = setting?.costPerPax === '' || setting?.costPerPax === null || setting?.costPerPax === undefined
+                        ? (setting?.cost === '' || setting?.cost === null || setting?.cost === undefined ? '' : Number(setting.cost) || 0)
+                        : Number(setting.costPerPax) || 0;
+                    const normalizedCostPerSession = setting?.costPerSession === '' || setting?.costPerSession === null || setting?.costPerSession === undefined
+                        ? ''
+                        : Number(setting.costPerSession) || 0;
+                    normalized[cleanName] = {
+                        bucket: PERFORMANCE_BUCKET_OPTIONS.some(option => option.value === setting?.bucket)
+                            ? setting.bucket
+                            : inferPerformanceBucket(cleanName),
+                        trait: String(setting?.trait || '').trim(),
+                        cost: normalizedCostPerPax,
+                        costPerPax: normalizedCostPerPax,
+                        costPerSession: normalizedCostPerSession
+                    };
+                });
+                setPerformanceProductSettings(normalized);
+                await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), { performanceProductSettings: normalized }, { merge: true });
             };
             const openCreateEventModal = (date = '', instructors = []) => {
                 if (date && companyRestDates.includes(date)) {
@@ -7870,7 +8269,14 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                             </div>
                         )}
                        
-                        {activeTab === 'stats' && <ActivityPerformance parsedData={parsedData} eventConfigs={eventConfigs} />}
+                        {activeTab === 'stats' && (
+                            <ActivityPerformance
+                                parsedData={parsedData}
+                                eventConfigs={eventConfigs}
+                                productPerformanceSettings={performanceProductSettings}
+                                onSaveProductPerformanceSettings={handleSavePerformanceProductSettings}
+                            />
+                        )}
 {activeTab === 'enrollment' && (
     <EnrollmentMonitor 
         stats={stats} 
