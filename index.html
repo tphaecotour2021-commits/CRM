@@ -471,6 +471,24 @@
             { value: 'normal', label: '顯示剩餘名額', helper: '前台顯示付費共乘剩餘名額' },
             { value: 'none', label: '顯示無共乘', helper: '前台固定顯示本活動無共乘' }
         ];
+        const DEFAULT_AUTH_ACCOUNT_NAME = '管理員';
+        const normalizeAuthAccounts = (accounts = [], fallbackPassword = '') => {
+            const normalized = (Array.isArray(accounts) ? accounts : [])
+                .map((account, index) => ({
+                    id: String(account?.id || `auth_${index}`),
+                    name: String(account?.name || '').trim(),
+                    password: String(account?.password || '').trim()
+                }))
+                .filter(account => account.password);
+            if (normalized.length === 0 && String(fallbackPassword || '').trim()) {
+                return [{
+                    id: 'legacy_admin',
+                    name: DEFAULT_AUTH_ACCOUNT_NAME,
+                    password: String(fallbackPassword || '').trim()
+                }];
+            }
+            return normalized;
+        };
         const DEFAULT_NO_CARPOOL_EVENT_NAMES = new Set(['大安鼠', '新店鼠']);
         const getDefaultCarpoolDisplayModeForEventName = (eventName = '') => (
             DEFAULT_NO_CARPOOL_EVENT_NAMES.has(String(eventName || '').trim()) ? 'none' : 'normal'
@@ -693,6 +711,20 @@
                 document.body.removeChild(link);
             }
         };
+        const downloadTextFile = (content, filename = 'export.txt') => {
+            const blob = new Blob([String(content ?? '')], { type: 'text/plain;charset=utf-8;' });
+            const link = document.createElement('a');
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', filename);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }
+        };
         const sanitizeFilename = (value, fallback = 'export') => {
             const cleaned = String(value || '').trim().replace(/[\\/:*?"<>|]/g, '_');
             return cleaned || fallback;
@@ -784,7 +816,7 @@ ${worksheetXml}
             const [error, setError] = useState(false);
             const handleSubmit = (e) => { e.preventDefault(); onLogin(password, (isSuccess) => { if (!isSuccess) setError(true); }); };
             return (
-                <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 fade-in backdrop-blur-sm"><div className="bg-white rounded-2xl w-full max-w-sm p-8 shadow-2xl"><div className="flex flex-col items-center mb-6"><div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 mb-3"><Icon name="lock" size={24} /></div><h3 className="text-xl font-bold text-slate-800">管理員登入</h3><p className="text-sm text-slate-500">請輸入密碼以存取後台</p></div><form onSubmit={handleSubmit} className="space-y-4"><div><input type="password" className={`w-full p-3 border rounded-xl outline-none transition-all text-center tracking-widest font-bold text-lg ${error ? 'border-red-500 bg-red-50' : 'border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'}`} placeholder="輸入密碼" value={password} onChange={e => { setPassword(e.target.value); setError(false); }} autoFocus />{error && <p className="text-red-500 text-xs text-center mt-2">密碼錯誤，請重試</p>}</div><div className="flex gap-2"><button type="button" onClick={onClose} className="flex-1 py-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">取消</button><button type="submit" className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow-md transition-colors">登入</button></div></form></div></div>
+                <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 fade-in backdrop-blur-sm"><div className="bg-white rounded-2xl w-full max-w-sm p-8 shadow-2xl"><div className="flex flex-col items-center mb-6"><div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 mb-3"><Icon name="lock" size={24} /></div><h3 className="text-xl font-bold text-slate-800">管理員登入</h3><p className="text-sm text-slate-500 text-center">請輸入密碼以存取後台，若有設定個人密碼，登入後會自動帶入操作人。</p></div><form onSubmit={handleSubmit} className="space-y-4"><div><input type="password" className={`w-full p-3 border rounded-xl outline-none transition-all text-center tracking-widest font-bold text-lg ${error ? 'border-red-500 bg-red-50' : 'border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'}`} placeholder="輸入密碼" value={password} onChange={e => { setPassword(e.target.value); setError(false); }} autoFocus />{error && <p className="text-red-500 text-xs text-center mt-2">密碼錯誤，請重試</p>}</div><div className="flex gap-2"><button type="button" onClick={onClose} className="flex-1 py-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">取消</button><button type="submit" className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow-md transition-colors">登入</button></div></form></div></div>
             );
         };
 
@@ -1544,7 +1576,7 @@ ${worksheetXml}
             );
         };
 
-        const EventManagerModal = ({ event, config, onClose, onSaveConfig, availableInstructors, instructorSchedule, onCheckInToggle, onDeleteEvent, globalRules, onEditCustomer, tagDefinitions, onAddTag, parsedData, onAddDirectReg, adminPassword }) => {
+        const EventManagerModal = ({ event, config, onClose, onSaveConfig, availableInstructors, instructorSchedule, onCheckInToggle, onDeleteEvent, globalRules, onEditCustomer, tagDefinitions, onAddTag, parsedData, onAddDirectReg, adminPasswords = [] }) => {
             const [capacity, setCapacity] = useState(config?.capacity || 12);
             const [internalName, setInternalName] = useState(event.eventName);
             const [isEditingInternalName, setIsEditingInternalName] = useState(false);
@@ -1693,7 +1725,7 @@ ${worksheetXml}
                                         <button 
                                             onClick={() => {
                                                 const pwd = prompt("修改後台名稱將連動所有報名資料，請輸入管理員密碼確認：");
-                                                if (pwd === adminPassword) {
+                                                if (adminPasswords.includes(pwd)) {
                                                     setInternalName(tempName);
                                                     setIsEditingInternalName(false);
                                                 } else if (pwd !== null) {
@@ -3330,12 +3362,13 @@ const removeFormRule = (idx) => {
             );
         };
 
-        const PlanningBoard = ({ monthLabel, planning, availableEventNames, saveStatus, onSave, onPrevMonth, onNextMonth, onAddActivity, onChangeActivityMetric, onBulkApplyActivityMetric, onChangeProfitSplit, onAssignPlacement, onRemovePlacement }) => {
+        const PlanningBoard = ({ monthLabel, planning, availableEventNames, saveStatus, versionHistory, operatorName, onOperatorNameChange, onRestoreVersion, onSave, onPrevMonth, onNextMonth, onAddActivity, onChangeActivityMetric, onBulkApplyActivityMetric, onChangeProfitSplit, onAssignPlacement, onRemovePlacement }) => {
             const [selectedActivity, setSelectedActivity] = useState('');
             const [selectedActivityTemplate, setSelectedActivityTemplate] = useState('theme');
             const [draggingEventName, setDraggingEventName] = useState('');
             const [dragTargetKey, setDragTargetKey] = useState('');
             const [bulkMetricDraft, setBulkMetricDraft] = useState({ avgPax: '', revenuePerPax: '', costPerPax: '' });
+            const [versionExpanded, setVersionExpanded] = useState(false);
             const boardRef = useRef(null);
             const calendarScrollRef = useRef(null);
             const matrixScrollRef = useRef(null);
@@ -3347,6 +3380,18 @@ const removeFormRule = (idx) => {
             const buildCellKey = (dateKey, instructorName) => `${String(dateKey || '').trim()}__${String(instructorName || '').trim()}`;
             const formatNumber = (value, digits = 0) => Number(value || 0).toLocaleString('zh-TW', { minimumFractionDigits: digits, maximumFractionDigits: digits });
             const formatCurrency = (value) => `$${Math.round(Number(value || 0)).toLocaleString()}`;
+            const formatVersionTime = (value) => {
+                if (!value) return '時間未記錄';
+                const dt = new Date(value);
+                if (Number.isNaN(dt.getTime())) return String(value);
+                return dt.toLocaleString('zh-TW', {
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                });
+            };
             const captureScrollSnapshot = () => {
                 const mainScrollEl = boardRef.current?.closest('main');
                 pendingScrollSnapshotRef.current = {
@@ -3627,7 +3672,17 @@ const removeFormRule = (idx) => {
                                     </div>
                                     <div className="text-[11px] text-slate-400 mt-2">這一頁只做月度活動模擬與損益估算，不會真的建立活動場次。</div>
                                 </div>
-                                <div className="flex items-center gap-3">
+                                <div className="flex flex-wrap items-center justify-end gap-3">
+                                    <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                                        <span className="text-[11px] font-bold text-slate-500 whitespace-nowrap">操作人</span>
+                                        <input
+                                            type="text"
+                                            value={operatorName}
+                                            onChange={e => onOperatorNameChange(e.target.value)}
+                                            placeholder="例如 郭玟希"
+                                            className="w-28 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-300"
+                                        />
+                                    </div>
                                     <div className="text-xs text-slate-400">
                                         {saveStatus === 'saving' && '模擬資料儲存中...'}
                                         {saveStatus === 'success' && '模擬資料已儲存'}
@@ -3644,6 +3699,68 @@ const removeFormRule = (idx) => {
                             </div>
                         </div>
                         <div className="p-5 space-y-6">
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                    <div>
+                                        <div className="text-xs font-bold uppercase tracking-wide text-slate-500">最近版本</div>
+                                        <div className="text-xs text-slate-400 mt-1">每次儲存本月模擬都會留一份快照。現在先用「操作人」欄位署名，之後再接個人帳號。</div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="text-[11px] text-slate-400">只影響 {monthLabel}，不會碰其他月份</div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setVersionExpanded(prev => !prev)}
+                                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                                        >
+                                            <Icon name={versionExpanded ? 'chevron-up' : 'chevron-down'} size={14}/>
+                                            {versionExpanded ? '收起版本' : '展開版本'}
+                                        </button>
+                                    </div>
+                                </div>
+                                {!versionExpanded ? (
+                                    <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-white px-4 py-4 text-sm text-slate-400">
+                                        版本列表已收起。展開後可查看 {monthLabel} 最近的儲存與還原紀錄。
+                                    </div>
+                                ) : Array.isArray(versionHistory) && versionHistory.length > 0 ? (
+                                    <div className="mt-4 space-y-2">
+                                        {versionHistory.map(version => (
+                                            <div key={`planning_version_${version.id}`} className="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                                                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                                                        <span className={`rounded-full px-2 py-1 font-bold ${version.action === 'restore' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
+                                                            {version.action === 'restore' ? '還原' : '儲存'}
+                                                        </span>
+                                                        <span className="font-bold text-slate-600">{formatVersionTime(version.savedAt)}</span>
+                                                        <span className="text-slate-400">{version.savedByName || '未署名'}</span>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => onRestoreVersion(version)}
+                                                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                                                    >
+                                                        <Icon name="history" size={14}/> 還原這版
+                                                    </button>
+                                                </div>
+                                                <div className="mt-2 text-xs text-slate-500">{version.summary || '這個版本沒有附帶摘要。'}</div>
+                                                {Array.isArray(version.details) && version.details.length > 0 && (
+                                                    <div className="mt-2 space-y-1 rounded-lg bg-slate-50 px-3 py-2">
+                                                        {version.details.slice(0, 4).map((detail, idx) => (
+                                                            <div key={`planning_version_detail_${version.id}_${idx}`} className="text-[11px] text-slate-500">• {detail}</div>
+                                                        ))}
+                                                        {version.details.length > 4 && (
+                                                            <div className="text-[11px] text-slate-400">還有 {version.details.length - 4} 項細節</div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-white px-4 py-5 text-sm text-slate-400">
+                                        這個月份還沒有歷史版本。第一次儲存後就會開始累積。
+                                    </div>
+                                )}
+                            </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                                 {summaryCards.map(card => (
                                     <div key={card.label} className={`rounded-2xl border p-4 ${card.tone}`}>
@@ -5989,9 +6106,29 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
             const [showTagSettings, setShowTagSettings] = useState(false);
             const [performanceProductSettings, setPerformanceProductSettings] = useState({});
             const [monthlyKpis, setMonthlyKpis] = useState({});
+            const [legacyMonthlyPlans, setLegacyMonthlyPlans] = useState({});
+            const [storedMonthlyPlanDocs, setStoredMonthlyPlanDocs] = useState({});
             const [monthlyPlans, setMonthlyPlans] = useState({});
+            const [currentMonthPlanVersions, setCurrentMonthPlanVersions] = useState([]);
             const [kpiSaveStatus, setKpiSaveStatus] = useState('idle');
             const [planningSaveStatus, setPlanningSaveStatus] = useState('idle');
+            const [planningOperatorName, setPlanningOperatorName] = useState(() => {
+                try {
+                    return localStorage.getItem('crm_planning_operator_name') || '';
+                } catch (e) {
+                    return '';
+                }
+            });
+            const [eventScheduleVersions, setEventScheduleVersions] = useState([]);
+            const [eventVersionStatus, setEventVersionStatus] = useState({ status: 'idle', message: '', at: '' });
+            const [eventVersionOperatorName, setEventVersionOperatorName] = useState(() => {
+                try {
+                    return localStorage.getItem('crm_event_version_operator_name') || '';
+                } catch (e) {
+                    return '';
+                }
+            });
+            const [eventVersionsExpanded, setEventVersionsExpanded] = useState(false);
             const [publicFilters, setPublicFilters] = useState({ level: [], type: [], location: [] });
             const [publicFiltersExpanded, setPublicFiltersExpanded] = useState(false);
             const [dbSource, setDbSource] = useState(() => localStorage.getItem('crm_db_source') || defaultAppId);
@@ -6007,6 +6144,9 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
             const [companyRestDates, setCompanyRestDates] = useState([]);
             const [newPasswordInput, setNewPasswordInput] = useState('');
             const [passwordSaveStatus, setPasswordSaveStatus] = useState('idle'); 
+            const [authAccounts, setAuthAccounts] = useState([]);
+            const [newAuthAccount, setNewAuthAccount] = useState({ name: '', password: '' });
+            const [authAccountsSaveStatus, setAuthAccountsSaveStatus] = useState('idle');
             const [addRegStatus, setAddRegStatus] = useState('idle'); 
             const [csvSaveStatus, setCsvSaveStatus] = useState('idle');
             const [isHealthChecking, setIsHealthChecking] = useState(false);
@@ -6022,6 +6162,7 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
             const [showCrmDropdown, setShowCrmDropdown] = useState(false);
             const [newReg, setNewReg] = useState({ date: new Date().toISOString().split('T')[0], eventName: '', instructor: '', customerName: '', price: '', transport: '', idNo: '', birthday: '', email: '', source: '', orderDate: new Date().toISOString().split('T')[0], phone: '' });
             const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+            const planningDirtyMonthsRef = useRef(new Set());
             
             // 跑馬燈與吉祥物 State
             const [latestNews, setLatestNews] = useState(''); 
@@ -6229,10 +6370,24 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
             useEffect(() => {
                 if (!user) return;
                 setLoading(true);
+                setStoredMonthlyPlanDocs({});
+                setCurrentMonthPlanVersions([]);
                 const basePath = `artifacts/${dbSource}/public/data`;
                 if (db) {
                     const settingsRef = doc(db, basePath, 'settings', 'auth');
-                    if (settingsRef) { onSnapshot(settingsRef, s => { if (s && s.exists()) { setAdminPassword(s.data().password || '8888'); } else { setAdminPassword('8888'); } }); }
+                    if (settingsRef) {
+                        onSnapshot(settingsRef, s => {
+                            if (s && s.exists()) {
+                                const authData = s.data() || {};
+                                const fallbackPassword = authData.password || '8888';
+                                setAdminPassword(fallbackPassword);
+                                setAuthAccounts(normalizeAuthAccounts(authData.accounts, fallbackPassword));
+                            } else {
+                                setAdminPassword('8888');
+                                setAuthAccounts(normalizeAuthAccounts([], '8888'));
+                            }
+                        });
+                    }
                     
                     const updateParsedData = (raw) => { 
                         try { 
@@ -6272,7 +6427,7 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
                             if (data.tagDefinitions) setTagDefinitions(data.tagDefinitions); 
                             setPerformanceProductSettings(data.performanceProductSettings || {});
                             setMonthlyKpis(data.monthlyKpis || {});
-                            setMonthlyPlans(data.monthlyPlans || {});
+                            setLegacyMonthlyPlans(data.monthlyPlans || {});
                             
                             if (data.latestNews) setLatestNews(data.latestNews);
                             
@@ -6293,9 +6448,15 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
                         } else {
                             setPerformanceProductSettings({});
                             setMonthlyKpis({});
-                            setMonthlyPlans({});
+                            setLegacyMonthlyPlans({});
                         } 
                         setLoading(false); 
+                    });
+                    const monthlyPlansRef = collection(db, basePath, 'monthly_plans');
+                    const unsubMonthlyPlans = onSnapshot(monthlyPlansRef, s => {
+                        const nextPlans = {};
+                        if (s) s.forEach(d => { nextPlans[d.id] = d.data() || {}; });
+                        setStoredMonthlyPlanDocs(nextPlans);
                     });
                     const templatesRef = doc(db, basePath, 'settings', 'templates');
                     const unsub2 = onSnapshot(templatesRef, s => { if(s && s.exists()) setCustomTemplates(s.data()?.list || []) });
@@ -6320,12 +6481,77 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
                     const analyticsRef = doc(db, `artifacts/${dbSource}/analytics`, 'stats', 'daily', todayStr);
                     const unsub7 = onSnapshot(analyticsRef, s => { if(s && s.exists()) setDailyStats(s.data() || {}); });
 
-                    return () => { if(unsub1) unsub1(); if(unsub2) unsub2(); if(unsub3) unsub3(); if(unsub4) unsub4(); if(unsub5) unsub5(); if(unsub6) unsub6(); if(unsub7) unsub7(); };
+                    return () => { if(unsub1) unsub1(); if(unsubMonthlyPlans) unsubMonthlyPlans(); if(unsub2) unsub2(); if(unsub3) unsub3(); if(unsub4) unsub4(); if(unsub5) unsub5(); if(unsub6) unsub6(); if(unsub7) unsub7(); };
                 } else { setLoading(false); console.warn("Running in offline/demo mode"); }
             }, [user, dbSource]);
 
-            const handleVerifyLogin = (inputPwd, callback) => { if (inputPwd === adminPassword) { setViewMode('admin'); setShowLoginModal(false); callback(true); } else { callback(false); } };
-            const handleUpdatePassword = async () => { if (!newPasswordInput) return; setPasswordSaveStatus('saving'); try { const ref = doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'auth'); if(ref) await setDoc(ref, { password: newPasswordInput }, { merge: true }); setNewPasswordInput(''); setPasswordSaveStatus('success'); setTimeout(() => setPasswordSaveStatus('idle'), 2000); } catch (e) { console.error("Password update failed", e); setPasswordSaveStatus('idle'); } };
+            const validAdminPasswords = useMemo(() => Array.from(new Set([
+                String(adminPassword || '').trim(),
+                ...authAccounts.map(account => String(account.password || '').trim())
+            ].filter(Boolean))), [adminPassword, authAccounts]);
+            const handleVerifyLogin = (inputPwd, callback) => {
+                const cleanInput = String(inputPwd || '').trim();
+                const matchedAccount = authAccounts.find(account => account.password === cleanInput);
+                if (matchedAccount || cleanInput === adminPassword) {
+                    const operatorName = String(matchedAccount?.name || DEFAULT_AUTH_ACCOUNT_NAME).trim() || DEFAULT_AUTH_ACCOUNT_NAME;
+                    setPlanningOperatorName(operatorName);
+                    setEventVersionOperatorName(operatorName);
+                    setViewMode('admin');
+                    setShowLoginModal(false);
+                    callback(true);
+                    return;
+                }
+                callback(false);
+            };
+            const handleUpdatePassword = async () => {
+                if (!newPasswordInput) return;
+                setPasswordSaveStatus('saving');
+                try {
+                    const ref = doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'auth');
+                    if(ref) await setDoc(ref, { password: newPasswordInput }, { merge: true });
+                    setNewPasswordInput('');
+                    setPasswordSaveStatus('success');
+                    setTimeout(() => setPasswordSaveStatus('idle'), 2000);
+                } catch (e) {
+                    console.error("Password update failed", e);
+                    setPasswordSaveStatus('idle');
+                }
+            };
+            const handleSaveAuthAccounts = async (nextAccounts) => {
+                if (!db) return;
+                const normalizedAccounts = normalizeAuthAccounts(nextAccounts, adminPassword);
+                setAuthAccountsSaveStatus('saving');
+                try {
+                    await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'auth'), { accounts: normalizedAccounts }, { merge: true });
+                    setAuthAccounts(normalizedAccounts);
+                    setAuthAccountsSaveStatus('success');
+                    setTimeout(() => setAuthAccountsSaveStatus('idle'), 2000);
+                } catch (e) {
+                    console.error('Auth accounts update failed', e);
+                    setAuthAccountsSaveStatus('idle');
+                    alert(`❌ 操作人帳號儲存失敗：${formatFirestoreError(e)}`);
+                }
+            };
+            const handleAddAuthAccount = async () => {
+                const name = String(newAuthAccount.name || '').trim();
+                const password = String(newAuthAccount.password || '').trim();
+                if (!name || !password) return;
+                const nextAccounts = [...authAccounts, { id: `auth_${Date.now()}`, name, password }];
+                await handleSaveAuthAccounts(nextAccounts);
+                setNewAuthAccount({ name: '', password: '' });
+            };
+            const handleDeleteAuthAccount = async (accountId) => {
+                if (!confirm('確定要刪除這組登入密碼對應嗎？')) return;
+                await handleSaveAuthAccounts(authAccounts.filter(account => account.id !== accountId));
+            };
+            const handleExportCurrentCsvAsTxt = () => {
+                const rawContent = String(csvInput || '').trim();
+                if (!rawContent) {
+                    alert('目前沒有可匯出的 CSV 資料。');
+                    return;
+                }
+                downloadTextFile(csvInput, `${sanitizeFilename(getLocalDateStr(), 'calendar_export')}.txt`);
+            };
             const handleToggleInstructorRest = async (date, name) => { if (!user || !db) return; const currentResting = instructorSchedule[date] || []; let newResting; if (currentResting.includes(name)) { newResting = currentResting.filter(n => n !== name); } else { newResting = [...currentResting, name]; } const newSchedule = { ...instructorSchedule }; if (newResting.length > 0) { newSchedule[date] = newResting; } else { newSchedule[date] = []; } await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'schedule'), { resting: newSchedule }, { merge: true }); };
             const handleToggleCompanyRest = async (date) => { if (!user || !db) return; const isResting = companyRestDates.includes(date); let newDates; if (isResting) { newDates = companyRestDates.filter(d => d !== date); } else { newDates = [...companyRestDates, date].sort(); } setCompanyRestDates(newDates); await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'schedule'), { companyRest: newDates }, { merge: true }); };
             const handleToggleOutingDay = async (date) => {
@@ -6452,6 +6678,7 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
                 }
             };
             const DEFAULT_PLAN_PROFIT_SPLIT = { companyPct: 75, bonusPct: 25 };
+            const DEFAULT_PLANNING_OPERATOR_NAME = '未署名';
             const normalizePlanMetricValue = (value, digits = null) => {
                 if (value === '' || value === null || value === undefined) return '';
                 const parsed = Number(value);
@@ -6501,43 +6728,364 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
                     templateType: normalizedType
                 };
             };
-            const handleSaveMonthlyPlans = async () => {
-                if (!user || !db) return alert("請先登入");
-                const sanitized = {};
-                Object.entries(monthlyPlans || {}).forEach(([monthKey, raw]) => {
-                    const activityInputs = {};
-                    const placementMap = {};
-                    const profitSplit = normalizePlanProfitSplit(raw?.profitSplit);
-                    Object.entries(raw?.activityInputs || {}).forEach(([eventName, metrics]) => {
-                        const cleanName = String(eventName || '').trim();
-                        if (!cleanName) return;
-                        const normalizedMetrics = normalizePlanActivityInput(metrics, cleanName);
-                        if (normalizedMetrics.avgPax === '' && normalizedMetrics.revenuePerPax === '' && normalizedMetrics.costPerPax === '') return;
-                        activityInputs[cleanName] = normalizedMetrics;
-                    });
-                    (Array.isArray(raw?.calendarPlacements) ? raw.calendarPlacements : []).forEach((placement, index) => {
-                        const eventName = String(placement?.eventName || '').trim();
-                        const instructorName = String(placement?.instructorName || '').trim();
-                        const dateKey = String(placement?.dateKey || '').trim();
-                        if (!eventName || !instructorName || !dateKey) return;
-                        placementMap[buildPlanningCellKey(dateKey, instructorName)] = {
-                            id: String(placement?.id || `${monthKey}_${index}`),
-                            eventName,
-                            instructorName,
-                            dateKey
-                        };
-                    });
-                    const calendarPlacements = Object.values(placementMap);
-                    const hasCustomProfitSplit = Math.abs((profitSplit.companyPct || 0) - DEFAULT_PLAN_PROFIT_SPLIT.companyPct) > 0.001 || Math.abs((profitSplit.bonusPct || 0) - DEFAULT_PLAN_PROFIT_SPLIT.bonusPct) > 0.001;
-                    if (Object.keys(activityInputs).length > 0 || calendarPlacements.length > 0 || hasCustomProfitSplit) {
-                        sanitized[monthKey] = { activityInputs, calendarPlacements, profitSplit };
+            const sanitizeMonthlyPlanEntry = (raw = {}, fallbackMonthKey = '') => {
+                const activityInputs = {};
+                const placementMap = {};
+                const profitSplit = normalizePlanProfitSplit(raw?.profitSplit);
+                Object.entries(raw?.activityInputs || {}).forEach(([eventName, metrics]) => {
+                    const cleanName = String(eventName || '').trim();
+                    if (!cleanName) return;
+                    const normalizedMetrics = normalizePlanActivityInput(metrics, cleanName);
+                    if (normalizedMetrics.avgPax === '' && normalizedMetrics.revenuePerPax === '' && normalizedMetrics.costPerPax === '') return;
+                    activityInputs[cleanName] = normalizedMetrics;
+                });
+                (Array.isArray(raw?.calendarPlacements) ? raw.calendarPlacements : []).forEach((placement, index) => {
+                    const eventName = String(placement?.eventName || '').trim();
+                    const instructorName = String(placement?.instructorName || '').trim();
+                    const dateKey = String(placement?.dateKey || '').trim();
+                    if (!eventName || !instructorName || !dateKey) return;
+                    placementMap[buildPlanningCellKey(dateKey, instructorName)] = {
+                        id: String(placement?.id || `${fallbackMonthKey}_${index}`),
+                        eventName,
+                        instructorName,
+                        dateKey
+                    };
+                });
+                return {
+                    activityInputs,
+                    calendarPlacements: Object.values(placementMap).sort((a, b) => (a.dateKey || '').localeCompare(b.dateKey || '') || (a.instructorName || '').localeCompare(b.instructorName || '', 'zh-Hant') || (a.eventName || '').localeCompare(b.eventName || '', 'zh-Hant')),
+                    profitSplit
+                };
+            };
+            const cloneMonthlyPlanEntry = (raw = {}, fallbackMonthKey = '') => {
+                const sanitized = sanitizeMonthlyPlanEntry(raw, fallbackMonthKey);
+                return {
+                    activityInputs: { ...(sanitized.activityInputs || {}) },
+                    calendarPlacements: (sanitized.calendarPlacements || []).map(placement => ({ ...placement })),
+                    profitSplit: { ...(sanitized.profitSplit || DEFAULT_PLAN_PROFIT_SPLIT) }
+                };
+            };
+            const formatVersionMetricValue = (value, digits = null) => {
+                if (value === '' || value === null || value === undefined) return '未填';
+                const parsed = Number(value);
+                if (!Number.isFinite(parsed)) return String(value);
+                return parsed.toLocaleString('zh-TW', {
+                    minimumFractionDigits: digits === null ? 0 : digits,
+                    maximumFractionDigits: digits === null ? 2 : digits
+                });
+            };
+            const getPlanTemplateLabel = (value) => {
+                const cleanValue = normalizePlanActivityTemplateType(value);
+                return PLAN_ACTIVITY_TEMPLATES[cleanValue]?.label || cleanValue || '未分類';
+            };
+            const buildPlanningVersionMeta = (previousRaw, nextRaw, options = {}) => {
+                const previous = previousRaw ? sanitizeMonthlyPlanEntry(previousRaw) : null;
+                const next = sanitizeMonthlyPlanEntry(nextRaw);
+                const details = [];
+                const previousPlacementMap = Object.fromEntries(
+                    (previous?.calendarPlacements || []).map(placement => [buildPlanningCellKey(placement.dateKey, placement.instructorName), placement])
+                );
+                const nextPlacementMap = Object.fromEntries(
+                    (next.calendarPlacements || []).map(placement => [buildPlanningCellKey(placement.dateKey, placement.instructorName), placement])
+                );
+                const placementCellKeys = Array.from(new Set([
+                    ...Object.keys(previousPlacementMap),
+                    ...Object.keys(nextPlacementMap)
+                ])).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+                let addedPlacements = 0;
+                let removedPlacements = 0;
+                let replacedPlacements = 0;
+                placementCellKeys.forEach(cellKey => {
+                    const before = previousPlacementMap[cellKey];
+                    const after = nextPlacementMap[cellKey];
+                    if (!before && after) {
+                        addedPlacements += 1;
+                        details.push(`${after.dateKey}｜${after.instructorName} 新增「${after.eventName}」`);
+                        return;
+                    }
+                    if (before && !after) {
+                        removedPlacements += 1;
+                        details.push(`${before.dateKey}｜${before.instructorName} 移除「${before.eventName}」`);
+                        return;
+                    }
+                    if (before && after && before.eventName !== after.eventName) {
+                        replacedPlacements += 1;
+                        details.push(`${after.dateKey}｜${after.instructorName} 「${before.eventName}」→「${after.eventName}」`);
                     }
                 });
+                const metricNames = Array.from(new Set([
+                    ...Object.keys(previous?.activityInputs || {}),
+                    ...Object.keys(next.activityInputs || {})
+                ])).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+                let metricChanges = 0;
+                metricNames.forEach(name => {
+                    const before = previous?.activityInputs?.[name] || null;
+                    const after = next.activityInputs?.[name] || null;
+                    if (!before && after) {
+                        metricChanges += 1;
+                        details.push(`活動設定｜${name} 新增假設（${getPlanTemplateLabel(after.templateType)}）`);
+                        return;
+                    }
+                    if (before && !after) {
+                        metricChanges += 1;
+                        details.push(`活動設定｜${name} 移除假設`);
+                        return;
+                    }
+                    if (!before || !after) return;
+                    if ((before.avgPax ?? '') !== (after.avgPax ?? '')) {
+                        metricChanges += 1;
+                        details.push(`活動設定｜${name} 平均人數 ${formatVersionMetricValue(before.avgPax, 1)} → ${formatVersionMetricValue(after.avgPax, 1)}`);
+                    }
+                    if ((before.revenuePerPax ?? '') !== (after.revenuePerPax ?? '')) {
+                        metricChanges += 1;
+                        details.push(`活動設定｜${name} 每人營收 ${formatVersionMetricValue(before.revenuePerPax, 2)} → ${formatVersionMetricValue(after.revenuePerPax, 2)}`);
+                    }
+                    if ((before.costPerPax ?? '') !== (after.costPerPax ?? '')) {
+                        metricChanges += 1;
+                        details.push(`活動設定｜${name} 每人成本 ${formatVersionMetricValue(before.costPerPax, 2)} → ${formatVersionMetricValue(after.costPerPax, 2)}`);
+                    }
+                    if (normalizePlanActivityTemplateType(before.templateType) !== normalizePlanActivityTemplateType(after.templateType)) {
+                        metricChanges += 1;
+                        details.push(`活動設定｜${name} 類型 ${getPlanTemplateLabel(before.templateType)} → ${getPlanTemplateLabel(after.templateType)}`);
+                    }
+                });
+                const previousSplit = normalizePlanProfitSplit(previous?.profitSplit);
+                const nextSplit = normalizePlanProfitSplit(next.profitSplit);
+                const splitChanged = previous
+                    ? previousSplit.companyPct !== nextSplit.companyPct || previousSplit.bonusPct !== nextSplit.bonusPct
+                    : false;
+                if (splitChanged) {
+                    details.push(`毛利拆分 公司 ${formatVersionMetricValue(previousSplit.companyPct, 1)}% / 獎金 ${formatVersionMetricValue(previousSplit.bonusPct, 1)}% → 公司 ${formatVersionMetricValue(nextSplit.companyPct, 1)}% / 獎金 ${formatVersionMetricValue(nextSplit.bonusPct, 1)}%`);
+                }
+                const summaryParts = [];
+                if (previous) {
+                    if (addedPlacements > 0) summaryParts.push(`新增 ${addedPlacements} 格`);
+                    if (removedPlacements > 0) summaryParts.push(`移除 ${removedPlacements} 格`);
+                    if (replacedPlacements > 0) summaryParts.push(`改派 ${replacedPlacements} 格`);
+                    if (metricChanges > 0) summaryParts.push(`活動設定 ${metricChanges} 項調整`);
+                    if (splitChanged) summaryParts.push('毛利拆分更新');
+                    if (summaryParts.length === 0) summaryParts.push('內容無差異，重新儲存');
+                } else {
+                    summaryParts.push(`建立初始版本`);
+                    if (next.calendarPlacements.length > 0) summaryParts.push(`排班 ${next.calendarPlacements.length} 格`);
+                    if (Object.keys(next.activityInputs || {}).length > 0) summaryParts.push(`活動設定 ${Object.keys(next.activityInputs || {}).length} 種`);
+                }
+                if (options?.action === 'restore') summaryParts.unshift('還原版本');
+                return {
+                    summary: summaryParts.join('｜'),
+                    details
+                };
+            };
+            const DEFAULT_EVENT_VERSION_OPERATOR_NAME = '未署名';
+            const EVENT_VERSION_FIELD_LABELS = {
+                time: '活動時間',
+                capacity: '人數上限',
+                displayName: '前台名稱',
+                activityCategory: '活動性質',
+                carpoolDisplayMode: '共乘顯示',
+                isCancelled: '流團標記',
+                duration: '持續天數',
+                prepDays: '前置天數',
+                prepTime: '前置時間',
+                price: '活動價格',
+                tags: '前台標籤',
+                statusRules: '狀態規則',
+                tasks: '任務清單',
+                leadInstructors: '帶團講師',
+                supportInstructors: '跟團講師'
+            };
+            const normalizeMonthKeyFromDate = (value) => {
+                const raw = String(value || '').trim();
+                const match = raw.match(/^(\d{4})[\/-](\d{1,2})/);
+                if (!match) return '';
+                return `${match[1]}-${String(parseInt(match[2], 10)).padStart(2, '0')}`;
+            };
+            const buildEventKeyFromRow = (row = {}) => {
+                const date = String(row.date || '').trim();
+                const eventName = String(row.eventName || '').trim();
+                const sortedInstr = row.instructor ? row.instructor.split(/[&,]/).map(s => s.trim()).filter(Boolean).sort().join(' & ') : '';
+                if (!date || !eventName) return '';
+                return `${date}_${eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-');
+            };
+            const sortEventRows = (rows = []) => [...rows].sort((a, b) =>
+                String(a.date || '').localeCompare(String(b.date || '')) ||
+                String(a.eventName || '').localeCompare(String(b.eventName || ''), 'zh-Hant') ||
+                String(a.instructor || '').localeCompare(String(b.instructor || ''), 'zh-Hant') ||
+                String(a.customerName || '').localeCompare(String(b.customerName || ''), 'zh-Hant') ||
+                String(a.orderDate || '').localeCompare(String(b.orderDate || ''))
+            );
+            const flattenRowsByMonth = (rowsByMonthKey = {}) => Object.values(rowsByMonthKey || {}).flat().map(row => ({ ...row }));
+            const buildEventGroupMapFromRows = (rows = []) => {
+                const map = {};
+                (rows || []).forEach(row => {
+                    const key = buildEventKeyFromRow(row);
+                    if (!key) return;
+                    if (!map[key]) {
+                        map[key] = {
+                            key,
+                            date: row.date || '',
+                            eventName: row.eventName || '',
+                            instructor: row.instructor || '',
+                            count: 0
+                        };
+                    }
+                    if (row.customerName !== '開放報名中') map[key].count += 1;
+                });
+                return map;
+            };
+            const collectEventConfigKeysFromRows = (rows = []) => Array.from(new Set(
+                (rows || []).map(row => buildEventKeyFromRow(row)).filter(Boolean)
+            ));
+            const cloneEventConfigValue = (configValue) => {
+                if (configValue === null || configValue === undefined) return null;
+                return JSON.parse(JSON.stringify(configValue));
+            };
+            const buildEventScheduleMonthSnapshot = (rows = [], configs = {}, monthKeys = []) => {
+                const cleanMonthKeys = Array.from(new Set((monthKeys || []).filter(Boolean))).sort();
+                const monthKeySet = new Set(cleanMonthKeys);
+                const rowsByMonthKey = {};
+                (rows || []).forEach(row => {
+                    const monthKey = normalizeMonthKeyFromDate(row.date);
+                    if (!monthKeySet.has(monthKey)) return;
+                    if (!rowsByMonthKey[monthKey]) rowsByMonthKey[monthKey] = [];
+                    rowsByMonthKey[monthKey].push({ ...row });
+                });
+                Object.keys(rowsByMonthKey).forEach(monthKey => {
+                    rowsByMonthKey[monthKey] = sortEventRows(rowsByMonthKey[monthKey]);
+                });
+                const configSnapshot = {};
+                collectEventConfigKeysFromRows(flattenRowsByMonth(rowsByMonthKey)).forEach(key => {
+                    configSnapshot[key] = cloneEventConfigValue(configs?.[key]);
+                });
+                return {
+                    monthKeys: cleanMonthKeys,
+                    rowsByMonthKey,
+                    configSnapshot
+                };
+            };
+            const formatEventVersionFieldValue = (field, value) => {
+                if (value === '' || value === null || value === undefined) {
+                    return field === 'isCancelled' ? '未標記' : '未填';
+                }
+                if (field === 'carpoolDisplayMode') {
+                    return CARPOOL_DISPLAY_MODE_OPTIONS.find(option => option.value === resolveCarpoolDisplayMode(value, ''))?.label || String(value);
+                }
+                if (field === 'isCancelled') return value ? '已標記流團' : '未標記';
+                if (Array.isArray(value)) return value.length > 0 ? value.join('、') : '未填';
+                if (typeof value === 'object') return JSON.stringify(value);
+                return String(value);
+            };
+            const buildEventScheduleVersionMeta = (previousRows = [], nextRows = [], previousConfigSnapshot = {}, nextConfigSnapshot = {}, options = {}) => {
+                const beforeGroups = buildEventGroupMapFromRows(previousRows);
+                const afterGroups = buildEventGroupMapFromRows(nextRows);
+                const details = [];
+                let createdCount = 0;
+                let removedCount = 0;
+                let updatedCount = 0;
+                const groupKeys = Array.from(new Set([
+                    ...Object.keys(beforeGroups),
+                    ...Object.keys(afterGroups)
+                ])).sort((a, b) => {
+                    const before = beforeGroups[a] || afterGroups[a] || {};
+                    const after = afterGroups[b] || beforeGroups[b] || {};
+                    return String(before.date || '').localeCompare(String(after.date || '')) ||
+                        String(before.eventName || '').localeCompare(String(after.eventName || ''), 'zh-Hant') ||
+                        String(before.instructor || '').localeCompare(String(after.instructor || ''), 'zh-Hant');
+                });
+                groupKeys.forEach(key => {
+                    const before = beforeGroups[key];
+                    const after = afterGroups[key];
+                    if (!before && after) {
+                        createdCount += 1;
+                        details.push(`${after.date}｜新增「${after.eventName}」@${after.instructor || '未定'}（${after.count} 人）`);
+                        return;
+                    }
+                    if (before && !after) {
+                        removedCount += 1;
+                        details.push(`${before.date}｜刪除「${before.eventName}」@${before.instructor || '未定'}（${before.count} 人）`);
+                        return;
+                    }
+                    if (!before || !after) return;
+                    if (before.eventName !== after.eventName || before.instructor !== after.instructor) {
+                        updatedCount += 1;
+                        details.push(`${after.date}｜「${before.eventName}」@${before.instructor || '未定'} → 「${after.eventName}」@${after.instructor || '未定'}`);
+                    }
+                });
+                let configChanges = 0;
+                const configKeys = Array.from(new Set([
+                    ...Object.keys(previousConfigSnapshot || {}),
+                    ...Object.keys(nextConfigSnapshot || {})
+                ])).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+                configKeys.forEach(key => {
+                    const beforeConfig = previousConfigSnapshot?.[key] || null;
+                    const afterConfig = nextConfigSnapshot?.[key] || null;
+                    if (!beforeConfig || !afterConfig) return;
+                    const group = afterGroups[key] || beforeGroups[key];
+                    const groupLabel = group ? `${group.date}｜${group.eventName}` : key;
+                    Object.keys(EVENT_VERSION_FIELD_LABELS).forEach(field => {
+                        const beforeValue = beforeConfig?.[field];
+                        const afterValue = afterConfig?.[field];
+                        if (JSON.stringify(beforeValue ?? null) === JSON.stringify(afterValue ?? null)) return;
+                        configChanges += 1;
+                        details.push(`設定｜${groupLabel} ${EVENT_VERSION_FIELD_LABELS[field]} ${formatEventVersionFieldValue(field, beforeValue)} → ${formatEventVersionFieldValue(field, afterValue)}`);
+                    });
+                });
+                const summaryParts = [];
+                if (createdCount > 0) summaryParts.push(`新增 ${createdCount} 場`);
+                if (removedCount > 0) summaryParts.push(`刪除 ${removedCount} 場`);
+                if (updatedCount > 0) summaryParts.push(`改動 ${updatedCount} 場`);
+                if (configChanges > 0) summaryParts.push(`設定 ${configChanges} 項調整`);
+                if (summaryParts.length === 0) summaryParts.push('內容無差異，重新儲存');
+                if (options?.action === 'restore') summaryParts.unshift('還原版本');
+                return {
+                    summary: summaryParts.join('｜'),
+                    details
+                };
+            };
+            const formatPlanningVersionTimestamp = (value) => {
+                if (!value) return '時間未記錄';
+                const dt = new Date(value);
+                if (Number.isNaN(dt.getTime())) return String(value);
+                return dt.toLocaleString('zh-TW', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                });
+            };
+            const handleSaveMonthlyPlans = async () => {
+                if (!user || !db) return alert("請先登入");
+                const basePath = `artifacts/${dbSource}/public/data`;
+                const mainPlanRef = doc(db, basePath, 'monthly_plans', currentMonthKey);
+                const versionRef = collection(db, basePath, 'monthly_plans', currentMonthKey, 'versions');
+                const sanitizedEntry = sanitizeMonthlyPlanEntry(currentMonthPlan, currentMonthKey);
+                const previousSavedEntry = storedMonthlyPlanDocs[currentMonthKey] || legacyMonthlyPlans[currentMonthKey] || null;
+                const versionMeta = buildPlanningVersionMeta(previousSavedEntry, sanitizedEntry);
+                const operatorName = String(planningOperatorName || '').trim() || DEFAULT_PLANNING_OPERATOR_NAME;
+                const savedAt = new Date().toISOString();
+                const versionPayload = {
+                    monthKey: currentMonthKey,
+                    monthLabel: currentMonthLabel,
+                    action: 'save',
+                    summary: versionMeta.summary,
+                    details: versionMeta.details,
+                    savedAt,
+                    savedAtMs: Date.now(),
+                    savedByName: operatorName,
+                    savedByUid: user?.uid || 'anonymous',
+                    snapshot: sanitizedEntry
+                };
 
                 setPlanningSaveStatus('saving');
                 try {
-                    await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), { monthlyPlans: sanitized }, { merge: true });
-                    setMonthlyPlans(sanitized);
+                    await setDoc(mainPlanRef, sanitizedEntry, {});
+                    await addDoc(versionRef, versionPayload);
+                    setStoredMonthlyPlanDocs(prev => ({ ...prev, [currentMonthKey]: cloneMonthlyPlanEntry(sanitizedEntry, currentMonthKey) }));
+                    setMonthlyPlans(prev => ({ ...prev, [currentMonthKey]: cloneMonthlyPlanEntry(sanitizedEntry, currentMonthKey) }));
+                    planningDirtyMonthsRef.current.delete(currentMonthKey);
                     setPlanningSaveStatus('success');
                     setTimeout(() => setPlanningSaveStatus('idle'), 2500);
                 } catch (e) {
@@ -6569,6 +7117,100 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
                     setIsSaving(false);
                 }
             };
+            const pushEventVersionStatus = (status, message) => {
+                setEventVersionStatus({
+                    status,
+                    message,
+                    at: new Date().toLocaleTimeString('zh-TW')
+                });
+            };
+            const saveEventScheduleVersionEntry = async ({ action = 'save', monthKeys = [], previousRows = [], nextRows = [], previousConfigs = {}, nextConfigs = {}, restoredFromVersion = null }) => {
+                const cleanMonthKeys = Array.from(new Set((monthKeys || []).filter(Boolean))).sort();
+                if (cleanMonthKeys.length === 0) return null;
+                const basePath = `artifacts/${dbSource}/public/data`;
+                const versionCollectionRef = collection(db, basePath, 'event_schedule_versions');
+                const beforeSnapshot = buildEventScheduleMonthSnapshot(previousRows, previousConfigs, cleanMonthKeys);
+                const afterSnapshot = buildEventScheduleMonthSnapshot(nextRows, nextConfigs, cleanMonthKeys);
+                const versionMeta = buildEventScheduleVersionMeta(
+                    flattenRowsByMonth(beforeSnapshot.rowsByMonthKey),
+                    flattenRowsByMonth(afterSnapshot.rowsByMonthKey),
+                    beforeSnapshot.configSnapshot,
+                    afterSnapshot.configSnapshot,
+                    { action }
+                );
+                const operatorName = String(eventVersionOperatorName || '').trim() || DEFAULT_EVENT_VERSION_OPERATOR_NAME;
+                const sourceLabel = restoredFromVersion?.savedAt ? formatPlanningVersionTimestamp(restoredFromVersion.savedAt) : '';
+                const payload = {
+                    action,
+                    monthKey: cleanMonthKeys[0],
+                    monthKeys: cleanMonthKeys,
+                    summary: action === 'restore' && sourceLabel ? `${versionMeta.summary}（來源：${sourceLabel}）` : versionMeta.summary,
+                    details: versionMeta.details,
+                    savedAt: new Date().toISOString(),
+                    savedAtMs: Date.now(),
+                    savedByName: operatorName,
+                    savedByUid: user?.uid || 'anonymous',
+                    snapshot: afterSnapshot
+                };
+                if (restoredFromVersion?.id) payload.restoredFromVersionId = restoredFromVersion.id;
+                await addDoc(versionCollectionRef, payload);
+                return payload;
+            };
+            const handleRestoreEventScheduleVersion = async (version) => {
+                if (!version?.snapshot || !db || !user) return alert('請先登入');
+                const monthKeys = Array.from(new Set([
+                    ...(Array.isArray(version.monthKeys) ? version.monthKeys : []),
+                    ...Object.keys(version.snapshot.rowsByMonthKey || {})
+                ].filter(Boolean))).sort();
+                if (monthKeys.length === 0) return alert('這個版本沒有可還原的月份資料。');
+                const sourceTime = formatPlanningVersionTimestamp(version.savedAt);
+                const sourceActor = String(version.savedByName || '').trim() || DEFAULT_EVENT_VERSION_OPERATOR_NAME;
+                if (!confirm(`確定要把活動場次表還原成 ${sourceTime}（${sourceActor}）這版嗎？\n會覆蓋 ${monthKeys.join('、')} 的活動場次與設定。`)) return;
+                const restoredRows = flattenRowsByMonth(version.snapshot.rowsByMonthKey || {});
+                const untouchedRows = parsedData.filter(row => !monthKeys.includes(normalizeMonthKeyFromDate(row.date)));
+                const nextRows = sortEventRows([...untouchedRows, ...restoredRows]);
+                const currentScopedRows = parsedData.filter(row => monthKeys.includes(normalizeMonthKeyFromDate(row.date)));
+                const currentConfigKeys = Array.from(new Set([
+                    ...collectEventConfigKeysFromRows(currentScopedRows),
+                    ...Object.keys(eventConfigs || {}).filter(key => monthKeys.some(monthKey => key.startsWith(`${monthKey}-`)))
+                ]));
+                const restoredConfigSnapshot = version.snapshot.configSnapshot || {};
+                const restoredConfigKeys = Object.keys(restoredConfigSnapshot);
+                const keysToDelete = currentConfigKeys.filter(key => !restoredConfigKeys.includes(key));
+                const nextConfigs = { ...eventConfigs };
+                keysToDelete.forEach(key => { delete nextConfigs[key]; });
+                restoredConfigKeys.forEach(key => {
+                    const configValue = cloneEventConfigValue(restoredConfigSnapshot[key]);
+                    if (configValue) nextConfigs[key] = configValue;
+                });
+
+                pushEventVersionStatus('checking', `正在還原 ${monthKeys.join('、')} 的活動場次...`);
+                try {
+                    await handleSaveCSV(arrayToCSV(nextRows));
+                    await Promise.all([
+                        ...keysToDelete.map(key => deleteDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', key)).catch(() => null)),
+                        ...restoredConfigKeys.map(key => {
+                            const configValue = restoredConfigSnapshot[key];
+                            if (!configValue) return Promise.resolve();
+                            return setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', key), configValue, {});
+                        })
+                    ]);
+                    await saveEventScheduleVersionEntry({
+                        action: 'restore',
+                        monthKeys,
+                        previousRows: parsedData,
+                        nextRows,
+                        previousConfigs: eventConfigs,
+                        nextConfigs,
+                        restoredFromVersion: version
+                    });
+                    pushEventVersionStatus('success', `已還原 ${monthKeys.join('、')} 的活動場次版本`);
+                } catch (e) {
+                    console.error('Event schedule restore failed', e);
+                    pushEventVersionStatus('error', `還原失敗：${formatFirestoreError(e)}`);
+                    alert(`❌ 活動場次版本還原失敗：${formatFirestoreError(e)}`);
+                }
+            };
             const arrayToCSV = (dataArray) => { let csv = CSV_HEADER + '\n'; dataArray.forEach(row => { const check = row.isCheckedIn ? '1' : '0'; const line = `${row.date||''},${row.eventName||''},${row.instructor||''},${row.customerName||''},${row.price||0},${row.transport||''},${row.idNo||''},${row.birthday||''},${row.email||''},${row.source||''},${row.socialName||''},${toCSVField(row.notes)},${row.orderDate||''},${row.phone||''},${check}`; csv += line + '\n'; }); return csv; };
             const handleUpdateRow = async (newRowData) => { 
                 const newData = parsedData.map(row => row.id === newRowData.id ? newRowData : row); 
@@ -6581,36 +7223,75 @@ const [showExportModal, setShowExportModal] = useState(false); // 新增這行
             const handleAddDirectReg = async (eventInfo, customerData) => { let currentData = csvInput.trim(); if (!currentData || !currentData.startsWith("日期")) { currentData = CSV_HEADER + "\n" + currentData; } const newRow = `\n${eventInfo.date},${eventInfo.eventName},${eventInfo.instructor},${customerData.customerName},${customerData.price},${customerData.transport},${customerData.idNo},${customerData.birthday},${customerData.email},${customerData.source},,${toCSVField(customerData.notes)},${customerData.orderDate},${customerData.phone},0`; const updatedCSV = currentData + newRow; await handleSaveCSV(updatedCSV); };
             // 找到原有的 handleCreateEvent，並更新解構與儲存邏輯
 const handleCreateEvent = async ({ dates, eventName, instructors, time, duration, prepDays, prepTime, link, note, displayName, activityCategory, carpoolDisplayMode, isCancelled, tags, capacity, backendColor, statusRules, price }) => { // 這裡加入 price
-    let rows = ''; 
-    const instr = [...instructors].sort().join(' & ');
-    dates.forEach(d => rows += `\n${d},${eventName},${instr},開放報名中,0,,,,,,,,,0`); 
-    await handleSaveCSV(csvInput + rows); 
-    const batch = writeBatch(db); 
-    dates.forEach(d => { 
-        const key = `${d}_${eventName}_${instr}`.replace(/[\/\\#\?]/g, '-'); 
-        const ref = doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', key); 
-        setDoc(ref, { 
-            time: time || '', 
+    const cleanDates = Array.from(new Set((dates || []).filter(Boolean))).sort();
+    if (cleanDates.length === 0) return;
+    const instr = [...(instructors || [])].map(name => String(name || '').trim()).filter(Boolean).sort().join(' & ');
+    const createdRows = cleanDates.map(d => ({
+        date: d,
+        eventName,
+        instructor: instr,
+        customerName: '開放報名中',
+        price: 0,
+        transport: '',
+        idNo: '',
+        birthday: '',
+        email: '',
+        source: '',
+        socialName: '',
+        notes: '',
+        orderDate: '',
+        phone: '',
+        isCheckedIn: false
+    }));
+    const nextRows = sortEventRows([...parsedData, ...createdRows]);
+    const monthKeys = Array.from(new Set(cleanDates.map(normalizeMonthKeyFromDate).filter(Boolean)));
+    const nextConfigs = { ...eventConfigs };
+
+    cleanDates.forEach(d => {
+        const key = `${d}_${eventName}_${instr}`.replace(/[\/\\#\?]/g, '-');
+        nextConfigs[key] = {
+            time: time || '',
             duration: parseInt(duration, 10) || 1,
             prepDays: parseInt(prepDays, 10) || 0,
             prepTime: prepTime || '',
-            link: link || '', 
+            link: link || '',
             note: note || '',
-            displayName: displayName || '', 
-            activityCategory: activityCategory || '', 
+            displayName: displayName || '',
+            activityCategory: activityCategory || '',
             carpoolDisplayMode: resolveCarpoolDisplayMode(carpoolDisplayMode, eventName),
-            capacity: parseInt(capacity) || 12, 
-            price: parseInt(price) || 0, // 儲存價格
+            capacity: parseInt(capacity) || 12,
+            price: parseInt(price) || 0,
             tags: tags || { levels: '', types: '', locations: '' },
             backendColor: backendColor || '#eff6ff',
             statusRules: statusRules || [],
             leadInstructors: instructors || [],
             supportInstructors: [],
             isCancelled: !!isCancelled
-        }, { merge: true }); 
-    }); 
-    await batch.commit(); 
-    closeCreateEventModal(); 
+        };
+    });
+
+    pushEventVersionStatus('checking', `正在建立 ${cleanDates.length} 場活動...`);
+    try {
+        await handleSaveCSV(arrayToCSV(nextRows));
+        await Promise.all(cleanDates.map(d => {
+            const key = `${d}_${eventName}_${instr}`.replace(/[\/\\#\?]/g, '-');
+            return setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', key), nextConfigs[key], { merge: true });
+        }));
+        await saveEventScheduleVersionEntry({
+            action: 'create',
+            monthKeys,
+            previousRows: parsedData,
+            nextRows,
+            previousConfigs: eventConfigs,
+            nextConfigs
+        });
+        pushEventVersionStatus('success', `已建立 ${cleanDates.length} 場活動，並留下版本紀錄`);
+        closeCreateEventModal();
+    } catch (e) {
+        console.error('Create event failed', e);
+        pushEventVersionStatus('error', `建立失敗：${formatFirestoreError(e)}`);
+        alert(`❌ 建立活動失敗：${formatFirestoreError(e)}`);
+    }
 };
             const handleCheckInToggle = async (customerId, currentStatus) => { const row = parsedData.find(r => r.id === customerId); if (row) { await handleUpdateRow({ ...row, isCheckedIn: !currentStatus }); } };
             const handleSaveEventConfig = async (oldEventKey, newConfig, newInstructorStr, newInternalName) => { 
@@ -6629,19 +7310,47 @@ const handleCreateEvent = async ({ dates, eventName, instructors, time, duration
         return r; 
     }); 
 
-    await handleSaveCSV(arrayToCSV(newRows)); 
-    
+    const sortedRows = sortEventRows(newRows);
     // 2. 更新 Firestore Config
     const finalName = newInternalName || editingEvent.eventName;
     const finalInstr = newInstructorStr !== undefined ? newInstructorStr : editingEvent.instructor;
     const newKey = `${editingEvent.date}_${finalName}_${finalInstr}`.replace(/[\/\\#\?]/g, '-');
+    const monthKeys = Array.from(new Set(
+        sortedRows
+            .filter(r => {
+                const key = buildEventKeyFromRow(r);
+                return key === newKey || key === oldEventKey;
+            })
+            .map(r => normalizeMonthKeyFromDate(r.date))
+            .filter(Boolean)
+    ));
+    const nextConfigs = { ...eventConfigs };
+    const mergedConfig = { ...(eventConfigs[oldEventKey] || {}), ...(newConfig || {}) };
+    if (newKey !== oldEventKey) delete nextConfigs[oldEventKey];
+    nextConfigs[newKey] = mergedConfig;
 
-    if (newKey !== oldEventKey) {
-        await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', newKey), newConfig, { merge: true });
-        // 改名後可選擇刪除舊 Config 避免殘留
-        await deleteDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', oldEventKey));
-    } else {
-        await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', oldEventKey), newConfig, { merge: true }); 
+    pushEventVersionStatus('checking', `正在更新 ${editingEvent.date} 的活動設定...`);
+    try {
+        await handleSaveCSV(arrayToCSV(sortedRows)); 
+        if (newKey !== oldEventKey) {
+            await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', newKey), mergedConfig, { merge: true });
+            await deleteDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', oldEventKey));
+        } else {
+            await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', oldEventKey), mergedConfig, { merge: true }); 
+        }
+        await saveEventScheduleVersionEntry({
+            action: 'save',
+            monthKeys: monthKeys.length > 0 ? monthKeys : [normalizeMonthKeyFromDate(editingEvent.date)],
+            previousRows: parsedData,
+            nextRows: sortedRows,
+            previousConfigs: eventConfigs,
+            nextConfigs
+        });
+        pushEventVersionStatus('success', `已更新 ${editingEvent.date} 的活動設定`);
+    } catch (e) {
+        console.error('Save event config failed', e);
+        pushEventVersionStatus('error', `更新失敗：${formatFirestoreError(e)}`);
+        alert(`❌ 活動設定更新失敗：${formatFirestoreError(e)}`);
     }
 };
             const handleSaveTemplate = (tpl) => { let newList; if (tpl.id) { newList = customTemplates.map(t => t.id === tpl.id ? tpl : t); } else { newList = [...customTemplates, { ...tpl, id: `custom_${Date.now()}` }]; } setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'templates'), { list: newList }, { merge: true }); };
@@ -6668,11 +7377,17 @@ const handleCreateEvent = async ({ dates, eventName, instructors, time, duration
                     const rowKey = `${r.date}_${r.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-');
                     return rowKey !== key;
                 });
+                const sortedRows = sortEventRows(newRows);
+                const monthKeys = [normalizeMonthKeyFromDate(date)].filter(Boolean);
+                const nextConfigs = { ...eventConfigs };
+                delete nextConfigs[key];
 
                 try {
-                    await handleSaveCSV(arrayToCSV(newRows));
+                    pushEventVersionStatus('checking', `正在刪除 ${date} ${eventName}...`);
+                    await handleSaveCSV(arrayToCSV(sortedRows));
                 } catch (e) {
                     pushEventDeleteStatus('error', `刪除失敗：${formatFirestoreError(e)}`);
+                    pushEventVersionStatus('error', `刪除失敗：${formatFirestoreError(e)}`);
                     return;
                 }
 
@@ -6680,6 +7395,20 @@ const handleCreateEvent = async ({ dates, eventName, instructors, time, duration
                     await deleteDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', key));
                 } catch (e) {
                     console.log('Config removal optional', e);
+                }
+                try {
+                    await saveEventScheduleVersionEntry({
+                        action: 'delete',
+                        monthKeys,
+                        previousRows: parsedData,
+                        nextRows: sortedRows,
+                        previousConfigs: eventConfigs,
+                        nextConfigs
+                    });
+                    pushEventVersionStatus('success', `已刪除 ${date} ${eventName}，並留下版本紀錄`);
+                } catch (e) {
+                    console.error('Delete event version save failed', e);
+                    pushEventVersionStatus('error', `刪除已完成，但版本紀錄失敗：${formatFirestoreError(e)}`);
                 }
                 setEditingEvent(null);
                 pushEventDeleteStatus('success', `已刪除活動並寫入 Firebase：${date} ${eventName}`);
@@ -6955,6 +7684,16 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     profitSplit: normalizePlanProfitSplit(raw?.profitSplit)
                 };
             }, [monthlyPlans, currentMonthKey]);
+            const remoteMonthlyPlans = useMemo(() => {
+                const merged = {};
+                Object.entries(legacyMonthlyPlans || {}).forEach(([monthKey, raw]) => {
+                    merged[monthKey] = sanitizeMonthlyPlanEntry(raw, monthKey);
+                });
+                Object.entries(storedMonthlyPlanDocs || {}).forEach(([monthKey, raw]) => {
+                    merged[monthKey] = sanitizeMonthlyPlanEntry(raw, monthKey);
+                });
+                return merged;
+            }, [legacyMonthlyPlans, storedMonthlyPlanDocs]);
             useEffect(() => {
                 setKpiSaveStatus('idle');
             }, [currentMonthKey]);
@@ -6962,12 +7701,82 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                 setPlanningSaveStatus('idle');
             }, [currentMonthKey]);
             useEffect(() => {
+                setMonthlyPlans(prev => {
+                    const next = { ...prev };
+                    Object.keys(next).forEach(monthKey => {
+                        if (!remoteMonthlyPlans[monthKey] && !planningDirtyMonthsRef.current.has(monthKey)) {
+                            delete next[monthKey];
+                        }
+                    });
+                    Object.entries(remoteMonthlyPlans).forEach(([monthKey, raw]) => {
+                        if (planningDirtyMonthsRef.current.has(monthKey)) return;
+                        next[monthKey] = cloneMonthlyPlanEntry(raw, monthKey);
+                    });
+                    return next;
+                });
+            }, [remoteMonthlyPlans]);
+            useEffect(() => {
                 try {
                     localStorage.setItem('crm_admin_sidebar_collapsed', sidebarCollapsed ? '1' : '0');
                 } catch (e) {
                     console.warn('Sidebar preference save failed', e);
                 }
             }, [sidebarCollapsed]);
+            useEffect(() => {
+                try {
+                    localStorage.setItem('crm_planning_operator_name', planningOperatorName);
+                } catch (e) {
+                    console.warn('Planning operator preference save failed', e);
+                }
+            }, [planningOperatorName]);
+            useEffect(() => {
+                try {
+                    localStorage.setItem('crm_event_version_operator_name', eventVersionOperatorName);
+                } catch (e) {
+                    console.warn('Event version operator preference save failed', e);
+                }
+            }, [eventVersionOperatorName]);
+            useEffect(() => {
+                if (!db || !user) {
+                    setCurrentMonthPlanVersions([]);
+                    return undefined;
+                }
+                const basePath = `artifacts/${dbSource}/public/data`;
+                const versionsRef = collection(db, basePath, 'monthly_plans', currentMonthKey, 'versions');
+                const versionsQuery = (versionsRef && typeof versionsRef.orderBy === 'function')
+                    ? versionsRef.orderBy('savedAtMs', 'desc').limit(8)
+                    : versionsRef;
+                return onSnapshot(versionsQuery, snapshot => {
+                    const nextVersions = [];
+                    if (snapshot) snapshot.forEach(d => nextVersions.push({ id: d.id, ...(d.data() || {}) }));
+                    nextVersions.sort((a, b) => (Number(b.savedAtMs) || 0) - (Number(a.savedAtMs) || 0));
+                    setCurrentMonthPlanVersions(nextVersions);
+                });
+            }, [db, user, dbSource, currentMonthKey]);
+            useEffect(() => {
+                if (!db || !user) {
+                    setEventScheduleVersions([]);
+                    return undefined;
+                }
+                const basePath = `artifacts/${dbSource}/public/data`;
+                const versionsRef = collection(db, basePath, 'event_schedule_versions');
+                return onSnapshot(versionsRef, snapshot => {
+                    const nextVersions = [];
+                    if (snapshot) snapshot.forEach(d => nextVersions.push({ id: d.id, ...(d.data() || {}) }));
+                    nextVersions.sort((a, b) => (Number(b.savedAtMs) || 0) - (Number(a.savedAtMs) || 0));
+                    setEventScheduleVersions(
+                        nextVersions
+                            .filter(version => {
+                                const monthKeys = Array.isArray(version.monthKeys) ? version.monthKeys : (version.monthKey ? [version.monthKey] : []);
+                                return monthKeys.includes(currentMonthKey);
+                            })
+                            .slice(0, 8)
+                    );
+                });
+            }, [db, user, dbSource, currentMonthKey]);
+            useEffect(() => {
+                setEventVersionStatus({ status: 'idle', message: '', at: '' });
+            }, [currentMonthKey]);
             const allEventNames = useMemo(() => Array.from(new Set(Object.values(stats.events).map(evt => evt.eventName).filter(Boolean))).sort((a, b) => a.localeCompare(b)), [stats.events]);
             const currentMonthKpiActuals = useMemo(() => {
                 const year = currentDate.getFullYear();
@@ -7401,6 +8210,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     };
                     return { ...prev, [currentMonthKey]: updater(draft) };
                 });
+                planningDirtyMonthsRef.current.add(currentMonthKey);
                 setPlanningSaveStatus('idle');
             };
             const handleCurrentMonthKpiFieldChange = (field, value, allowFloat = false) => {
@@ -7496,18 +8306,64 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     }
                 }));
             };
+            const handleRestoreCurrentMonthPlanVersion = async (version) => {
+                if (!version?.snapshot || !user || !db) return alert("請先登入");
+                const versionTime = formatPlanningVersionTimestamp(version.savedAt);
+                const versionActor = String(version.savedByName || '').trim() || DEFAULT_PLANNING_OPERATOR_NAME;
+                if (!confirm(`確定要把 ${currentMonthLabel} 還原成 ${versionTime}（${versionActor}）這版嗎？\n目前本月未儲存的調整會被覆蓋。`)) return;
+                const basePath = `artifacts/${dbSource}/public/data`;
+                const mainPlanRef = doc(db, basePath, 'monthly_plans', currentMonthKey);
+                const versionRef = collection(db, basePath, 'monthly_plans', currentMonthKey, 'versions');
+                const restoredEntry = sanitizeMonthlyPlanEntry(version.snapshot, currentMonthKey);
+                const previousSavedEntry = storedMonthlyPlanDocs[currentMonthKey] || legacyMonthlyPlans[currentMonthKey] || null;
+                const operatorName = String(planningOperatorName || '').trim() || DEFAULT_PLANNING_OPERATOR_NAME;
+                const savedAt = new Date().toISOString();
+                const versionMeta = buildPlanningVersionMeta(previousSavedEntry, restoredEntry, { action: 'restore' });
+                const versionPayload = {
+                    monthKey: currentMonthKey,
+                    monthLabel: currentMonthLabel,
+                    action: 'restore',
+                    summary: `${versionMeta.summary}（來源：${versionTime}）`,
+                    details: versionMeta.details,
+                    savedAt,
+                    savedAtMs: Date.now(),
+                    savedByName: operatorName,
+                    savedByUid: user?.uid || 'anonymous',
+                    restoredFromVersionId: version.id || '',
+                    snapshot: restoredEntry
+                };
+
+                setPlanningSaveStatus('saving');
+                try {
+                    await setDoc(mainPlanRef, restoredEntry, {});
+                    await addDoc(versionRef, versionPayload);
+                    setStoredMonthlyPlanDocs(prev => ({ ...prev, [currentMonthKey]: cloneMonthlyPlanEntry(restoredEntry, currentMonthKey) }));
+                    setMonthlyPlans(prev => ({ ...prev, [currentMonthKey]: cloneMonthlyPlanEntry(restoredEntry, currentMonthKey) }));
+                    planningDirtyMonthsRef.current.delete(currentMonthKey);
+                    setPlanningSaveStatus('success');
+                    setTimeout(() => setPlanningSaveStatus('idle'), 2500);
+                } catch (e) {
+                    console.error('Monthly planning restore failed', e);
+                    setPlanningSaveStatus('error');
+                    alert(`❌ 版本還原失敗：${formatFirestoreError(e)}`);
+                }
+            };
             const handleAssignCurrentMonthPlanPlacement = ({ eventName, instructorName, dateKey, sourceDateKey, sourceInstructorName }) => {
                 const cleanEventName = String(eventName || '').trim();
                 const cleanInstructorName = String(instructorName || '').trim();
                 const cleanDateKey = String(dateKey || '').trim();
                 if (!cleanEventName || !cleanInstructorName || !cleanDateKey) return;
+                const sourceKey = buildPlanningCellKey(sourceDateKey, sourceInstructorName);
+                const targetKey = buildPlanningCellKey(cleanDateKey, cleanInstructorName);
+                if (sourceKey && sourceKey === targetKey) return;
+                const existingPlacement = (Array.isArray(currentMonthPlan.calendarPlacements) ? currentMonthPlan.calendarPlacements : [])
+                    .find(placement => buildPlanningCellKey(placement?.dateKey, placement?.instructorName) === targetKey);
+                if (existingPlacement && !confirm(`這格原本已排「${existingPlacement.eventName}」，確定要改成「${cleanEventName}」嗎？`)) return;
                 updateCurrentMonthPlan(current => {
                     const nextInputs = {
                         ...(current.activityInputs || {}),
                         [cleanEventName]: current.activityInputs?.[cleanEventName] || buildDefaultPlanActivityInput(inferPlanActivityTemplateType(cleanEventName))
                     };
-                    const sourceKey = buildPlanningCellKey(sourceDateKey, sourceInstructorName);
-                    const targetKey = buildPlanningCellKey(cleanDateKey, cleanInstructorName);
                     const nextPlacements = (Array.isArray(current.calendarPlacements) ? current.calendarPlacements : [])
                         .filter(placement => {
                             const key = buildPlanningCellKey(placement?.dateKey, placement?.instructorName);
@@ -7529,6 +8385,9 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
             };
             const handleRemoveCurrentMonthPlanPlacement = (instructorName, dateKey) => {
                 const targetKey = buildPlanningCellKey(dateKey, instructorName);
+                const targetPlacement = (Array.isArray(currentMonthPlan.calendarPlacements) ? currentMonthPlan.calendarPlacements : [])
+                    .find(placement => buildPlanningCellKey(placement?.dateKey, placement?.instructorName) === targetKey);
+                if (targetPlacement && !confirm(`確定要移除 ${dateKey} ${instructorName} 的「${targetPlacement.eventName}」模擬安排嗎？`)) return;
                 updateCurrentMonthPlan(current => ({
                     ...current,
                     calendarPlacements: (Array.isArray(current.calendarPlacements) ? current.calendarPlacements : [])
@@ -7617,7 +8476,21 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
 
                 if (viewMode === 'public') {
                     // [修改] 改用 calendarOccupancy 取得該日所有事項 (含主活動、前置、跨日)
-                    const selectedDayItems = (calendarOccupancy[selectedPublicDate] || []).filter(item => checkEventMatchesFilters(item.evt.key));
+                    const selectedDayItems = (calendarOccupancy[selectedPublicDate] || [])
+                        .filter(item => checkEventMatchesFilters(item.evt.key))
+                        .map((item, index) => {
+                            const cfg = eventConfigs[item.evt.key] || {};
+                            const status = getEventStatus(item.evt.count, cfg.capacity, cfg, item.evt.date, globalRules);
+                            return {
+                                ...item,
+                                sortIndex: index,
+                                sortIsFull: !!status.isFull
+                            };
+                        })
+                        .sort((a, b) => {
+                            if (a.sortIsFull !== b.sortIsFull) return a.sortIsFull ? 1 : -1;
+                            return a.sortIndex - b.sortIndex;
+                        });
                     const selectedOuting = outingDays[selectedPublicDate];
                     const isSelectedOutingDay = !!selectedOuting?.enabled;
                     const selectedOutingPoster = isSelectedOutingDay
@@ -8048,6 +8921,10 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                                 planning={currentMonthPlanningData}
                                 availableEventNames={Array.from(new Set([...allEventNames, ...currentMonthPlanningData.activityRows.map(row => row.name)])).sort((a, b) => a.localeCompare(b, 'zh-Hant'))}
                                 saveStatus={planningSaveStatus}
+                                versionHistory={currentMonthPlanVersions}
+                                operatorName={planningOperatorName}
+                                onOperatorNameChange={setPlanningOperatorName}
+                                onRestoreVersion={handleRestoreCurrentMonthPlanVersion}
                                 onSave={handleSaveMonthlyPlans}
                                 onPrevMonth={prevMonth}
                                 onNextMonth={nextMonth}
@@ -8067,6 +8944,9 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                                     <div className="text-[11px] text-slate-400 mt-1">Build: {APP_BUILD}</div>
                                 </div>
                                 <div className="flex gap-3">
+                                    <button onClick={handleExportCurrentCsvAsTxt} className="bg-white hover:bg-slate-50 text-slate-700 px-3 py-1.5 text-xs font-bold rounded-lg flex items-center gap-2 shadow-md border border-slate-200">
+                                        <Icon name="file-text" size={14}/> 匯出 TXT
+                                    </button>
                                     {/* 修改後的按鈕：字體變小 (text-xs)，padding 變小 (px-3 py-1.5) */}
                                     <button onClick={()=>setShowExportModal(true)} className="bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 text-xs font-bold rounded-lg flex items-center gap-2 shadow-md">
                                         <Icon name="download" size={14}/> 匯出月曆資料
@@ -8082,6 +8962,89 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                                     </div>
                                 </div>
                             </header>
+                            <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                                    <div>
+                                        <div className="text-xs font-bold uppercase tracking-wide text-slate-500">版本控制</div>
+                                        <div className="text-sm text-slate-500 mt-1">現在活動場次表也會留下版本。這裡只顯示與 {currentMonthLabel} 有關的變更，方便回頭查誰動過哪個月份。</div>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                                            <span className="text-[11px] font-bold text-slate-500 whitespace-nowrap">操作人</span>
+                                            <input
+                                                type="text"
+                                                value={eventVersionOperatorName}
+                                                onChange={e => setEventVersionOperatorName(e.target.value)}
+                                                placeholder="例如 郭玟希"
+                                                className="w-28 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-300"
+                                            />
+                                        </div>
+                                        <div className="text-[11px] text-slate-400">{currentMonthLabel} 版本紀錄</div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setEventVersionsExpanded(prev => !prev)}
+                                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                                        >
+                                            <Icon name={eventVersionsExpanded ? 'chevron-up' : 'chevron-down'} size={14}/>
+                                            {eventVersionsExpanded ? '收起版本' : '展開版本'}
+                                        </button>
+                                    </div>
+                                </div>
+                                {eventVersionStatus.status !== 'idle' && (
+                                    <div className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
+                                        eventVersionStatus.status === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+                                        eventVersionStatus.status === 'error' ? 'bg-rose-50 border-rose-200 text-rose-700' :
+                                        'bg-sky-50 border-sky-200 text-sky-700'
+                                    }`}>
+                                        <div className="font-bold mb-1">活動場次版本狀態</div>
+                                        <div>{eventVersionStatus.message}</div>
+                                        {eventVersionStatus.at && <div className="text-xs opacity-75 mt-1">時間：{eventVersionStatus.at}</div>}
+                                    </div>
+                                )}
+                                {!eventVersionsExpanded ? (
+                                    <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-400">
+                                        版本列表已收起。展開後可查看 {currentMonthLabel} 最近的建立、調整、刪除與還原紀錄。
+                                    </div>
+                                ) : eventScheduleVersions.length > 0 ? (
+                                    <div className="mt-4 space-y-2">
+                                        {eventScheduleVersions.map(version => (
+                                            <div key={`event_version_${version.id}`} className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+                                                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                                                        <span className={`rounded-full px-2 py-1 font-bold ${version.action === 'restore' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
+                                                            {version.action === 'restore' ? '還原' : version.action === 'delete' ? '刪除' : version.action === 'create' ? '建立' : '儲存'}
+                                                        </span>
+                                                        <span className="font-bold text-slate-600">{formatPlanningVersionTimestamp(version.savedAt)}</span>
+                                                        <span className="text-slate-400">{version.savedByName || DEFAULT_EVENT_VERSION_OPERATOR_NAME}</span>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRestoreEventScheduleVersion(version)}
+                                                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                                                    >
+                                                        <Icon name="history" size={14}/> 還原這版
+                                                    </button>
+                                                </div>
+                                                <div className="mt-2 text-xs text-slate-500">{version.summary || '這個版本沒有附帶摘要。'}</div>
+                                                {Array.isArray(version.details) && version.details.length > 0 && (
+                                                    <div className="mt-2 space-y-1 rounded-lg bg-white px-3 py-2">
+                                                        {version.details.slice(0, 4).map((detail, idx) => (
+                                                            <div key={`event_version_detail_${version.id}_${idx}`} className="text-[11px] text-slate-500">• {detail}</div>
+                                                        ))}
+                                                        {version.details.length > 4 && (
+                                                            <div className="text-[11px] text-slate-400">還有 {version.details.length - 4} 項細節</div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-400">
+                                        這個月份還沒有活動場次版本。之後在 {currentMonthLabel} 建立、調整或刪除活動時，會開始自動累積。
+                                    </div>
+                                )}
+                            </div>
                             {eventDeleteStatus.status !== 'idle' && (
                                 <div className={`mb-4 rounded-xl border px-4 py-3 text-sm ${
                                     eventDeleteStatus.status === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
@@ -8431,6 +9394,56 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                                             {csvSaveStatus === 'success' && <span className="text-xs text-slate-400 hidden md:inline">Saved</span>}
                                         </div>
                                     </div>
+                                    <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                            <div>
+                                                <div className="text-sm font-bold text-slate-700">登入密碼對應操作人</div>
+                                                <div className="text-xs text-slate-400 mt-1">登入後會自動把操作人帶入版本控制。舊的共用密碼仍可保留，下面這裡則可以為每位成員設定自己的密碼。</div>
+                                            </div>
+                                            <div className="text-xs text-slate-400">
+                                                {authAccountsSaveStatus === 'saving' && '儲存中...'}
+                                                {authAccountsSaveStatus === 'success' && '已更新'}
+                                                {authAccountsSaveStatus === 'idle' && `${authAccounts.length} 組對應`}
+                                            </div>
+                                        </div>
+                                        <div className="mt-3 space-y-2">
+                                            {authAccounts.length > 0 ? authAccounts.map(account => (
+                                                <div key={account.id} className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white px-3 py-3 md:flex-row md:items-center md:justify-between">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-sm font-bold text-slate-700">{account.name || DEFAULT_AUTH_ACCOUNT_NAME}</span>
+                                                        <span className="text-xs text-slate-400">密碼：{account.password}</span>
+                                                    </div>
+                                                    <button onClick={() => handleDeleteAuthAccount(account.id)} className="inline-flex items-center justify-center gap-1 rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50">
+                                                        <Icon name="trash-2" size={13}/> 刪除
+                                                    </button>
+                                                </div>
+                                            )) : (
+                                                <div className="rounded-lg border border-dashed border-slate-200 bg-white px-3 py-4 text-sm text-slate-400">
+                                                    目前只有共用密碼，還沒有個人登入對應。
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_auto]">
+                                            <input
+                                                type="text"
+                                                placeholder="操作人名稱，例如 郭玟希"
+                                                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400"
+                                                value={newAuthAccount.name}
+                                                onChange={e => setNewAuthAccount(prev => ({ ...prev, name: e.target.value }))}
+                                            />
+                                            <input
+                                                type="password"
+                                                placeholder="對應登入密碼"
+                                                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400"
+                                                value={newAuthAccount.password}
+                                                onChange={e => setNewAuthAccount(prev => ({ ...prev, password: e.target.value }))}
+                                                onKeyDown={e => e.key === 'Enter' && handleAddAuthAccount()}
+                                            />
+                                            <button onClick={handleAddAuthAccount} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">
+                                                新增對應
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             </details>
 
@@ -8697,7 +9710,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                         onAddTag={handleAddTagDefinition}
                         parsedData={parsedData}
                         onAddDirectReg={handleAddDirectReg}
-                        adminPassword={adminPassword} 
+                        adminPasswords={validAdminPasswords} 
                     />}
                     
                     {editingProject && <ProjectDetailModal 
