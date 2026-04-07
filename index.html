@@ -1576,7 +1576,7 @@ ${worksheetXml}
             );
         };
 
-        const EventManagerModal = ({ event, config, onClose, onSaveConfig, availableInstructors, instructorSchedule, onCheckInToggle, onDeleteEvent, globalRules, onEditCustomer, tagDefinitions, onAddTag, parsedData, onAddDirectReg, adminPasswords = [] }) => {
+        const EventManagerModal = ({ event, config, onClose, onSaveConfig, availableInstructors, instructorSchedule, onCheckInToggle, onDeleteEvent, globalRules, onEditCustomer, tagDefinitions, onAddTag, parsedData, onAddDirectReg, customTemplates = [], adminPasswords = [] }) => {
             const [capacity, setCapacity] = useState(config?.capacity || 12);
             const [internalName, setInternalName] = useState(event.eventName);
             const [isEditingInternalName, setIsEditingInternalName] = useState(false);
@@ -1602,8 +1602,40 @@ ${worksheetXml}
             const [showAddRegModal, setShowAddRegModal] = useState(false);
             const [tags, setTags] = useState(config?.tags || { levels: '', types: '', locations: '' });
             const [isCancelled, setIsCancelled] = useState(!!config?.isCancelled);
+            const [dismissedTemplateSuggestionKey, setDismissedTemplateSuggestionKey] = useState('');
+            const [appliedTemplateSuggestionKey, setAppliedTemplateSuggestionKey] = useState('');
+            const [templateAutofillNotice, setTemplateAutofillNotice] = useState('');
             
             const handleTagChange = (type, val) => { setTags({ ...tags, [type]: val }); };
+            const normalizedInternalName = useMemo(
+                () => String(internalName || '').trim().replace(/\s+/g, ''),
+                [internalName]
+            );
+            const matchedTemplate = useMemo(() => {
+                if (!normalizedInternalName) return null;
+                const matches = (customTemplates || []).filter(tpl => String(tpl?.eventName || '').trim().replace(/\s+/g, '') === normalizedInternalName);
+                return matches.length > 0 ? matches[matches.length - 1] : null;
+            }, [customTemplates, normalizedInternalName]);
+            const matchedTemplateKey = matchedTemplate ? `${matchedTemplate.id || matchedTemplate.name || matchedTemplate.eventName}::${normalizedInternalName}` : '';
+            const templateSuggestionNeeded = !!(
+                matchedTemplate &&
+                (
+                    (!eventTime && matchedTemplate.time) ||
+                    (!eventLink && matchedTemplate.link) ||
+                    (!displayName && matchedTemplate.displayName) ||
+                    (!activityCategory && matchedTemplate.activityCategory) ||
+                    (!eventNote && matchedTemplate.note) ||
+                    ((capacity === 12 || capacity === '' || capacity === null || capacity === undefined) && matchedTemplate.capacity) ||
+                    ((!tags?.levels && matchedTemplate?.tags?.levels) || (!tags?.types && matchedTemplate?.tags?.types) || (!tags?.locations && matchedTemplate?.tags?.locations)) ||
+                    (!(statusRules || []).length && (matchedTemplate.statusRules || []).length)
+                )
+            );
+            const shouldShowTemplateSuggestion = !!(
+                templateSuggestionNeeded &&
+                matchedTemplateKey &&
+                matchedTemplateKey !== dismissedTemplateSuggestionKey &&
+                matchedTemplateKey !== appliedTemplateSuggestionKey
+            );
 // 偵測是否有任何變更
             const hasChanges = useMemo(() => {
                 const currentInstr = [...leadInstructors, ...supportInstructors].sort().join(' & ');
@@ -1678,6 +1710,30 @@ ${worksheetXml}
             const removeSupportInstructor = (name) => { setSupportInstructors(supportInstructors.filter(i => i !== name)); };
             const addStatusRule = () => { if (!newRule.label) return alert("請輸入顯示文字"); const updatedRules = [...statusRules, newRule].sort((a,b) => parseInt(a.min) - parseInt(b.min)); setStatusRules(updatedRules); setNewRule({ min: parseInt(newRule.max) + 1, max: parseInt(newRule.max) + 10, label: '', color: 'blue' }); };
             const removeStatusRule = (idx) => { setStatusRules(statusRules.filter((_, i) => i !== idx)); };
+            const applyTemplateToEvent = (tpl) => {
+                if (!tpl) return;
+                setEventTime(tpl.time || '');
+                setEventLink(tpl.link || '');
+                setEventNote(tpl.note || '');
+                setDisplayName(tpl.displayName || '');
+                setActivityCategory(tpl.activityCategory || '');
+                setCarpoolDisplayMode(resolveCarpoolDisplayMode(tpl.carpoolDisplayMode, tpl.eventName));
+                setCapacity(tpl.capacity || 12);
+                setBackendColor(tpl.backendColor || '#eff6ff');
+                setTags(tpl.tags || { levels: '', types: '', locations: '' });
+                setStatusRules(tpl.statusRules || []);
+                setIsCancelled(!!tpl.isCancelled);
+                const templateKey = `${tpl.id || tpl.name || tpl.eventName}::${String(tpl.eventName || '').trim().replace(/\s+/g, '')}`;
+                setAppliedTemplateSuggestionKey(templateKey);
+                setDismissedTemplateSuggestionKey('');
+                setTemplateAutofillNotice(`已從模板「${tpl.name || tpl.eventName}」帶入時間、連結、前台名稱、標籤與共乘設定。`);
+            };
+
+            useEffect(() => {
+                setDismissedTemplateSuggestionKey('');
+                setAppliedTemplateSuggestionKey('');
+                setTemplateAutofillNotice('');
+            }, [event.key]);
 
             const handleSave = () => { 
                 const newInstructorStr = Array.from(new Set([...leadInstructors, ...supportInstructors])).sort().join(' & ');
@@ -1801,6 +1857,42 @@ ${worksheetXml}
                             <section>
                                 <h4 className="font-bold text-slate-700 mb-3 flex items-center"><Icon name="settings" size={18} className="mr-2"/> 活動設定</h4>
                                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
+                                    {shouldShowTemplateSuggestion && (
+                                        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div>
+                                                    <div className="text-xs font-bold text-amber-700 flex items-center gap-1">
+                                                        <Icon name="sparkles" size={12}/> 找到同名模板
+                                                    </div>
+                                                    <div className="text-sm font-bold text-slate-700 mt-1">{matchedTemplate.name || matchedTemplate.eventName}</div>
+                                                    <div className="text-[11px] text-slate-500 mt-1 leading-5">
+                                                        這場「{internalName}」和模板同名，系統找到可補齊的預設內容。要不要直接帶入模板裡的時間、連結、前台名稱、標籤與共乘設定？
+                                                    </div>
+                                                </div>
+                                                <div className="shrink-0 flex gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => applyTemplateToEvent(matchedTemplate)}
+                                                        className="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-bold hover:bg-amber-600"
+                                                    >
+                                                        套用內容
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setDismissedTemplateSuggestionKey(matchedTemplateKey)}
+                                                        className="px-3 py-1.5 rounded-lg bg-white text-slate-500 text-xs font-bold border border-slate-200 hover:bg-slate-50"
+                                                    >
+                                                        先不要
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {templateAutofillNotice && (
+                                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-[11px] font-medium text-emerald-700">
+                                            {templateAutofillNotice}
+                                        </div>
+                                    )}
                                     <div className="grid grid-cols-2 gap-3 bg-white p-3 rounded-lg border border-slate-200">
                                         <div className="col-span-2 text-xs font-bold text-slate-500 border-b pb-1 mb-1">📅 時間與時程設定</div>
                                         
@@ -2233,6 +2325,9 @@ ${worksheetXml}
             }); 
             
             const [tempInstructor, setTempInstructor] = useState(''); 
+            const [dismissedTemplateSuggestionKey, setDismissedTemplateSuggestionKey] = useState('');
+            const [appliedTemplateSuggestionKey, setAppliedTemplateSuggestionKey] = useState('');
+            const [templateAutofillNotice, setTemplateAutofillNotice] = useState('');
             
             // 模板資料初始化
             const [newTemplateData, setNewTemplateData] = useState({ 
@@ -2261,6 +2356,22 @@ ${worksheetXml}
             const [newRule, setNewRule] = useState({ min: 0, max: 10, label: '', color: 'blue' });
 
             const unavailableInstructors = useMemo(() => { const unavailable = new Set(); formData.dates.forEach(date => { const resting = instructorSchedule[date] || []; resting.forEach(name => unavailable.add(name)); }); return unavailable; }, [formData.dates, instructorSchedule]);
+            const normalizedFormEventName = useMemo(
+                () => String(formData.eventName || '').trim().replace(/\s+/g, ''),
+                [formData.eventName]
+            );
+            const matchedTemplate = useMemo(() => {
+                if (!normalizedFormEventName) return null;
+                const matches = (customTemplates || []).filter(tpl => String(tpl?.eventName || '').trim().replace(/\s+/g, '') === normalizedFormEventName);
+                return matches.length > 0 ? matches[matches.length - 1] : null;
+            }, [customTemplates, normalizedFormEventName]);
+            const matchedTemplateKey = matchedTemplate ? `${matchedTemplate.id || matchedTemplate.name || matchedTemplate.eventName}::${normalizedFormEventName}` : '';
+            const shouldShowTemplateSuggestion = !!(
+                matchedTemplate &&
+                matchedTemplateKey &&
+                matchedTemplateKey !== dismissedTemplateSuggestionKey &&
+                matchedTemplateKey !== appliedTemplateSuggestionKey
+            );
             const companyRestSet = useMemo(() => new Set((companyRestDates || []).map(date => String(date || ''))), [companyRestDates]);
             const selectedDateSchedules = useMemo(() => ([...formData.dates].sort().map(dateKey => ({
                 dateKey,
@@ -2301,30 +2412,43 @@ const removeFormRule = (idx) => {
 };
 // -------------------------------------
 
-            const handleTemplateSelect = (tpl) => { 
-                let tplInstructors = []; 
-                if (tpl.instructor) tplInstructors = tpl.instructor.split(/[&,]/).map(s => s.trim()); 
-                const nextInstructors = formData.instructors.length > 0 ? formData.instructors : tplInstructors;
-                setFormData({ 
-                    ...formData, 
-                    eventName: tpl.eventName, 
-                    instructors: nextInstructors, 
-                    time: tpl.time || '', 
-                    duration: parseInt(tpl.duration, 10) || 1,
-                    prepDays: parseInt(tpl.prepDays, 10) || 0,
-                    prepTime: tpl.prepTime || '',
-                    link: tpl.link || '', 
-                    note: tpl.note || '',
-                    displayName: tpl.displayName || '',
-                    activityCategory: tpl.activityCategory || '',
-                    carpoolDisplayMode: resolveCarpoolDisplayMode(tpl.carpoolDisplayMode, tpl.eventName),
-                    isCancelled: !!tpl.isCancelled,
-                    capacity: tpl.capacity || 12, 
-                    price: tpl.price || '', // 載入價格
-                    tags: tpl.tags || { levels: '', types: '', locations: '' },
-                    backendColor: tpl.backendColor || '#eff6ff',
-                    statusRules: tpl.statusRules || [] // 載入規則
-                }); 
+            const applyTemplateToForm = (tpl) => {
+                let tplInstructors = [];
+                if (tpl.instructor) tplInstructors = tpl.instructor.split(/[&,]/).map(s => s.trim()).filter(Boolean);
+                setFormData(prev => {
+                    const nextInstructors = prev.instructors.length > 0 ? prev.instructors : tplInstructors;
+                    return {
+                        ...prev,
+                        eventName: tpl.eventName,
+                        instructors: nextInstructors,
+                        time: tpl.time || '',
+                        duration: parseInt(tpl.duration, 10) || 1,
+                        prepDays: parseInt(tpl.prepDays, 10) || 0,
+                        prepTime: tpl.prepTime || '',
+                        link: tpl.link || '',
+                        note: tpl.note || '',
+                        displayName: tpl.displayName || '',
+                        activityCategory: tpl.activityCategory || '',
+                        carpoolDisplayMode: resolveCarpoolDisplayMode(tpl.carpoolDisplayMode, tpl.eventName),
+                        isCancelled: !!tpl.isCancelled,
+                        capacity: tpl.capacity || 12,
+                        price: tpl.price || '',
+                        tags: tpl.tags || { levels: '', types: '', locations: '' },
+                        backendColor: tpl.backendColor || '#eff6ff',
+                        statusRules: tpl.statusRules || []
+                    };
+                });
+            };
+            const handleTemplateSelect = (tpl, options = {}) => { 
+                applyTemplateToForm(tpl);
+                const templateKey = `${tpl.id || tpl.name || tpl.eventName}::${String(tpl.eventName || '').trim().replace(/\s+/g, '')}`;
+                setAppliedTemplateSuggestionKey(templateKey);
+                setDismissedTemplateSuggestionKey('');
+                if (options.fromSuggestion) {
+                    setTemplateAutofillNotice(`已從模板「${tpl.name || tpl.eventName}」帶入時間、連結、前台名稱等預設內容。`);
+                } else {
+                    setTemplateAutofillNotice('');
+                }
             };
             
             const handleEditTemplate = (e, tpl) => { 
@@ -2353,6 +2477,12 @@ const removeFormRule = (idx) => {
                 setIsCreatingTemplate(true); 
             };
             
+            useEffect(() => {
+                setDismissedTemplateSuggestionKey('');
+                setAppliedTemplateSuggestionKey('');
+                setTemplateAutofillNotice('');
+            }, [normalizedFormEventName]);
+
             const toggleDate = (dateStr) => { if (companyRestSet.has(dateStr)) return; let newDates = formData.dates.includes(dateStr) ? formData.dates.filter(d => d !== dateStr) : [...formData.dates, dateStr].sort(); setFormData({ ...formData, dates: newDates }); };
             
             const addInstructor = (name) => { const clean = name.trim(); const isResting = formData.dates.some(d => instructorSchedule[d] && instructorSchedule[d].includes(clean)); if (isResting) { if(!confirm(`${clean} 在部分選定的日期已排休，確定要排入嗎？`)) return; } if (clean && !formData.instructors.includes(clean)) setFormData({ ...formData, instructors: [...formData.instructors, clean] }); setTempInstructor(''); };
@@ -2433,7 +2563,45 @@ const removeFormRule = (idx) => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-slate-100"> 
                                 <div><label className="block text-sm font-medium text-slate-700 mb-2">1. 選擇日期</label>{renderCalendar()}</div> 
                                 <div className="space-y-4"> 
-                                    <div><label className="block text-sm font-medium text-slate-700 mb-1">2. 活動名稱</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" value={formData.eventName} onChange={e=>setFormData({...formData, eventName: e.target.value})} placeholder="輸入名稱..."/></div> 
+                                    <div className="space-y-2">
+                                        <div><label className="block text-sm font-medium text-slate-700 mb-1">2. 活動名稱</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" value={formData.eventName} onChange={e=>setFormData({...formData, eventName: e.target.value})} placeholder="輸入名稱..."/></div>
+                                        {shouldShowTemplateSuggestion && (
+                                            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div>
+                                                        <div className="text-xs font-bold text-amber-700 flex items-center gap-1">
+                                                            <Icon name="sparkles" size={12}/> 找到同名模板
+                                                        </div>
+                                                        <div className="text-sm font-bold text-slate-700 mt-1">{matchedTemplate.name || matchedTemplate.eventName}</div>
+                                                        <div className="text-[11px] text-slate-500 mt-1 leading-5">
+                                                            這個活動名稱和模板「{matchedTemplate.eventName}」一致。要不要直接帶入預設時間、連結、前台名稱、標籤和共乘設定？
+                                                        </div>
+                                                    </div>
+                                                    <div className="shrink-0 flex gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleTemplateSelect(matchedTemplate, { fromSuggestion: true })}
+                                                            className="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-bold hover:bg-amber-600"
+                                                        >
+                                                            套用內容
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setDismissedTemplateSuggestionKey(matchedTemplateKey)}
+                                                            className="px-3 py-1.5 rounded-lg bg-white text-slate-500 text-xs font-bold border border-slate-200 hover:bg-slate-50"
+                                                        >
+                                                            先不要
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {templateAutofillNotice && (
+                                            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-medium text-emerald-700">
+                                                {templateAutofillNotice}
+                                            </div>
+                                        )}
+                                    </div> 
                                     <div> <label className="block text-sm font-medium text-slate-700 mb-1">3. 帶團講師</label> <div className="flex flex-wrap gap-2 mb-2 min-h-[38px] p-2 bg-white border border-slate-200 rounded-lg">{formData.instructors.map(ins=><div key={ins} className="flex items-center bg-blue-50 text-blue-700 px-2 py-1 rounded text-sm"><span className="mr-1">{ins}</span><button onClick={()=>setFormData({...formData, instructors: formData.instructors.filter(i=>i!==ins)})}><Icon name="x" size={14}/></button></div>)}</div> <div className="flex gap-2"><input type="text" className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" value={tempInstructor} onChange={e=>setTempInstructor(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addInstructor(tempInstructor)} placeholder="輸入名字..."/><button onClick={()=>addInstructor(tempInstructor)} className="px-3 bg-slate-100 rounded-lg hover:bg-slate-200"><Icon name="plus" size={18}/></button></div> <div className="flex flex-wrap gap-2 mt-2">{availableInstructors.slice(0,6).map(i=><button key={i} onClick={()=>addInstructor(i)} className={`text-xs px-2 py-1 border rounded-full transition ${unavailableInstructors.has(i)?'bg-slate-100 text-slate-400 border-slate-200':'bg-slate-50 hover:bg-blue-50 text-slate-600'}`}>+ {i}</button>)}</div> </div> 
                                     <div className="grid grid-cols-2 gap-3">
                                         <div><label className="block text-sm font-medium text-slate-700 mb-1">4. 活動時間</label><input type="time" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" value={formData.time} onChange={e=>setFormData({...formData, time: e.target.value})}/></div> 
@@ -9710,6 +9878,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                         onAddTag={handleAddTagDefinition}
                         parsedData={parsedData}
                         onAddDirectReg={handleAddDirectReg}
+                        customTemplates={customTemplates}
                         adminPasswords={validAdminPasswords} 
                     />}
                     
