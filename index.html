@@ -192,26 +192,13 @@
             }
             if (value instanceof Date) return { timestampValue: value.toISOString() };
             if (Array.isArray(value)) return { arrayValue: { values: value.map(v => toFirestoreRestValue(v)) } };
-            if (value === null) return { nullValue: null };
-
-// Firestore Timestamp
-if (value && typeof value.toDate === 'function') {
-    return { timestampValue: value.toDate().toISOString() };
-}
-
-// Firebase / Firestore 特殊物件，先不要當一般 object 展開
-if (value && typeof value === 'object' && '_delegate' in value) {
-    return { stringValue: String(value.path || value.id || '') };
-}
-
-if (typeof value === 'object') {
-    const fields = {};
-    Object.keys(value).forEach((k) => {
-        if (k === '_delegate') return;
-        if (value[k] !== undefined) fields[k] = toFirestoreRestValue(value[k]);
-    });
-    return { mapValue: { fields } };
-}
+            if (typeof value === 'object') {
+                const fields = {};
+                Object.keys(value).forEach((k) => {
+                    if (value[k] !== undefined) fields[k] = toFirestoreRestValue(value[k]);
+                });
+                return { mapValue: { fields } };
+            }
             return { stringValue: String(value) };
         };
         const getAuthTokenForRest = async () => {
@@ -706,7 +693,7 @@ if (typeof value === 'object') {
             const matchedRule = rules.find(r => r && count >= parseInt(r.min) && count <= parseInt(r.max));
             if (matchedRule) {
                 const colorObj = COLOR_OPTIONS.find(c => c.value === matchedRule.color) || COLOR_OPTIONS[0];
-                return { label: matchedRule.label || '報名中', color: matchedRule.color || 'blue', colorObj: colorObj || COLOR_OPTIONS[0], isFull: false };
+                return { label: toSafeDisplayText(matchedRule.label, '報名中'), color: toSafeDisplayText(matchedRule.color, 'blue'), colorObj: colorObj || COLOR_OPTIONS[0], isFull: false };
             }
             return { label: '報名中', color: 'blue', colorObj: COLOR_OPTIONS[0], isFull: false };
         };
@@ -4692,6 +4679,90 @@ if (typeof value === 'object') {
             .replace(/^下班後走走[｜|｜\-－:：\s]*/u, '')
             .replace(/^下班走走[｜|｜\-－:：\s]*/u, '')
             .trim();
+        const toSafeDisplayText = (value, fallback = '') => {
+            const safeFallback = (() => {
+                if (fallback === null || fallback === undefined) return '';
+                if (typeof fallback === 'string') return fallback;
+                if (typeof fallback === 'number' || typeof fallback === 'boolean') return String(fallback);
+                if (fallback instanceof Date) return fallback.toISOString();
+                if (typeof fallback === 'object') {
+                    if (typeof fallback.label === 'string') return fallback.label;
+                    if (typeof fallback.name === 'string') return fallback.name;
+                    if (typeof fallback.value === 'string') return fallback.value;
+                    return '';
+                }
+                return String(fallback || '');
+            })();
+            if (value === null || value === undefined) return safeFallback;
+            if (typeof value === 'string') return value;
+            if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+            if (value instanceof Date) return value.toISOString();
+            if (typeof value === 'object') {
+                if (typeof value.label === 'string') return value.label;
+                if (typeof value.name === 'string') return value.name;
+                if (typeof value.value === 'string') return value.value;
+                return safeFallback;
+            }
+            return String(value || safeFallback);
+        };
+        const normalizeTagDefinitionsForDisplay = (definitions = DEFAULT_TAG_DEFS) => {
+            const normalizeList = (items = []) => (Array.isArray(items) ? items : [])
+                .map(item => toSafeDisplayText(item, '').trim())
+                .filter(Boolean);
+            return {
+                levels: normalizeList(definitions.levels || DEFAULT_TAG_DEFS.levels),
+                types: normalizeList(definitions.types || DEFAULT_TAG_DEFS.types),
+                locations: normalizeList(definitions.locations || DEFAULT_TAG_DEFS.locations)
+            };
+        };
+        const normalizeStatusRulesForDisplay = (rules = DEFAULT_STATUS_RULES) => (Array.isArray(rules) ? rules : DEFAULT_STATUS_RULES)
+            .map(rule => ({
+                ...rule,
+                min: toSafeDisplayText(rule?.min, '0'),
+                max: toSafeDisplayText(rule?.max, '999'),
+                label: toSafeDisplayText(rule?.label, '報名中'),
+                color: toSafeDisplayText(rule?.color, 'blue')
+            }));
+        const sanitizeFirebaseValue = (value) => {
+            if (value === null || value === undefined) return value;
+            if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
+            if (value instanceof Date) return value.toISOString();
+            if (Array.isArray(value)) return value.map(item => sanitizeFirebaseValue(item));
+            if (typeof value === 'object') {
+                if (value._delegate) return '';
+                if (typeof value.toDate === 'function') {
+                    try { return value.toDate().toISOString(); } catch (_) { return ''; }
+                }
+                const sanitized = {};
+                Object.entries(value).forEach(([key, child]) => {
+                    const nextValue = sanitizeFirebaseValue(child);
+                    if (nextValue !== undefined) sanitized[key] = nextValue;
+                });
+                return sanitized;
+            }
+            if (typeof value === 'function') return '';
+            return String(value);
+        };
+        const normalizeEventConfigForDisplay = (config = {}) => {
+            const rawTags = config?.tags || {};
+            const rawRules = Array.isArray(config?.statusRules) ? config.statusRules : [];
+            return {
+                ...config,
+                displayName: toSafeDisplayText(config.displayName, ''),
+                activityCategory: toSafeDisplayText(config.activityCategory, ''),
+                time: toSafeDisplayText(config.time, ''),
+                link: toSafeDisplayText(config.link, ''),
+                note: toSafeDisplayText(config.note, ''),
+                backendColor: toSafeDisplayText(config.backendColor, ''),
+                carpoolDisplayMode: toSafeDisplayText(config.carpoolDisplayMode, ''),
+                tags: {
+                    levels: toSafeDisplayText(rawTags.levels, ''),
+                    types: toSafeDisplayText(rawTags.types, ''),
+                    locations: toSafeDisplayText(rawTags.locations, '')
+                },
+                statusRules: normalizeStatusRulesForDisplay(rawRules)
+            };
+        };
         const resolvePosterEventName = (evt = {}, cfg = {}) => {
             const rawInternalName = String(evt?.eventName || cfg?.eventName || '').trim();
             const rawDisplayName = String(cfg?.displayName || '').trim();
@@ -4790,29 +4861,32 @@ if (typeof value === 'object') {
         const buildPosterActivityOptions = (posterData) => {
             const optionMap = new Map();
             (posterData?.entries || []).forEach(entry => {
-                const current = optionMap.get(entry.displayName);
+                const safeName = String(entry?.displayName || '').trim() || '未命名活動';
+                const safeBucket = String(entry?.bucket || 'special');
+                const safeDay = Number(entry?.day) || 0;
+                const current = optionMap.get(safeName);
                 if (!current) {
-                    optionMap.set(entry.displayName, {
-                        name: entry.displayName,
-                        bucket: entry.bucket,
-                        bucketLabel: POSTER_BUCKET_META[entry.bucket]?.label || '其他活動',
+                    optionMap.set(safeName, {
+                        name: safeName,
+                        bucket: safeBucket,
+                        bucketLabel: String(POSTER_BUCKET_META[safeBucket]?.label || '其他活動'),
                         count: 1,
-                        days: [entry.day]
+                        days: safeDay ? [safeDay] : []
                     });
                     return;
                 }
                 current.count += 1;
-                if (!current.days.includes(entry.day)) current.days.push(entry.day);
+                if (safeDay && !current.days.includes(safeDay)) current.days.push(safeDay);
             });
             return Array.from(optionMap.values())
                 .map(option => ({
                     ...option,
                     days: option.days.slice().sort((a, b) => a - b),
-                    daysLabel: option.days.slice().sort((a, b) => a - b).join('、')
+                    daysLabel: option.days.slice().sort((a, b) => a - b).join('、') || '-'
                 }))
                 .sort((a, b) =>
                     (POSTER_BUCKET_META[a.bucket]?.order ?? 99) - (POSTER_BUCKET_META[b.bucket]?.order ?? 99) ||
-                    a.name.localeCompare(b.name, 'zh-Hant')
+                    String(a.name).localeCompare(String(b.name), 'zh-Hant')
                 );
         };
         const filterMonthlySchedulePosterData = (posterData, selectedNames) => {
@@ -5536,7 +5610,7 @@ ${worksheetXml}
             const [newRule, setNewRule] = useState({ min: 0, max: 10, label: '', color: 'blue' });
             const addRule = () => { if (!newRule.label) return alert("請輸入顯示文字"); const updated = [...rules, newRule].sort((a,b) => parseInt(a.min) - parseInt(b.min)); setRules(updated); setNewRule({ min: parseInt(newRule.max) + 1, max: parseInt(newRule.max) + 10, label: '', color: 'blue' }); };
             const removeRule = (idx) => setRules(rules.filter((_, i) => i !== idx));
-            return (<div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 fade-in backdrop-blur-sm"><div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl"><div className="flex justify-between items-center mb-4"><h3 className="text-lg font-bold text-slate-800">設定全域預設狀態規則</h3><button onClick={onClose}><Icon name="x" className="text-slate-400"/></button></div><p className="text-xs text-slate-500 mb-4 bg-yellow-50 p-2 rounded text-yellow-700">注意：這裡的設定將套用到「未個別設定規則」的所有活動。如果您在個別活動中設定了規則，將以個別活動為準。</p><div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4"><div className="space-y-2 mb-3 max-h-60 overflow-y-auto">{rules.map((rule, idx) => (<div key={idx} className="flex items-center gap-2 text-xs bg-white p-2 rounded border"><span className="w-16 text-center bg-slate-100 rounded py-1">{rule.min}-{rule.max}人</span><span className={`flex-1 px-2 py-1 rounded text-center ${COLOR_OPTIONS.find(c=>c.value===rule.color)?.bg} ${COLOR_OPTIONS.find(c=>c.value===rule.color)?.text}`}>{rule.label}</span><button onClick={()=>removeRule(idx)} className="text-slate-400 hover:text-red-500"><Icon name="trash-2" size={14}/></button></div>))}</div><div className="grid grid-cols-4 gap-2 items-end border-t pt-2 border-slate-200"><div><span className="text-[10px] text-slate-400">Min</span><input type="number" className="w-full p-1 text-xs border rounded" value={newRule.min} onChange={e=>setNewRule({...newRule, min: e.target.value})}/></div><div><span className="text-[10px] text-slate-400">Max</span><input type="number" className="w-full p-1 text-xs border rounded" value={newRule.max} onChange={e=>setNewRule({...newRule, max: e.target.value})}/></div><div className="col-span-2"><span className="text-[10px] text-slate-400">文字</span><input type="text" className="w-full p-1 text-xs border rounded" placeholder="如: 熱賣中" value={newRule.label} onChange={e=>setNewRule({...newRule, label: e.target.value})}/></div><div className="col-span-3"><span className="text-[10px] text-slate-400">顏色</span><select className="w-full p-1 text-xs border rounded" value={newRule.color} onChange={e=>setNewRule({...newRule, color: e.target.value})}>{COLOR_OPTIONS.map(c=><option key={c.value} value={c.value}>{c.label}</option>)}</select></div><button onClick={addRule} className="h-[26px] bg-slate-800 text-white text-xs rounded hover:bg-slate-700">新增</button></div></div><div className="flex justify-end gap-2"><button onClick={onClose} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg text-sm">取消</button><button onClick={()=>onSave(rules)} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm shadow-md">儲存設定</button></div></div></div>);
+            return (<div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 fade-in backdrop-blur-sm"><div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl"><div className="flex justify-between items-center mb-4"><h3 className="text-lg font-bold text-slate-800">設定全域預設狀態規則</h3><button onClick={onClose}><Icon name="x" className="text-slate-400"/></button></div><p className="text-xs text-slate-500 mb-4 bg-yellow-50 p-2 rounded text-yellow-700">注意：這裡的設定將套用到「未個別設定規則」的所有活動。如果您在個別活動中設定了規則，將以個別活動為準。</p><div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4"><div className="space-y-2 mb-3 max-h-60 overflow-y-auto">{rules.map((rule, idx) => (<div key={idx} className="flex items-center gap-2 text-xs bg-white p-2 rounded border"><span className="w-16 text-center bg-slate-100 rounded py-1">{toSafeDisplayText(rule.min, '0')}-{toSafeDisplayText(rule.max, '999')}人</span><span className={`flex-1 px-2 py-1 rounded text-center ${COLOR_OPTIONS.find(c=>c.value===rule.color)?.bg} ${COLOR_OPTIONS.find(c=>c.value===rule.color)?.text}`}>{toSafeDisplayText(rule.label, '報名中')}</span><button onClick={()=>removeRule(idx)} className="text-slate-400 hover:text-red-500"><Icon name="trash-2" size={14}/></button></div>))}</div><div className="grid grid-cols-4 gap-2 items-end border-t pt-2 border-slate-200"><div><span className="text-[10px] text-slate-400">Min</span><input type="number" className="w-full p-1 text-xs border rounded" value={newRule.min} onChange={e=>setNewRule({...newRule, min: e.target.value})}/></div><div><span className="text-[10px] text-slate-400">Max</span><input type="number" className="w-full p-1 text-xs border rounded" value={newRule.max} onChange={e=>setNewRule({...newRule, max: e.target.value})}/></div><div className="col-span-2"><span className="text-[10px] text-slate-400">文字</span><input type="text" className="w-full p-1 text-xs border rounded" placeholder="如: 熱賣中" value={newRule.label} onChange={e=>setNewRule({...newRule, label: e.target.value})}/></div><div className="col-span-3"><span className="text-[10px] text-slate-400">顏色</span><select className="w-full p-1 text-xs border rounded" value={newRule.color} onChange={e=>setNewRule({...newRule, color: e.target.value})}>{COLOR_OPTIONS.map(c=><option key={c.value} value={c.value}>{c.label}</option>)}</select></div><button onClick={addRule} className="h-[26px] bg-slate-800 text-white text-xs rounded hover:bg-slate-700">新增</button></div></div><div className="flex justify-end gap-2"><button onClick={onClose} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg text-sm">取消</button><button onClick={()=>onSave(normalizeStatusRulesForDisplay(rules))} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm shadow-md">儲存設定</button></div></div></div>);
         };
 
         const TagSettingsModal = ({ currentDefs, onClose, onSave }) => {
@@ -5735,11 +5809,17 @@ ${worksheetXml}
                             </div>
                         </div>
                         <div className="max-h-[60vh] overflow-y-auto p-4 space-y-2 bg-white">
-                            {options.map(option => (
+                            {options.map(option => {
+                                const optionName = String(option?.name || '未命名活動');
+                                const optionBucketLabel = String(option?.bucketLabel || '其他活動');
+                                const optionDaysLabel = String(option?.daysLabel || '-');
+                                const optionCount = Number(option?.count) || 0;
+                                const isSelected = selectedNames.includes(optionName);
+                                return (
                                 <label
-                                    key={option.name}
+                                    key={optionName}
                                     className={`flex items-start gap-3 rounded-xl border px-4 py-3 cursor-pointer transition ${
-                                        selectedNames.includes(option.name)
+                                        isSelected
                                             ? 'border-emerald-300 bg-emerald-50/60'
                                             : 'border-slate-200 bg-white hover:bg-slate-50'
                                     }`}
@@ -5747,22 +5827,23 @@ ${worksheetXml}
                                     <input
                                         type="checkbox"
                                         className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                                        checked={selectedNames.includes(option.name)}
-                                        onChange={() => onToggle(option.name)}
+                                        checked={isSelected}
+                                        onChange={() => onToggle(optionName)}
                                     />
                                     <div className="flex-1 min-w-0">
                                         <div className="flex flex-wrap items-center gap-2">
-                                            <span className="text-sm font-bold text-slate-800">{option.name}</span>
+                                            <span className="text-sm font-bold text-slate-800">{optionName}</span>
                                             <span className="text-[11px] px-2 py-0.5 rounded-full border border-slate-200 bg-white text-slate-500">
-                                                {option.bucketLabel}
+                                                {optionBucketLabel}
                                             </span>
                                         </div>
                                         <div className="text-xs text-slate-400 mt-1">
-                                            本月顯示 {option.count} 次 · 日期：{option.daysLabel}
+                                            本月顯示 {optionCount} 次 · 日期：{optionDaysLabel}
                                         </div>
                                     </div>
                                 </label>
-                            ))}
+                                );
+                            })}
                         </div>
                         <div className="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
                             <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg text-slate-500 hover:bg-slate-100">
@@ -6090,7 +6171,7 @@ ${worksheetXml}
                         <div className="flex justify-between items-center mb-4">
                             <div>
                                 <h3 className="text-lg font-bold text-slate-800">新增報名</h3>
-                                <p className="text-xs text-slate-500">{eventData.date} - {eventData.eventName}</p>
+                                <p className="text-xs text-slate-500">{toSafeDisplayText(eventData.date, '')} - {toSafeDisplayText(eventData.eventName, '未命名活動')}</p>
                             </div>
                             <button onClick={onClose}><Icon name="x" className="text-slate-400 hover:text-slate-600"/></button>
                         </div>
@@ -6444,7 +6525,7 @@ ${worksheetXml}
                                             type="button"
                                             onClick={() => applyTemplateToEvent(matchedTemplate)}
                                             className="shrink-0 px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-[11px] font-bold text-blue-700 hover:bg-blue-100"
-                                            title={`從模板「${matchedTemplate.name || matchedTemplate.eventName}」帶入設定`}
+	                                            title={`從模板「${toSafeDisplayText(matchedTemplate.name, toSafeDisplayText(matchedTemplate.eventName, '模板'))}」帶入設定`}
                                         >
                                             從同名模板補齊設定
                                         </button>
@@ -6458,7 +6539,7 @@ ${worksheetXml}
                                                     <div className="text-xs font-bold text-amber-700 flex items-center gap-1">
                                                         <Icon name="sparkles" size={12}/> 找到同名模板
                                                     </div>
-                                                    <div className="text-sm font-bold text-slate-700 mt-1">{matchedTemplate.name || matchedTemplate.eventName}</div>
+	                                                    <div className="text-sm font-bold text-slate-700 mt-1">{toSafeDisplayText(matchedTemplate.name, toSafeDisplayText(matchedTemplate.eventName, '模板'))}</div>
                                                     <div className="text-[11px] text-slate-500 mt-1 leading-5">
                                                         這場「{internalName}」和模板同名，系統找到可補齊的預設內容。要不要直接帶入模板裡的時間、連結、前台名稱、標籤與共乘設定？
                                                     </div>
@@ -6559,7 +6640,7 @@ ${worksheetXml}
                                         <TagSelector definitions={tagDefinitions} value={tags} onChange={handleTagChange} onAddTag={onAddTag} />
                                     </div>
 
-                                    <div className="bg-white border border-slate-200 rounded-lg p-3"><label className="text-xs font-bold text-slate-500 mb-2 block flex justify-between"><span>自定義狀態規則 (依照人數顯示)</span><span className="text-[10px] bg-slate-100 px-1 rounded font-normal">從上到下匹配</span></label><div className="space-y-2 mb-3">{statusRules.map((rule, idx) => (<div key={idx} className="flex items-center gap-2 text-xs"><span className="w-12 text-center bg-slate-100 rounded py-1">{rule.min}-{rule.max}人</span><span className={`flex-1 px-2 py-1 rounded border text-center ${COLOR_OPTIONS.find(c=>c.value===rule.color)?.bg} ${COLOR_OPTIONS.find(c=>c.value===rule.color)?.text}`}>{rule.label}</span><button onClick={()=>removeStatusRule(idx)} className="text-slate-400 hover:text-red-500"><Icon name="trash-2" size={14}/></button></div>))}</div><div className="grid grid-cols-4 gap-2 items-end bg-slate-50 p-2 rounded border border-slate-100"><div><span className="text-[10px] text-slate-400">Min</span><input type="number" className="w-full p-1 text-xs border rounded" value={newRule.min} onChange={e=>setNewRule({...newRule, min: e.target.value})}/></div><div><span className="text-[10px] text-slate-400">Max</span><input type="number" className="w-full p-1 text-xs border rounded" value={newRule.max} onChange={e=>setNewRule({...newRule, max: e.target.value})}/></div><div className="col-span-2"><span className="text-[10px] text-slate-400">顯示文字</span><input type="text" className="w-full p-1 text-xs border rounded" placeholder="如: 報名中" value={newRule.label} onChange={e=>setNewRule({...newRule, label: e.target.value})}/></div><div className="col-span-2"><span className="text-[10px] text-slate-400">顏色</span><select className="w-full p-1 text-xs border rounded" value={newRule.color} onChange={e=>setNewRule({...newRule, color: e.target.value})}>{COLOR_OPTIONS.map(c=><option key={c.value} value={c.value}>{c.label}</option>)}</select></div><div className="col-span-2"><button onClick={addStatusRule} className="w-full py-1 bg-slate-800 text-white text-xs rounded hover:bg-slate-700">新增規則</button></div></div></div>
+	                                    <div className="bg-white border border-slate-200 rounded-lg p-3"><label className="text-xs font-bold text-slate-500 mb-2 block flex justify-between"><span>自定義狀態規則 (依照人數顯示)</span><span className="text-[10px] bg-slate-100 px-1 rounded font-normal">從上到下匹配</span></label><div className="space-y-2 mb-3">{statusRules.map((rule, idx) => (<div key={idx} className="flex items-center gap-2 text-xs"><span className="w-12 text-center bg-slate-100 rounded py-1">{toSafeDisplayText(rule.min, '0')}-{toSafeDisplayText(rule.max, '999')}人</span><span className={`flex-1 px-2 py-1 rounded border text-center ${COLOR_OPTIONS.find(c=>c.value===rule.color)?.bg} ${COLOR_OPTIONS.find(c=>c.value===rule.color)?.text}`}>{toSafeDisplayText(rule.label, '報名中')}</span><button onClick={()=>removeStatusRule(idx)} className="text-slate-400 hover:text-red-500"><Icon name="trash-2" size={14}/></button></div>))}</div><div className="grid grid-cols-4 gap-2 items-end bg-slate-50 p-2 rounded border border-slate-100"><div><span className="text-[10px] text-slate-400">Min</span><input type="number" className="w-full p-1 text-xs border rounded" value={newRule.min} onChange={e=>setNewRule({...newRule, min: e.target.value})}/></div><div><span className="text-[10px] text-slate-400">Max</span><input type="number" className="w-full p-1 text-xs border rounded" value={newRule.max} onChange={e=>setNewRule({...newRule, max: e.target.value})}/></div><div className="col-span-2"><span className="text-[10px] text-slate-400">顯示文字</span><input type="text" className="w-full p-1 text-xs border rounded" placeholder="如: 報名中" value={newRule.label} onChange={e=>setNewRule({...newRule, label: e.target.value})}/></div><div className="col-span-2"><span className="text-[10px] text-slate-400">顏色</span><select className="w-full p-1 text-xs border rounded" value={newRule.color} onChange={e=>setNewRule({...newRule, color: e.target.value})}>{COLOR_OPTIONS.map(c=><option key={c.value} value={c.value}>{c.label}</option>)}</select></div><div className="col-span-2"><button onClick={addStatusRule} className="w-full py-1 bg-slate-800 text-white text-xs rounded hover:bg-slate-700">新增規則</button></div></div></div>
                                     <div><label className="text-xs font-bold text-slate-500 mb-1 block">活動報名連結</label><input type="text" className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" placeholder="https://..." value={eventLink} onChange={e=>setEventLink(e.target.value)} /></div>
                                     <div><label className="text-xs font-bold text-slate-500 mb-1 block">活動專屬備註</label><textarea className="w-full p-2 border border-slate-300 rounded-lg text-sm h-20 resize-none focus:ring-2 focus:ring-blue-500 outline-none" placeholder="例如: 記得帶無線電..." value={eventNote} onChange={e=>setEventNote(e.target.value)}></textarea></div>
                                 </div>
@@ -6567,7 +6648,7 @@ ${worksheetXml}
                             <section>
                                 <div className="flex justify-between items-center mb-2"><h4 className="font-bold text-slate-700 flex items-center"><Icon name="check-square" size={18} className="mr-2"/> 執行任務</h4><button onClick={handleAddTask} className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded hover:bg-blue-200 flex items-center"><Icon name="plus" size={14} className="mr-1"/> 新增</button></div>
                                 <div className="w-full h-1.5 bg-slate-100 rounded-full mb-4 overflow-hidden"><div className="h-full bg-green-500 transition-all duration-500" style={{width: `${progress}%`}}></div></div>
-                                <div className="space-y-2">{tasks.map((t, i) => (<div key={i} className="flex items-center justify-between p-2.5 border border-slate-200 rounded-lg hover:bg-slate-50 group"><div className="flex items-center gap-3 cursor-pointer" onClick={()=>handleTaskToggle(i)}><div className={`w-4 h-4 rounded border flex items-center justify-center ${t.completed ? 'bg-green-500 border-green-500 text-white' : 'border-slate-300'}`}>{t.completed && <Icon name="check" size={12}/>}</div><span className={`text-sm ${t.completed ? 'text-slate-400 line-through' : 'text-slate-700 font-medium'}`}>{t.name}</span></div><button onClick={()=>handleDeleteTask(i)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Icon name="trash-2" size={14}/></button></div>))}</div>
+	                                <div className="space-y-2">{tasks.map((t, i) => (<div key={i} className="flex items-center justify-between p-2.5 border border-slate-200 rounded-lg hover:bg-slate-50 group"><div className="flex items-center gap-3 cursor-pointer" onClick={()=>handleTaskToggle(i)}><div className={`w-4 h-4 rounded border flex items-center justify-center ${t.completed ? 'bg-green-500 border-green-500 text-white' : 'border-slate-300'}`}>{t.completed && <Icon name="check" size={12}/>}</div><span className={`text-sm ${t.completed ? 'text-slate-400 line-through' : 'text-slate-700 font-medium'}`}>{toSafeDisplayText(t.name, '未命名任務')}</span></div><button onClick={()=>handleDeleteTask(i)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Icon name="trash-2" size={14}/></button></div>))}</div>
                             </section>
                         </div>
                         <div className="p-4 border-t border-slate-100 bg-slate-50/50 rounded-b-2xl flex justify-between items-center">
@@ -7144,8 +7225,8 @@ const removeFormRule = (idx) => {
                                     {customTemplates.length === 0 && <div className="col-span-full text-center text-slate-400 text-xs py-2">無模板</div>} 
                                     {[...customTemplates].map((tpl, i) => ( 
                                         <div key={i} onClick={()=>handleTemplateSelect(tpl)} className={`relative border rounded-lg p-1.5 cursor-pointer text-center hover:shadow-sm transition-all ${formData.eventName===tpl.eventName?'border-blue-500 ring-2 ring-blue-100 bg-blue-50':'border-slate-200 bg-white'}`} style={formData.eventName===tpl.eventName ? {borderColor: tpl.backendColor} : {}}> 
-                                            <div className="font-bold text-slate-700 text-[11px] truncate mb-0.5">{tpl.name}</div>
-                                            <div className="text-[9px] text-slate-400 truncate">{tpl.instructor}</div>
+	                                            <div className="font-bold text-slate-700 text-[11px] truncate mb-0.5">{toSafeDisplayText(tpl.name, toSafeDisplayText(tpl.eventName, '模板'))}</div>
+	                                            <div className="text-[9px] text-slate-400 truncate">{toSafeDisplayText(tpl.instructor, '')}</div>
                                             <button onClick={(e)=>{e.stopPropagation(); handleEditTemplate(e, tpl)}} className="absolute -top-1 -right-1 p-0.5 bg-slate-100 rounded-full text-slate-400 hover:text-blue-500 border border-white"><Icon name="edit-2" size={8}/></button> 
                                         </div> 
                                     ))} 
@@ -7166,9 +7247,9 @@ const removeFormRule = (idx) => {
                                                         <div className="text-xs font-bold text-amber-700 flex items-center gap-1">
                                                             <Icon name="sparkles" size={12}/> 找到同名模板
                                                         </div>
-                                                        <div className="text-sm font-bold text-slate-700 mt-1">{matchedTemplate.name || matchedTemplate.eventName}</div>
+	                                                        <div className="text-sm font-bold text-slate-700 mt-1">{toSafeDisplayText(matchedTemplate.name, toSafeDisplayText(matchedTemplate.eventName, '模板'))}</div>
                                                         <div className="text-[11px] text-slate-500 mt-1 leading-5">
-                                                            這個活動名稱和模板「{matchedTemplate.eventName}」一致。要不要直接帶入預設時間、連結、前台名稱、標籤和共乘設定？
+	                                                            這個活動名稱和模板「{toSafeDisplayText(matchedTemplate.eventName, '模板')}」一致。要不要直接帶入預設時間、連結、前台名稱、標籤和共乘設定？
                                                         </div>
                                                     </div>
                                                     <div className="shrink-0 flex gap-2">
@@ -7237,8 +7318,8 @@ const removeFormRule = (idx) => {
     <div className="space-y-2 mb-3">
         {(formData.statusRules || []).map((rule, idx) => (
             <div key={idx} className="flex items-center gap-2 text-xs">
-                <span className="w-12 text-center bg-slate-100 rounded py-1">{rule.min}-{rule.max}人</span>
-                <span className={`flex-1 px-2 py-1 rounded border text-center ${COLOR_OPTIONS.find(c=>c.value===rule.color)?.bg} ${COLOR_OPTIONS.find(c=>c.value===rule.color)?.text}`}>{rule.label}</span>
+	                <span className="w-12 text-center bg-slate-100 rounded py-1">{toSafeDisplayText(rule.min, '0')}-{toSafeDisplayText(rule.max, '999')}人</span>
+	                <span className={`flex-1 px-2 py-1 rounded border text-center ${COLOR_OPTIONS.find(c=>c.value===rule.color)?.bg} ${COLOR_OPTIONS.find(c=>c.value===rule.color)?.text}`}>{toSafeDisplayText(rule.label, '報名中')}</span>
                 <button onClick={()=>removeFormRule(idx)} className="text-slate-400 hover:text-red-500"><Icon name="trash-2" size={14}/></button>
             </div>
         ))}
@@ -7275,10 +7356,10 @@ const removeFormRule = (idx) => {
                                                         return (
                                                             <div key={`${dateKey}_${evt.key || evt.eventName || idx}_${item.type || 'main'}_${idx}`} className="flex items-start justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2">
                                                                 <div>
-                                                                    <div className="text-sm font-bold text-slate-700">{evt.eventName || '未命名活動'}{cfg.isCancelled && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200">流團</span>}</div>
-                                                                    <div className="text-[11px] text-slate-500 mt-1">{item.displayTime || '--:--'} · @{evt.instructor || '未定'}</div>
+	                                                                    <div className="text-sm font-bold text-slate-700">{toSafeDisplayText(evt.eventName, '未命名活動')}{cfg.isCancelled && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200">流團</span>}</div>
+	                                                                    <div className="text-[11px] text-slate-500 mt-1">{toSafeDisplayText(item.displayTime, '--:--')} · @{toSafeDisplayText(evt.instructor, '未定')}</div>
                                                                 </div>
-                                                                <span className={`shrink-0 text-[10px] font-bold px-2 py-1 rounded-full border ${meta.tone}`}>{meta.label}</span>
+	                                                                <span className={`shrink-0 text-[10px] font-bold px-2 py-1 rounded-full border ${meta.tone}`}>{toSafeDisplayText(meta.label, '')}</span>
                                                             </div>
                                                         );
                                                     })}
@@ -7341,8 +7422,8 @@ const removeFormRule = (idx) => {
                                 <div className="space-y-2 mb-3">
                                     {(newTemplateData.statusRules || []).map((rule, idx) => (
                                         <div key={idx} className="flex items-center gap-2 text-xs">
-                                            <span className="w-12 text-center bg-slate-100 rounded py-1">{rule.min}-{rule.max}人</span>
-                                            <span className={`flex-1 px-2 py-1 rounded border text-center ${COLOR_OPTIONS.find(c=>c.value===rule.color)?.bg} ${COLOR_OPTIONS.find(c=>c.value===rule.color)?.text}`}>{rule.label}</span>
+	                                            <span className="w-12 text-center bg-slate-100 rounded py-1">{toSafeDisplayText(rule.min, '0')}-{toSafeDisplayText(rule.max, '999')}人</span>
+	                                            <span className={`flex-1 px-2 py-1 rounded border text-center ${COLOR_OPTIONS.find(c=>c.value===rule.color)?.bg} ${COLOR_OPTIONS.find(c=>c.value===rule.color)?.text}`}>{toSafeDisplayText(rule.label, '報名中')}</span>
                                             <button onClick={()=>removeTemplateRule(idx)} className="text-slate-400 hover:text-red-500"><Icon name="trash-2" size={14}/></button>
                                         </div>
                                     ))}
@@ -9997,40 +10078,47 @@ const removeFormRule = (idx) => {
                                 <label className="text-xs font-bold text-slate-400 mb-1 block">活動等級</label>
                                 <select className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500" value={filters.level} onChange={e => setFilters({...filters, level: e.target.value})}>
                                     <option value="">全部等級</option>
-                                    {(tagDefinitions.levels || []).map(t => <option key={t} value={t}>{t}</option>)}
+                                    {(tagDefinitions.levels || []).map(t => { const safeTag = toSafeDisplayText(t, '').trim(); return safeTag ? <option key={safeTag} value={safeTag}>{safeTag}</option> : null; })}
                                 </select>
                             </div>
                             <div>
                                 <label className="text-xs font-bold text-slate-400 mb-1 block">活動種類</label>
                                 <select className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-emerald-500" value={filters.type} onChange={e => setFilters({...filters, type: e.target.value})}>
                                     <option value="">全部種類</option>
-                                    {(tagDefinitions.types || []).map(t => <option key={t} value={t}>{t}</option>)}
+                                    {(tagDefinitions.types || []).map(t => { const safeTag = toSafeDisplayText(t, '').trim(); return safeTag ? <option key={safeTag} value={safeTag}>{safeTag}</option> : null; })}
                                 </select>
                             </div>
                             <div>
                                 <label className="text-xs font-bold text-slate-400 mb-1 block">活動地點</label>
                                 <select className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-purple-500" value={filters.location} onChange={e => setFilters({...filters, location: e.target.value})}>
                                     <option value="">全部地點</option>
-                                    {(tagDefinitions.locations || []).map(t => <option key={t} value={t}>{t}</option>)}
+                                    {(tagDefinitions.locations || []).map(t => { const safeTag = toSafeDisplayText(t, '').trim(); return safeTag ? <option key={safeTag} value={safeTag}>{safeTag}</option> : null; })}
                                 </select>
                             </div>
                         </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                        {processedEvents.map((e, idx) => (
+                        {processedEvents.map((e, idx) => {
+                            const safeEventDate = toSafeDisplayText(e.date, '');
+                            const safeEventName = toSafeDisplayText(e.cfg?.displayName, toSafeDisplayText(e.eventName, '未命名活動'));
+                            const safeInstructor = toSafeDisplayText(e.instructor, '未定');
+                            const safeLocationTag = toSafeDisplayText(e.tags?.locations, '');
+                            const safeLevelTag = toSafeDisplayText(e.tags?.levels, '');
+                            const safeTypeTag = toSafeDisplayText(e.tags?.types, '');
+                            return (
                             <div key={idx} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all p-4 relative overflow-hidden group">
                                 <div className="flex justify-between items-start mb-2">
-                                    <span className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{e.date}</span>
+                                    <span className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{safeEventDate}</span>
                                     <div className="flex gap-1">
                                         {e.isFull && <span className="text-[10px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded">額滿</span>}
-                                        {e.tags.locations && <span className="text-[10px] font-bold bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded border border-purple-100">{e.tags.locations}</span>}
+                                        {safeLocationTag && <span className="text-[10px] font-bold bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded border border-purple-100">{safeLocationTag}</span>}
                                     </div>
                                 </div>
 
-                                <h3 className="font-bold text-slate-800 mb-1 truncate" title={e.eventName}>{e.cfg.displayName || e.eventName}</h3>
+                                <h3 className="font-bold text-slate-800 mb-1 truncate" title={safeEventName}>{safeEventName}</h3>
                                 <div className="text-xs text-slate-500 mb-4 flex items-center gap-1">
-                                    <Icon name="user" size={12}/> {e.instructor || '未定'}
+                                    <Icon name="user" size={12}/> {safeInstructor}
                                 </div>
 
                                 <div className="mb-2">
@@ -10059,12 +10147,12 @@ const removeFormRule = (idx) => {
                                 </div>
 
                                 <div className="flex flex-wrap gap-1 mt-3 pt-3 border-t border-slate-50">
-                                    {e.tags.levels && <span className="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{e.tags.levels}</span>}
-                                    {e.tags.types && <span className="text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">{e.tags.types}</span>}
-                                    {!e.tags.levels && !e.tags.types && <span className="text-[10px] text-slate-300 italic">無標籤</span>}
+                                    {safeLevelTag && <span className="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{safeLevelTag}</span>}
+                                    {safeTypeTag && <span className="text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">{safeTypeTag}</span>}
+                                    {!safeLevelTag && !safeTypeTag && <span className="text-[10px] text-slate-300 italic">無標籤</span>}
                                 </div>
                             </div>
-                        ))}
+                        );})}
                     </div>
 
                     {processedEvents.length === 0 && (
@@ -10340,16 +10428,18 @@ const removeFormRule = (idx) => {
                 const todayStr = getLocalDateStr();
 
                 const unsubTotal = onSnapshot(doc(db, basePath, 'stats', 'overview', 'total'), s => {
-                    setStats(prev => ({ ...prev, total: (s && s.exists()) ? s.data().count : 0 }));
+	                    const statData = (s && s.exists()) ? sanitizeFirebaseValue(s.data() || {}) : {};
+	                    setStats(prev => ({ ...prev, total: statData.count || 0 }));
                 });
                 const unsubDaily = onSnapshot(doc(db, basePath, 'stats', 'daily', todayStr), s => {
-                    setStats(prev => ({ ...prev, today: (s && s.exists()) ? s.data().count : 0 }));
+	                    const statData = (s && s.exists()) ? sanitizeFirebaseValue(s.data() || {}) : {};
+	                    setStats(prev => ({ ...prev, today: statData.count || 0 }));
                 });
 
                 const q = collection(db, basePath, 'traffic', 'sessions');
                 const unsubSessions = onSnapshot(q, (snapshot) => {
                     const list = [];
-                    if (snapshot) snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+	                    if (snapshot) snapshot.forEach(doc => list.push({ id: doc.id, ...sanitizeFirebaseValue(doc.data() || {}) }));
                     list.sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
                     setSessions(list);
                     setLoading(false);
@@ -11145,7 +11235,7 @@ const removeFormRule = (idx) => {
                     if (settingsRef) {
                         onSnapshot(settingsRef, s => {
                             if (s && s.exists()) {
-                                const authData = s.data() || {};
+	                                const authData = sanitizeFirebaseValue(s.data() || {});
                                 const fallbackPassword = authData.password || '8888';
                                 setAdminPassword(fallbackPassword);
                                 setAuthAccounts(normalizeAuthAccounts(authData.accounts, fallbackPassword));
@@ -11188,10 +11278,10 @@ const removeFormRule = (idx) => {
                     const mainRef = doc(db, basePath, 'settings', 'main');
                     const unsub1 = onSnapshot(mainRef, s => { 
                         if(s && s.exists()) { 
-                            const data = s.data(); 
+	                            const data = sanitizeFirebaseValue(s.data() || {}); 
                             const d = data.csvData || ''; 
-                            if (data.globalRules) setGlobalRules(data.globalRules); 
-                            if (data.tagDefinitions) setTagDefinitions(data.tagDefinitions); 
+                            if (data.globalRules) setGlobalRules(normalizeStatusRulesForDisplay(data.globalRules)); 
+                            if (data.tagDefinitions) setTagDefinitions(normalizeTagDefinitionsForDisplay(data.tagDefinitions)); 
                             setPerformanceProductSettings(data.performanceProductSettings || {});
                             setMonthlyKpis(data.monthlyKpis || {});
                             setLegacyMonthlyPlans(data.monthlyPlans || {});
@@ -11222,23 +11312,30 @@ const removeFormRule = (idx) => {
                     const monthlyPlansRef = collection(db, basePath, 'monthly_plans');
                     const unsubMonthlyPlans = onSnapshot(monthlyPlansRef, s => {
                         const nextPlans = {};
-                        if (s) s.forEach(d => { nextPlans[d.id] = d.data() || {}; });
+	                        if (s) s.forEach(d => { nextPlans[d.id] = sanitizeFirebaseValue(d.data() || {}); });
                         setStoredMonthlyPlanDocs(nextPlans);
                     });
                     const templatesRef = doc(db, basePath, 'settings', 'templates');
-                    const unsub2 = onSnapshot(templatesRef, s => { if(s && s.exists()) setCustomTemplates(s.data()?.list || []) });
+	                    const unsub2 = onSnapshot(templatesRef, s => { if(s && s.exists()) setCustomTemplates(sanitizeFirebaseValue(s.data() || {})?.list || []) });
                     const configsRef = collection(db, basePath, 'event_configs');
-                    const unsub3 = onSnapshot(configsRef, s => { const cfgs = {}; if(s) s.forEach(d => cfgs[d.id] = d.data()); setEventConfigs(cfgs); });
+                    const unsub3 = onSnapshot(configsRef, s => {
+                        const cfgs = {};
+                        if (s) s.forEach(d => {
+	                            cfgs[d.id] = normalizeEventConfigForDisplay(sanitizeFirebaseValue(d.data() || {}));
+                        });
+                        setEventConfigs(cfgs);
+                    });
                     const projectsRef = collection(db, basePath, 'projects');
-                    const unsub4 = onSnapshot(projectsRef, s => { const p = []; if(s) s.forEach(d => p.push({id: d.id, ...d.data()})); setProjects(p); });
+	                    const unsub4 = onSnapshot(projectsRef, s => { const p = []; if(s) s.forEach(d => p.push({id: d.id, ...sanitizeFirebaseValue(d.data() || {})})); setProjects(p); });
                     const promisesRef = collection(db, basePath, 'promises');
-                    const unsub5 = onSnapshot(promisesRef, s => { const p = []; if(s) s.forEach(d => p.push({id: d.id, ...d.data()})); setPromises(p.sort((a,b) => new Date(a.date+'T'+a.time) - new Date(b.date+'T'+b.time))); });
+	                    const unsub5 = onSnapshot(promisesRef, s => { const p = []; if(s) s.forEach(d => p.push({id: d.id, ...sanitizeFirebaseValue(d.data() || {})})); setPromises(p.sort((a,b) => new Date(a.date+'T'+a.time) - new Date(b.date+'T'+b.time))); });
                     const scheduleRef = doc(db, basePath, 'settings', 'schedule');
                     const unsub6 = onSnapshot(scheduleRef, s => {
                         if (s && s.exists()) {
-                            setInstructorSchedule(s.data().resting || {});
-                            setCompanyRestDates(s.data().companyRest || []);
-                            setOutingDays(s.data().outingDays || {});
+	                            const scheduleData = sanitizeFirebaseValue(s.data() || {});
+	                            setInstructorSchedule(scheduleData.resting || {});
+	                            setCompanyRestDates(scheduleData.companyRest || []);
+	                            setOutingDays(scheduleData.outingDays || {});
                         } else {
                             setOutingDays({});
                         }
@@ -11246,7 +11343,7 @@ const removeFormRule = (idx) => {
                     
                     const todayStr = getLocalDateStr();
                     const analyticsRef = doc(db, `artifacts/${dbSource}/analytics`, 'stats', 'daily', todayStr);
-                    const unsub7 = onSnapshot(analyticsRef, s => { if(s && s.exists()) setDailyStats(s.data() || {}); });
+	                    const unsub7 = onSnapshot(analyticsRef, s => { if(s && s.exists()) setDailyStats(sanitizeFirebaseValue(s.data() || {})); });
 
                     return () => { if(unsub1) unsub1(); if(unsubMonthlyPlans) unsubMonthlyPlans(); if(unsub2) unsub2(); if(unsub3) unsub3(); if(unsub4) unsub4(); if(unsub5) unsub5(); if(unsub6) unsub6(); if(unsub7) unsub7(); };
                 } else { setLoading(false); console.warn("Running in offline/demo mode"); }
@@ -11327,38 +11424,20 @@ const removeFormRule = (idx) => {
                 );
             };
             const handleOpenMonthlyPosterGenerator = () => {
-                const posterData = buildMonthlySchedulePosterData({
-                    currentDate,
-                    events: stats.events,
-                    eventConfigs
-                });
-                if (posterData.entryCount === 0) {
-                    alert(`目前 ${posterData.year} 年 ${posterData.month + 1} 月沒有可生成的活動資料。`);
-                    return;
-                }
-                const options = buildPosterActivityOptions(posterData);
-                setPendingPosterData(posterData);
-                setPosterActivityOptions(options);
-                setPosterSelectedNames(options.map(option => option.name));
-                setShowPosterActivitySelection(true);
+                handleGenerateMonthlyPoster();
             };
             const handleGenerateMonthlyPoster = async () => {
                 try {
-                    if (!pendingPosterData) {
-                        alert('目前沒有可生成的海報資料，請重新點一次生成按鈕。');
-                        return;
-                    }
-                    if (posterSelectedNames.length === 0) {
-                        alert('請至少勾選一個活動，再生成海報。');
-                        return;
-                    }
                     setPosterGenerating(true);
-                    const posterData = filterMonthlySchedulePosterData(pendingPosterData, posterSelectedNames);
+                    const posterData = buildMonthlySchedulePosterData({
+                        currentDate,
+                        events: stats.events,
+                        eventConfigs
+                    });
                     if (posterData.entryCount === 0) {
                         alert(`目前 ${posterData.year} 年 ${posterData.month + 1} 月沒有可生成的活動資料。`);
                         return;
                     }
-                    setShowPosterActivitySelection(false);
                     const canvas = await renderMonthlySchedulePosterCanvas(posterData);
                     const htmlMarkup = buildMonthlySchedulePosterHtmlDocument(posterData);
                     const filename = sanitizeFilename(`${posterData.title}_${getLocalDateStr()}`, `monthly_schedule_${getLocalDateStr()}`);
@@ -11393,7 +11472,6 @@ const removeFormRule = (idx) => {
                     alert(`月曆海報生成失敗：${e?.message || e}`);
                 } finally {
                     setPosterGenerating(false);
-                    setPendingPosterData(null);
                 }
             };
             const handleToggleInstructorRest = async (date, name) => { if (!user || !db) return; const currentResting = instructorSchedule[date] || []; let newResting; if (currentResting.includes(name)) { newResting = currentResting.filter(n => n !== name); } else { newResting = [...currentResting, name]; } const newSchedule = { ...instructorSchedule }; if (newResting.length > 0) { newSchedule[date] = newResting; } else { newSchedule[date] = []; } await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'schedule'), { resting: newSchedule }, { merge: true }); };
@@ -12258,7 +12336,7 @@ const handleCreateEvent = async ({ dates, eventName, instructors, time, duration
                 pushEventDeleteStatus('success', `已刪除活動並寫入 Firebase：${date} ${eventName}`);
                 alert('✅ 活動已刪除並寫入 Firebase');
             };
-            const handleAddTagDefinition = async (type, newValue) => { const currentList = tagDefinitions[type] || []; if (currentList.includes(newValue)) return; const newDefs = { ...tagDefinitions, [type]: [...currentList, newValue] }; setTagDefinitions(newDefs); await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), { tagDefinitions: newDefs }, { merge: true }); };
+            const handleAddTagDefinition = async (type, newValue) => { const safeValue = toSafeDisplayText(newValue, '').trim(); if (!safeValue) return; const currentList = (tagDefinitions[type] || []).map(item => toSafeDisplayText(item, '').trim()).filter(Boolean); if (currentList.includes(safeValue)) return; const newDefs = normalizeTagDefinitionsForDisplay({ ...tagDefinitions, [type]: [...currentList, safeValue] }); setTagDefinitions(newDefs); await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), { tagDefinitions: newDefs }, { merge: true }); };
 
             const handleInitializeAnalytics = async () => {
                 if (!db || !user) return alert("資料庫未連線");
@@ -12592,7 +12670,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     : versionsRef;
                 return onSnapshot(versionsQuery, snapshot => {
                     const nextVersions = [];
-                    if (snapshot) snapshot.forEach(d => nextVersions.push({ id: d.id, ...(d.data() || {}) }));
+	                    if (snapshot) snapshot.forEach(d => nextVersions.push({ id: d.id, ...sanitizeFirebaseValue(d.data() || {}) }));
                     nextVersions.sort((a, b) => (Number(b.savedAtMs) || 0) - (Number(a.savedAtMs) || 0));
                     setCurrentMonthPlanVersions(nextVersions);
                 });
@@ -12606,7 +12684,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                 const versionsRef = collection(db, basePath, 'event_schedule_versions');
                 return onSnapshot(versionsRef, snapshot => {
                     const nextVersions = [];
-                    if (snapshot) snapshot.forEach(d => nextVersions.push({ id: d.id, ...(d.data() || {}) }));
+	                    if (snapshot) snapshot.forEach(d => nextVersions.push({ id: d.id, ...sanitizeFirebaseValue(d.data() || {}) }));
                     nextVersions.sort((a, b) => (Number(b.savedAtMs) || 0) - (Number(a.savedAtMs) || 0));
                     setEventScheduleVersions(
                         nextVersions
@@ -13353,7 +13431,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                                 <div className="animate-marquee font-bold text-sm tracking-wide flex items-center" style={{ animationDuration: `${marqueeSpeed}s` }}>
                                     {marqueeIcon && (<img src={marqueeIcon} className="w-auto mr-3 -mt-1 pixel-art inline-block" style={{ height: `${marqueeIconSize}px` }} alt="icon" />)}
                                     <span className="text-yellow-400 mr-2"> 最新消息：</span>
-                                    {latestNews}
+                                    {toSafeDisplayText(latestNews, '')}
                                 </div>
                             </div>
                         )}
@@ -13435,11 +13513,13 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                                             <span className="text-xs font-bold text-slate-400 w-12 shrink-0 flex items-center gap-1"><Icon name="bar-chart-2" size={12}/> 等級</span>
                                             <div className="flex flex-wrap gap-2">
                                                 {(tagDefinitions.levels || []).map(t => {
-                                                    const isActive = publicFilters.level.includes(t);
-                                                    const isAvailable = availableOptions.levels.has(t);
+                                                    const safeTag = toSafeDisplayText(t, '');
+                                                    if (!safeTag) return null;
+                                                    const isActive = publicFilters.level.includes(safeTag);
+                                                    const isAvailable = availableOptions.levels.has(safeTag);
                                                     return (
-                                                        <button key={t} onClick={() => toggleFilter('level', t)} disabled={!isAvailable && !isActive} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${ isActive ? 'bg-blue-600 text-white border-blue-600 shadow-md ring-2 ring-blue-100' : !isAvailable ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-blue-300' }`}>
-                                                            {t}
+                                                        <button key={safeTag} onClick={() => toggleFilter('level', safeTag)} disabled={!isAvailable && !isActive} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${ isActive ? 'bg-blue-600 text-white border-blue-600 shadow-md ring-2 ring-blue-100' : !isAvailable ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-blue-300' }`}>
+                                                            {safeTag}
                                                         </button>
                                                     );
                                                 })}
@@ -13450,11 +13530,13 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                                             <span className="text-xs font-bold text-slate-400 w-12 shrink-0 flex items-center gap-1"><Icon name="tag" size={12}/> 種類</span>
                                             <div className="flex flex-wrap gap-2">
                                                 {(tagDefinitions.types || []).map(t => {
-                                                    const isActive = publicFilters.type.includes(t);
-                                                    const isAvailable = availableOptions.types.has(t);
+                                                    const safeTag = toSafeDisplayText(t, '');
+                                                    if (!safeTag) return null;
+                                                    const isActive = publicFilters.type.includes(safeTag);
+                                                    const isAvailable = availableOptions.types.has(safeTag);
                                                     return (
-                                                        <button key={t} onClick={() => toggleFilter('type', t)} disabled={!isAvailable && !isActive} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${ isActive ? 'bg-emerald-600 text-white border-emerald-600 shadow-md ring-2 ring-emerald-100' : !isAvailable ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-emerald-300' }`}>
-                                                            {t}
+                                                        <button key={safeTag} onClick={() => toggleFilter('type', safeTag)} disabled={!isAvailable && !isActive} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${ isActive ? 'bg-emerald-600 text-white border-emerald-600 shadow-md ring-2 ring-emerald-100' : !isAvailable ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-emerald-300' }`}>
+                                                            {safeTag}
                                                         </button>
                                                     );
                                                 })}
@@ -13465,11 +13547,13 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                                             <span className="text-xs font-bold text-slate-400 w-12 shrink-0 flex items-center gap-1"><Icon name="map-pin" size={12}/> 地點</span>
                                             <div className="flex flex-wrap gap-2">
                                                 {(tagDefinitions.locations || []).map(t => {
-                                                    const isActive = publicFilters.location.includes(t);
-                                                    const isAvailable = availableOptions.locations.has(t);
+                                                    const safeTag = toSafeDisplayText(t, '');
+                                                    if (!safeTag) return null;
+                                                    const isActive = publicFilters.location.includes(safeTag);
+                                                    const isAvailable = availableOptions.locations.has(safeTag);
                                                     return (
-                                                        <button key={t} onClick={() => toggleFilter('location', t)} disabled={!isAvailable && !isActive} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${ isActive ? 'bg-purple-600 text-white border-purple-600 shadow-md ring-2 ring-purple-100' : !isAvailable ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-purple-300' }`}>
-                                                            {t}
+                                                        <button key={safeTag} onClick={() => toggleFilter('location', safeTag)} disabled={!isAvailable && !isActive} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${ isActive ? 'bg-purple-600 text-white border-purple-600 shadow-md ring-2 ring-purple-100' : !isAvailable ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-purple-300' }`}>
+                                                            {safeTag}
                                                         </button>
                                                     );
                                                 })}
@@ -13637,9 +13721,9 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
     const itemType = item.type; // 'main', 'cont', 'prep'
     const itemLabel = item.label; // 例如 "⚠️ 前置: ..." 或 "↳ D2: ..."
     
-    const cfg = eventConfigs[e.key] || {};
-    const status = getEventStatus(e.count, cfg.capacity, cfg, e.date, globalRules);
-    const displayName = cfg.displayName || e.eventName;
+	    const cfg = eventConfigs[e.key] || {};
+	    const status = getEventStatus(e.count, cfg.capacity, cfg, e.date, globalRules);
+	    const displayName = toSafeDisplayText(cfg.displayName, toSafeDisplayText(e.eventName, '未命名活動'));
     
     // --- [新增 1] 計算星期幾 ---
     const dayIndex = new Date(e.date).getDay();
@@ -13657,8 +13741,13 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
     else cardClass = `bg-white border-slate-100 shadow-sm hover:shadow-md border-l-4 ${borderColor.replace('border-l-100', 'border-l-500')}`;
     
     const statusBadgeClass = status.isFull ? "bg-slate-600 text-white" : `${status.colorObj?.bg || 'bg-blue-50'} ${status.colorObj?.text || 'text-blue-600'}`;
-    const tags = cfg.tags || {};
-    const carpoolDisplayMode = resolveCarpoolDisplayMode(cfg.carpoolDisplayMode, e.eventName);
+	    const rawTags = cfg.tags || {};
+	    const tags = {
+	        levels: toSafeDisplayText(rawTags.levels, ''),
+	        types: toSafeDisplayText(rawTags.types, ''),
+	        locations: toSafeDisplayText(rawTags.locations, '')
+	    };
+	    const carpoolDisplayMode = resolveCarpoolDisplayMode(cfg.carpoolDisplayMode, e.eventName);
     const carpoolCount = Array.isArray(e.customers) ? e.customers.filter(customer => customer && customer.transport === '共乘').length : 0;
     const remainingCarpoolSeats = Math.max(DEFAULT_CARPOOL_CAPACITY - carpoolCount, 0);
     const carpoolHint = carpoolDisplayMode === 'none'
@@ -13685,7 +13774,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
         <span className="align-middle">{displayName}</span>
     </div>
                 <div className="flex flex-col items-end gap-1">
-                    <span className={`text-xs px-2 py-1 rounded-lg font-bold ${statusBadgeClass}`}>{status.label}</span>
+                    <span className={`text-xs px-2 py-1 rounded-lg font-bold ${statusBadgeClass}`}>{toSafeDisplayText(status.label, '報名中')}</span>
                     {!status.isEnded && (
                         <div className="flex flex-col items-end gap-1">
                             <span className="text-[10px] text-slate-500 font-bold bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">目前: <span className="text-blue-600">{e.count}</span> 人</span>
@@ -13708,8 +13797,8 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
 
             {/* 中間：資訊 (保持不變) */}
             <div className="space-y-2 text-sm text-slate-600">
-                <div className="flex items-center gap-2"><Icon name="user" size={16} className="text-slate-400"/> <span>講師：{e.instructor || '未定'}</span></div>
-                {cfg.time && (<div className="flex items-center gap-2"><Icon name="clock" size={16} className="text-slate-400"/> <span>時間：{cfg.time}</span></div>)}
+	                <div className="flex items-center gap-2"><Icon name="user" size={16} className="text-slate-400"/> <span>講師：{toSafeDisplayText(e.instructor, '未定')}</span></div>
+	                {toSafeDisplayText(cfg.time, '') && (<div className="flex items-center gap-2"><Icon name="clock" size={16} className="text-slate-400"/> <span>時間：{toSafeDisplayText(cfg.time, '')}</span></div>)}
             </div>
 
             {/* 底部區域：修改按鈕位置與行為 */}
@@ -13934,7 +14023,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                                 onMatrixCellClick={handleOpenCreateEventFromMatrix}
                             />
                             
-                            {/* ... 下接 eventsViewMode === 'list' 的內容 ... */}{eventsViewMode === 'list' && (<div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden table-container"><table className="w-full text-left min-w-[600px]"><thead className="bg-slate-50 border-b border-slate-100 text-slate-500 text-sm"><tr><th className="px-6 py-4 whitespace-nowrap">日期</th><th className="px-6 py-4 whitespace-nowrap">活動</th><th className="px-6 py-4 whitespace-nowrap">報名</th><th className="px-6 py-4 whitespace-nowrap">操作</th></tr></thead><tbody className="divide-y divide-slate-100">{Object.values(stats.events).map((e, i) => { const cfg = eventConfigs[e.key] || {}; const cap = cfg.capacity || 12; const isFull = e.count >= cap; const carpool = e.customers ? e.customers.filter(c=>c.transport==='共乘').length : 0; const isCancelled = !!cfg.isCancelled; return (<tr key={i} className="hover:bg-slate-50/80"><td className="px-6 py-4 text-slate-600 whitespace-nowrap">{e.date}</td><td className="px-6 py-4"><div className="font-bold text-slate-800 flex items-center gap-2">{e.eventName}{isCancelled && <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200">流團</span>}</div><div className="text-xs text-slate-400 mt-0.5">{e.instructor}</div></td><td className="px-6 py-4"><div className="flex items-center gap-2"><span className={`font-bold ${isFull?'text-red-500':'text-slate-700'}`}>{e.count}</span><span className="text-xs text-slate-400">/ {cap}</span><div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full ${isFull?'bg-red-500':'bg-green-500'}`} style={{width:`${Math.min((e.count/cap)*100,100)}%`}}></div></div></div>{carpool > 0 && <div className="text-[10px] text-orange-500 mt-1 flex items-center"><Icon name="car" size={10} className="mr-1"/> 共乘 {carpool} 人</div>}</td><td className="px-6 py-4"><button onClick={()=>setEditingEvent(e)} className="text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded flex items-center gap-1 text-sm whitespace-nowrap"><Icon name="settings" size={14}/> 管理</button></td></tr>);})}</tbody></table></div>)}{eventsViewMode === 'calendar' && (<div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-200 table-container"><div className="flex justify-between items-center mb-6 sticky left-0"><div className="flex items-center gap-2"><button onClick={prevMonth} className="p-2 hover:bg-slate-100 rounded-full"><Icon name="chevron-left"/></button><h3 className="text-xl font-bold text-slate-800 whitespace-nowrap">{currentDate.getFullYear()}年 {currentDate.getMonth()+1}月</h3><button onClick={nextMonth} className="p-2 hover:bg-slate-100 rounded-full"><Icon name="chevron-right"/></button></div></div><div className="min-w-[600px]"><div className="grid grid-cols-7 mb-2 text-center text-sm font-bold text-slate-400">{['日','一','二','三','四','五','六'].map(d=><div key={d}>{d}</div>)}</div><div className="grid grid-cols-7 auto-rows-[160px] border-t border-l border-slate-200">{calendarDays.map((day, i) => { const dateStr = day ? `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}` : ''; const dayItems = day ? (calendarOccupancy[dateStr] || []) : []; const isCompanyRestDay = day ? companyRestDates.includes(dateStr) : false; return (<div key={i} 
+                            {/* ... 下接 eventsViewMode === 'list' 的內容 ... */}{eventsViewMode === 'list' && (<div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden table-container"><table className="w-full text-left min-w-[600px]"><thead className="bg-slate-50 border-b border-slate-100 text-slate-500 text-sm"><tr><th className="px-6 py-4 whitespace-nowrap">日期</th><th className="px-6 py-4 whitespace-nowrap">活動</th><th className="px-6 py-4 whitespace-nowrap">報名</th><th className="px-6 py-4 whitespace-nowrap">操作</th></tr></thead><tbody className="divide-y divide-slate-100">{Object.values(stats.events).map((e, i) => { const cfg = eventConfigs[e.key] || {}; const cap = cfg.capacity || 12; const isFull = e.count >= cap; const carpool = e.customers ? e.customers.filter(c=>c.transport==='共乘').length : 0; const isCancelled = !!cfg.isCancelled; const safeDate = toSafeDisplayText(e.date, ''); const safeEventName = toSafeDisplayText(e.eventName, '未命名活動'); const safeInstructor = toSafeDisplayText(e.instructor, '未定'); return (<tr key={i} className="hover:bg-slate-50/80"><td className="px-6 py-4 text-slate-600 whitespace-nowrap">{safeDate}</td><td className="px-6 py-4"><div className="font-bold text-slate-800 flex items-center gap-2">{safeEventName}{isCancelled && <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200">流團</span>}</div><div className="text-xs text-slate-400 mt-0.5">{safeInstructor}</div></td><td className="px-6 py-4"><div className="flex items-center gap-2"><span className={`font-bold ${isFull?'text-red-500':'text-slate-700'}`}>{e.count}</span><span className="text-xs text-slate-400">/ {cap}</span><div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full ${isFull?'bg-red-500':'bg-green-500'}`} style={{width:`${Math.min((e.count/cap)*100,100)}%`}}></div></div></div>{carpool > 0 && <div className="text-[10px] text-orange-500 mt-1 flex items-center"><Icon name="car" size={10} className="mr-1"/> 共乘 {carpool} 人</div>}</td><td className="px-6 py-4"><button onClick={()=>setEditingEvent(e)} className="text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded flex items-center gap-1 text-sm whitespace-nowrap"><Icon name="settings" size={14}/> 管理</button></td></tr>);})}</tbody></table></div>)}{eventsViewMode === 'calendar' && (<div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-200 table-container"><div className="flex justify-between items-center mb-6 sticky left-0"><div className="flex items-center gap-2"><button onClick={prevMonth} className="p-2 hover:bg-slate-100 rounded-full"><Icon name="chevron-left"/></button><h3 className="text-xl font-bold text-slate-800 whitespace-nowrap">{currentDate.getFullYear()}年 {currentDate.getMonth()+1}月</h3><button onClick={nextMonth} className="p-2 hover:bg-slate-100 rounded-full"><Icon name="chevron-right"/></button></div></div><div className="min-w-[600px]"><div className="grid grid-cols-7 mb-2 text-center text-sm font-bold text-slate-400">{['日','一','二','三','四','五','六'].map(d=><div key={d}>{d}</div>)}</div><div className="grid grid-cols-7 auto-rows-[160px] border-t border-l border-slate-200">{calendarDays.map((day, i) => { const dateStr = day ? `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}` : ''; const dayItems = day ? (calendarOccupancy[dateStr] || []) : []; const isCompanyRestDay = day ? companyRestDates.includes(dateStr) : false; return (<div key={i} 
     onClick={() => { if(day && !isCompanyRestDay) { openCreateEventModal(dateStr); } }} 
     className={`border-b border-r border-slate-200 p-1 md:p-2 relative group ${day ? (isCompanyRestDay ? 'bg-slate-50/70 cursor-not-allowed' : 'hover:bg-blue-50 cursor-pointer') : 'bg-slate-50/50'}`}
 >
@@ -13950,11 +14039,15 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
             ) : (
                 <div className="space-y-1 overflow-y-auto max-h-[120px] no-scrollbar">
                     {/* [修改] 改用 dayItems 渲染，包含前置與跨日，並顯示講師 */ }
-                    {dayItems.map((item, idx) => {
-                        const { type, evt, cfg, label, displayTime } = item;
-                        const isMain = type === 'main';
-                        const isPrep = type === 'prep';
-                        const isCancelled = !!cfg.isCancelled;
+	                    {dayItems.map((item, idx) => {
+	                        const { type, evt, cfg, label, displayTime } = item;
+	                        const isMain = type === 'main';
+	                        const isPrep = type === 'prep';
+	                        const isCancelled = !!cfg.isCancelled;
+	                        const safeEventName = toSafeDisplayText(evt?.eventName, '未命名活動');
+	                        const safeInstructor = toSafeDisplayText(evt?.instructor, '?');
+	                        const safeLabel = toSafeDisplayText(label, '');
+	                        const safeDisplayTime = toSafeDisplayText(displayTime, '');
                         
                         // 樣式設定
                         let cardClass = 'mb-1 p-1 px-1.5 rounded-md border cursor-pointer transition-all group hover:shadow-md text-[10px] relative overflow-hidden ';
@@ -13982,7 +14075,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                         if (isMain && isCancelled) cardClass += ' ring-1 ring-rose-300';
 
                         return (
-                            <div key={`${evt.key}_${type}_${idx}`} onClick={(e)=>{ e.stopPropagation(); setEditingEvent(evt); }} className={cardClass} style={cardStyle} title={`${evt.eventName} @${evt.instructor || '未定'}`}>
+	                            <div key={`${evt.key}_${type}_${idx}`} onClick={(e)=>{ e.stopPropagation(); setEditingEvent(evt); }} className={cardClass} style={cardStyle} title={`${safeEventName} @${safeInstructor || '未定'}`}>
                                 {isMain && isCancelled && (
                                     <div className="absolute bottom-0 right-0 bg-rose-600 text-white text-[8px] leading-none px-1 py-0.5 rounded-tl-md font-bold tracking-wide">
                                         流團
@@ -13995,32 +14088,32 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                                     // 第三行：@講師 (換行顯示)
                                     <div className="flex flex-col leading-none py-0.5">
                                         <div className="flex justify-between items-center opacity-70 text-[8px] mb-0.5 font-mono">
-                                            <span>{displayTime}</span>
-                                            <span className="font-bold">{evt.count}人</span>
-                                        </div>
-                                        <div className="truncate font-bold text-[10px] mb-0.5">
-                                            {evt.eventName}
-                                        </div>
-                                        <div className="truncate opacity-60 font-normal text-[9px]">
-                                            @{evt.instructor || '?'}
-                                        </div>
+	                                            <span>{safeDisplayTime}</span>
+	                                            <span className="font-bold">{evt.count}人</span>
+	                                        </div>
+	                                        <div className="truncate font-bold text-[10px] mb-0.5">
+	                                            {safeEventName}
+	                                        </div>
+	                                        <div className="truncate opacity-60 font-normal text-[9px]">
+	                                            @{safeInstructor || '?'}
+	                                        </div>
                                     </div>
                                 ) : isPrep ? (
                                     // [修改] 前置：同樣併為單行
                                     <div className="flex flex-col leading-none py-0.5">
                                         <div className="flex items-center gap-1 opacity-70 text-[8px] mb-0.5 font-mono">
-                                            <span>{displayTime}</span>
+	                                            <span>{safeDisplayTime}</span>
                                             <Icon name="alert-circle" size={8}/> 
                                             <span>前置</span>
                                         </div>
                                         <div className="truncate text-[10px]">
-                                            {evt.eventName} <span className="opacity-60 text-[9px]">@{evt.instructor}</span>
+	                                            {safeEventName} <span className="opacity-60 text-[9px]">@{safeInstructor}</span>
                                         </div>
                                     </div>
                                 ) : (
                                     // 跨日 (保持原樣)
                                     <div className="flex items-center gap-1">
-                                        {label}
+	                                        {safeLabel}
                                     </div>
                                 )}
                             </div>
@@ -14030,14 +14123,14 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
             )}
             {instructorSchedule[dateStr] && instructorSchedule[dateStr].length > 0 && !companyRestDates.includes(dateStr) && (
                 <div className="text-[10px] text-red-400 flex flex-wrap gap-1 mt-1">
-                    {instructorSchedule[dateStr].map(name => <span key={name} className="bg-red-50 px-1 rounded">{name}休</span>)}
+	                    {instructorSchedule[dateStr].map(name => { const safeName = toSafeDisplayText(name, '').trim(); return safeName ? <span key={safeName} className="bg-red-50 px-1 rounded">{safeName}休</span> : null; })}
                 </div>
             )}
             {outingDays[dateStr]?.enabled && !companyRestDates.includes(dateStr) && (
                 <div className="absolute bottom-1 right-1 max-w-[90%] text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 leading-tight shadow-sm pointer-events-none">
                     <span className="font-bold">場勘</span>
                     {Array.isArray(outingDays[dateStr]?.people) && outingDays[dateStr].people.length > 0 && (
-                        <span className="ml-1">: {outingDays[dateStr].people.join('、')}</span>
+	                        <span className="ml-1">: {outingDays[dateStr].people.map(person => toSafeDisplayText(person, '').trim()).filter(Boolean).join('、')}</span>
                     )}
                 </div>
             )}
@@ -14152,23 +14245,23 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                                                     <button onClick={() => setEditingRow(customerProfile.latestRecord)} className="text-slate-400 hover:text-blue-600 flex items-center gap-1 text-sm border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition whitespace-nowrap"><Icon name="edit-2" size={14}/> 編輯資料/備註</button>
                                                 </div>
                                                 <div className="flex-1 bg-slate-50 p-4 rounded-xl border border-slate-100 grid grid-cols-2 gap-y-3 gap-x-6 text-sm mb-8">
-                                                    <div><span className="block text-xs text-slate-400 font-bold uppercase">Email</span>{customerProfile.email || '-'}</div>
-                                                    <div><span className="block text-xs text-slate-400 font-bold uppercase">手機</span>{customerProfile.phone || '-'}</div>
-                                                    <div><span className="block text-xs text-slate-400 font-bold uppercase">身分證</span>{customerProfile.idNo || '-'}</div>
-                                                    <div><span className="block text-xs text-slate-400 font-bold uppercase">生日</span>{customerProfile.birthday || '-'}</div>
-                                                    <div><span className="block text-xs text-slate-400 font-bold uppercase">常用交通</span>{customerProfile.transport || '-'}</div>
-                                                    <div><span className="block text-xs text-slate-400 font-bold uppercase">來源管道</span>{customerProfile.source || '-'}</div>
-                                                    <div><span className="block text-xs text-slate-400 font-bold uppercase">社群暱稱</span>{customerProfile.socialName || '-'}</div>
-                                                    <div className="col-span-2"><span className="block text-xs text-slate-400 font-bold uppercase">備註</span>{customerProfile.notes || '-'}</div>
+	                                                    <div><span className="block text-xs text-slate-400 font-bold uppercase">Email</span>{toSafeDisplayText(customerProfile.email, '-')}</div>
+	                                                    <div><span className="block text-xs text-slate-400 font-bold uppercase">手機</span>{toSafeDisplayText(customerProfile.phone, '-')}</div>
+	                                                    <div><span className="block text-xs text-slate-400 font-bold uppercase">身分證</span>{toSafeDisplayText(customerProfile.idNo, '-')}</div>
+	                                                    <div><span className="block text-xs text-slate-400 font-bold uppercase">生日</span>{toSafeDisplayText(customerProfile.birthday, '-')}</div>
+	                                                    <div><span className="block text-xs text-slate-400 font-bold uppercase">常用交通</span>{toSafeDisplayText(customerProfile.transport, '-')}</div>
+	                                                    <div><span className="block text-xs text-slate-400 font-bold uppercase">來源管道</span>{toSafeDisplayText(customerProfile.source, '-')}</div>
+	                                                    <div><span className="block text-xs text-slate-400 font-bold uppercase">社群暱稱</span>{toSafeDisplayText(customerProfile.socialName, '-')}</div>
+	                                                    <div className="col-span-2"><span className="block text-xs text-slate-400 font-bold uppercase">備註</span>{toSafeDisplayText(customerProfile.notes, '-')}</div>
                                                 </div>
                                                 <h4 className="font-bold text-slate-700 mb-4">消費歷史 ({customerProfile.history.length})</h4>
                                                 <div className="space-y-2 table-container max-h-[400px] overflow-y-auto">
                                                     {customerProfile.history.map((h,i) => (
                                                         <div key={i} className="flex justify-between items-center p-4 border border-slate-100 rounded-xl hover:bg-slate-50 transition">
                                                             <div>
-                                                                <div className="font-bold text-slate-700">{h.eventName}</div>
-                                                                <div className="text-xs text-slate-400 mt-1">{h.date} • {h.instructor}</div>
-                                                                {h.orderDate && <div className="text-xs text-blue-500 mt-0.5">📅 下定於: {h.orderDate}</div>}
+	                                                                <div className="font-bold text-slate-700">{toSafeDisplayText(h.eventName, '未命名活動')}</div>
+	                                                                <div className="text-xs text-slate-400 mt-1">{toSafeDisplayText(h.date, '')} • {toSafeDisplayText(h.instructor, '未定')}</div>
+	                                                                {h.orderDate && <div className="text-xs text-blue-500 mt-0.5">📅 下定於: {toSafeDisplayText(h.orderDate, '')}</div>}
                                                             </div>
                                                             <div className="font-mono font-bold text-slate-600">${h.price}</div>
                                                         </div>
@@ -14269,8 +14362,8 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                                             {authAccounts.length > 0 ? authAccounts.map(account => (
                                                 <div key={account.id} className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white px-3 py-3 md:flex-row md:items-center md:justify-between">
                                                     <div className="flex flex-col">
-                                                        <span className="text-sm font-bold text-slate-700">{account.name || DEFAULT_AUTH_ACCOUNT_NAME}</span>
-                                                        <span className="text-xs text-slate-400">密碼：{account.password}</span>
+                                                        <span className="text-sm font-bold text-slate-700">{toSafeDisplayText(account.name, DEFAULT_AUTH_ACCOUNT_NAME)}</span>
+                                                        <span className="text-xs text-slate-400">密碼：{toSafeDisplayText(account.password, '')}</span>
                                                     </div>
                                                     <button onClick={() => handleDeleteAuthAccount(account.id)} className="inline-flex items-center justify-center gap-1 rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50">
                                                         <Icon name="trash-2" size={13}/> 刪除
@@ -14329,9 +14422,9 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                                                 });
                                                 return sorted.map((row) => (
                                                     <tr key={row.id} className="hover:bg-slate-50">
-                                                        <td className="p-2 md:p-4 text-slate-600 text-xs md:text-sm whitespace-nowrap">{row.date}</td>
-                                                        <td className="p-2 md:p-4 font-medium text-slate-700 text-xs md:text-sm">{row.eventName}</td>
-                                                        <td className="p-2 md:p-4 text-xs md:text-sm truncate max-w-[80px] md:max-w-none">{row.customerName}</td>
+	                                                        <td className="p-2 md:p-4 text-slate-600 text-xs md:text-sm whitespace-nowrap">{toSafeDisplayText(row.date, '')}</td>
+	                                                        <td className="p-2 md:p-4 font-medium text-slate-700 text-xs md:text-sm">{toSafeDisplayText(row.eventName, '未命名活動')}</td>
+	                                                        <td className="p-2 md:p-4 text-xs md:text-sm truncate max-w-[80px] md:max-w-none">{toSafeDisplayText(row.customerName, '')}</td>
                                                         <td className="p-4 font-mono hidden md:table-cell text-right">${row.price}</td>
                                                         <td className="p-2 md:p-4 text-right flex justify-end gap-1 md:gap-2"><button onClick={()=>setEditingRow(row)} className="p-2 text-blue-600 hover:bg-blue-50 rounded border border-transparent hover:border-blue-100"><Icon name="edit-2" size={16}/></button><button onClick={()=>handleDeleteRow(row.id)} className="p-2 text-red-400 hover:bg-red-50 rounded hidden md:inline-block"><Icon name="trash-2" size={16}/></button></td>
                                                     </tr>
@@ -14587,7 +14680,7 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
                     {/* 新增：吉祥物設定 Modal */}
                     {showMascotSettings && <MascotSettingsModal currentList={mascotConfig} onClose={()=>setShowMascotSettings(false)} onSave={async (newList) => { await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), { mascotConfig: newList }, { merge: true }); setShowMascotSettings(false); }} />}
                     {showOutingPosterSettings && <OutingPosterSettingsModal currentList={outingPosterConfig} onClose={()=>setShowOutingPosterSettings(false)} onSave={async (newList) => { await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), { outingPosterConfig: newList }, { merge: true }); setShowOutingPosterSettings(false); }} />}
-                    {showPosterActivitySelection && (
+                    {false && showPosterActivitySelection && (
                         <PosterActivitySelectionModal
                             options={posterActivityOptions}
                             selectedNames={posterSelectedNames}
@@ -14620,5 +14713,4 @@ const key = `${c.date}_${c.eventName}_${sortedInstr}`.replace(/[\/\\#\?]/g, '-')
         }
     </script>
 </body>
-</html> 
- 
+</html>
