@@ -192,13 +192,26 @@
             }
             if (value instanceof Date) return { timestampValue: value.toISOString() };
             if (Array.isArray(value)) return { arrayValue: { values: value.map(v => toFirestoreRestValue(v)) } };
-            if (typeof value === 'object') {
-                const fields = {};
-                Object.keys(value).forEach((k) => {
-                    if (value[k] !== undefined) fields[k] = toFirestoreRestValue(value[k]);
-                });
-                return { mapValue: { fields } };
-            }
+            if (value === null) return { nullValue: null };
+
+// Firestore Timestamp
+if (value && typeof value.toDate === 'function') {
+    return { timestampValue: value.toDate().toISOString() };
+}
+
+// Firebase / Firestore 特殊物件，先不要當一般 object 展開
+if (value && typeof value === 'object' && '_delegate' in value) {
+    return { stringValue: String(value.path || value.id || '') };
+}
+
+if (typeof value === 'object') {
+    const fields = {};
+    Object.keys(value).forEach((k) => {
+        if (k === '_delegate') return;
+        if (value[k] !== undefined) fields[k] = toFirestoreRestValue(value[k]);
+    });
+    return { mapValue: { fields } };
+}
             return { stringValue: String(value) };
         };
         const getAuthTokenForRest = async () => {
