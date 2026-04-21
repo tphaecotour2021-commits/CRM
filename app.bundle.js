@@ -6955,7 +6955,7 @@ const PlanningBoard = ({
   }, item.label), React.createElement("span", null, item.value)))), React.createElement("div", {
     className: "grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)] gap-4"
   }, React.createElement("div", {
-    className: "bg-slate-50 border border-slate-200 rounded-2xl p-4 xl:self-start xl:sticky xl:top-6 xl:z-10"
+    className: "bg-slate-50 border border-slate-200 rounded-2xl p-4 xl:self-start"
   }, React.createElement("h3", {
     className: "text-sm font-bold text-slate-700 mb-2"
   }, "\u6D3B\u52D5\u6B04\u4F4D"), React.createElement("p", {
@@ -13616,7 +13616,7 @@ const MainApp = () => {
     }, ['日', '一', '二', '三', '四', '五', '六'].map(d => React.createElement("div", {
       key: d
     }, d))), React.createElement("div", {
-      className: "grid grid-cols-7 auto-rows-[50px] bg-white"
+      className: "grid grid-cols-7 auto-rows-[60px] bg-white"
     }, calendarDays.map((day, i) => {
       const dateStr = day ? `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` : '';
       const dayItems = day ? (calendarOccupancy[dateStr] || []).filter(item => checkEventMatchesFilters(item.evt.key)) : [];
@@ -13633,7 +13633,7 @@ const MainApp = () => {
       const isSearchMatch = publicSearchTerm && matchingDates.includes(dateStr);
       const isFilterMatch = hasActiveFilters && hasEvents;
       const shouldHighlight = isSearchMatch || isFilterMatch;
-      let cellClass = "cursor-pointer flex flex-col items-center justify-center relative transition-all border-b border-r border-slate-50";
+      let cellClass = "cursor-pointer relative transition-all border-b border-r border-slate-50";
       let numClass = "text-sm font-medium text-slate-700 z-10 relative";
       if (isRestDay) {
         cellClass += " bg-slate-50 cursor-not-allowed";
@@ -13655,14 +13655,16 @@ const MainApp = () => {
           }
         },
         className: cellClass
-      }, day && React.createElement(React.Fragment, null, React.createElement("div", {
+      }, day && React.createElement("div", {
+        className: `h-full w-full flex flex-col items-center ${isSelected ? 'justify-center' : 'justify-start pt-3'}`
+      }, React.createElement("div", {
         className: numClass
       }, day), isRestDay ? React.createElement("div", {
-        className: "text-slate-300 font-bold text-lg select-none"
+        className: "text-slate-300 font-bold text-lg select-none mt-1"
       }, "\u2715") : isOutingDay && !isSelected ? React.createElement("div", {
-        className: "text-[9px] font-bold text-amber-500 mt-0.5 scale-90 relative z-10"
+        className: "text-[9px] font-bold text-amber-500 mt-1 scale-90 relative z-10"
       }, "\u5916\u51FA") : hasEvents && !isSelected && (areAllFull ? React.createElement("div", {
-        className: "text-[9px] font-bold text-red-500 mt-0.5 scale-90 relative z-10"
+        className: "text-[9px] font-bold text-red-500 mt-1 scale-90 relative z-10"
       }, "\u984D\u6EFF") : (() => {
         const dObj = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
         dObj.setDate(dObj.getDate() + 1);
