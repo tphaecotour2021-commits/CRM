@@ -1,0 +1,4 @@
+[build]
+  publish = "."
+  command = "echo 'Using prebuilt static site files from repository root'"
+
