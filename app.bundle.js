@@ -3145,9 +3145,9 @@ const EventMascot = ({
   if (!gifSrc) return null;
   const luckyNumber = dailyStats && dailyStats.mascots && dailyStats.mascots[mascotCounterKey] ? dailyStats.mascots[mascotCounterKey] : 1;
   return React.createElement("div", {
-    className: "absolute bottom-0 right-0 z-10 pointer-events-none flex flex-row items-end"
+    className: "absolute bottom-0 right-0 z-10 pointer-events-none flex flex-col items-end"
   }, React.createElement("div", {
-    className: "mb-12 mr-[-10px] bg-white/95 border border-slate-200 shadow-lg rounded-2xl rounded-br-none px-3 py-2 text-[10px] leading-tight text-slate-600 animate-in fade-in slide-in-from-bottom-2 duration-700 relative z-20 max-w-[140px]"
+    className: "mb-2 mr-2 bg-white/95 border border-slate-200 shadow-lg rounded-2xl rounded-br-none px-3 py-2 text-[10px] leading-tight text-slate-600 animate-in fade-in slide-in-from-bottom-2 duration-700 relative z-20 max-w-[140px]"
   }, "\u4F60\u662F\u4ECA\u5929\u7B2C ", React.createElement("span", {
     className: "text-orange-500 font-bold text-sm"
   }, luckyNumber), " \u4F4D", React.createElement("br", null), "\u770B\u5230", React.createElement("span", {
