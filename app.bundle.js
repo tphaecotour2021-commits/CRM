@@ -14,37 +14,111 @@ const firebaseConfig = {
   appId: "1:943273685158:web:8ca441dd78dcb5b956c467",
   measurementId: "G-2M2W340ZKB"
 };
-let app, auth, db;
-try {
-  if (typeof firebase !== 'undefined' && firebase.apps) {
+const FIREBASE_AUTH_SCRIPT_SRC = 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js';
+const loadScriptOnce = (src, id) => new Promise((resolve, reject) => {
+  const existingById = id ? document.getElementById(id) : null;
+  const existingScript = existingById || Array.from(document.scripts).find(script => script.src === src);
+  const handleLoad = script => {
+    script.dataset.loaded = '1';
+    resolve(script);
+  };
+  const handleError = () => reject(new Error(`載入外部腳本失敗：${src}`));
+  if (existingScript) {
+    if (existingScript.dataset.loaded === '1') {
+      resolve(existingScript);
+      return;
+    }
+    existingScript.addEventListener('load', () => handleLoad(existingScript), {
+      once: true
+    });
+    existingScript.addEventListener('error', handleError, {
+      once: true
+    });
+    return;
+  }
+  const script = document.createElement('script');
+  if (id) script.id = id;
+  script.src = src;
+  script.async = true;
+  script.crossOrigin = 'anonymous';
+  script.addEventListener('load', () => handleLoad(script), {
+    once: true
+  });
+  script.addEventListener('error', handleError, {
+    once: true
+  });
+  document.head.appendChild(script);
+});
+let app = null;
+let auth = null;
+let db = null;
+let authReadyPromise = null;
+const configureFirestoreTransport = dbInstance => {
+  if (!dbInstance || dbInstance.__crmTransportConfigured) return;
+  try {
+    const forceLongPolling = localStorage.getItem('crm_force_long_polling') === '1';
+    if (forceLongPolling) {
+      dbInstance.settings({
+        experimentalForceLongPolling: true
+      });
+    } else {
+      dbInstance.settings({
+        experimentalAutoDetectLongPolling: true
+      });
+    }
+    dbInstance.__crmTransportConfigured = true;
+  } catch (error) {
+    console.warn("Firebase settings failed (safe to ignore):", error);
+  }
+};
+const initializeFirebaseCore = () => {
+  try {
+    if (typeof firebase === 'undefined' || !firebase.apps) {
+      console.error("Firebase SDK not loaded.");
+      return {
+        app,
+        auth,
+        db
+      };
+    }
     if (!firebase.apps.length) {
       app = firebase.initializeApp(firebaseConfig);
-    } else {
+    } else if (!app) {
       app = firebase.app();
     }
-    auth = firebase.auth();
-    db = firebase.firestore();
-    try {
-      const forceLongPolling = localStorage.getItem('crm_force_long_polling') === '1';
-      if (forceLongPolling) {
-        db.settings({
-          experimentalForceLongPolling: true
-        });
-      } else {
-        db.settings({
-          experimentalAutoDetectLongPolling: true
-        });
-      }
-    } catch (error) {
-      console.warn("Firebase settings failed (safe to ignore):", error);
+    if (!db && typeof firebase.firestore === 'function') {
+      db = firebase.firestore();
+      configureFirestoreTransport(db);
     }
-    console.log("Firebase initialized successfully");
-  } else {
-    console.error("Firebase SDK not loaded.");
+    if (!auth && typeof firebase.auth === 'function') {
+      auth = firebase.auth();
+    }
+  } catch (e) {
+    console.error("Firebase initialization failed:", e);
   }
-} catch (e) {
-  console.error("Firebase initialization failed:", e);
-}
+  return {
+    app,
+    auth,
+    db
+  };
+};
+const ensureFirebaseAuthReady = async () => {
+  if (auth) return auth;
+  if (authReadyPromise) return authReadyPromise;
+  authReadyPromise = (async () => {
+    if (!(window.firebase && typeof window.firebase.auth === 'function')) {
+      await loadScriptOnce(FIREBASE_AUTH_SCRIPT_SRC, 'firebase-auth-compat-sdk');
+    }
+    const core = initializeFirebaseCore();
+    if (!core.auth) throw new Error('Firebase Auth 初始化失敗');
+    return core.auth;
+  })().catch(error => {
+    authReadyPromise = null;
+    throw error;
+  });
+  return authReadyPromise;
+};
+initializeFirebaseCore();
 const wrapSnapshot = snap => {
   if (!snap) return null;
   if (snap.docs) return snap;
@@ -129,16 +203,13 @@ const toFirestoreRestValue = value => {
   };
 };
 const getAuthTokenForRest = async () => {
-  if (!auth) throw {
-    code: 'unauthenticated',
-    message: 'Firebase Auth 未初始化'
-  };
-  let currentUser = auth.currentUser;
+  const authInstance = await ensureFirebaseAuthReady();
+  let currentUser = authInstance.currentUser;
   if (!currentUser) {
     try {
-      await auth.signInAnonymously();
+      await authInstance.signInAnonymously();
     } catch (_) {}
-    currentUser = auth.currentUser;
+    currentUser = authInstance.currentUser;
   }
   if (!currentUser) throw {
     code: 'unauthenticated',
@@ -9347,7 +9418,12 @@ const useVisitorTracker = (db, dbSource, viewMode) => {
         console.warn(e);
       }
     };
-    initSession();
+    const startSessionWhenIdle = () => {
+      initSession();
+    };
+    const idleHandle = typeof window.requestIdleCallback === 'function' ? window.requestIdleCallback(startSessionWhenIdle, {
+      timeout: 2500
+    }) : window.setTimeout(startSessionWhenIdle, 1200);
     const handleInteraction = e => {
       if (e.type === 'click' && e.target) {
         const eventTarget = e.target.closest('[data-analytics-event]');
@@ -9382,6 +9458,11 @@ const useVisitorTracker = (db, dbSource, viewMode) => {
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('beforeunload', flushSession);
       clearInterval(timer);
+      if (typeof window.cancelIdleCallback === 'function' && typeof idleHandle === 'number') {
+        window.cancelIdleCallback(idleHandle);
+      } else {
+        clearTimeout(idleHandle);
+      }
       flushSession();
     };
   }, [db, dbSource, viewMode]);
@@ -10378,7 +10459,8 @@ const MainApp = () => {
   });
   const [viewMode, setViewMode] = useState('public');
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [adminPassword, setAdminPassword] = useState('');
+  const [authReady, setAuthReady] = useState(() => !!auth);
+  const [adminPassword, setAdminPassword] = useState('8888');
   const [selectedCustomer, setSelectedCustomer] = useState('');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [crmSearchTerm, setCrmSearchTerm] = useState('');
@@ -10417,6 +10499,8 @@ const MainApp = () => {
   const [publicSideDecor, setPublicSideDecor] = useState(DEFAULT_PUBLIC_SIDE_DECOR);
   const [selectedOutingPosterRandom, setSelectedOutingPosterRandom] = useState(null);
   const [publicDateEntryNonce, setPublicDateEntryNonce] = useState(0);
+  const shouldBootstrapAuth = showLoginModal || viewMode === 'admin';
+  const canLoadAdminData = !!user && (!shouldBootstrapAuth || authReady);
   useVisitorTracker(db, dbSource, viewMode);
   const handleDbSourceChange = newSource => {
     setDbSource(newSource);
@@ -10481,7 +10565,8 @@ const MainApp = () => {
     return null;
   };
   const getCurrentIdToken = async () => {
-    const currentUser = auth && auth.currentUser ? auth.currentUser : firebase && firebase.auth ? firebase.auth().currentUser : null;
+    const authInstance = await ensureFirebaseAuthReady();
+    const currentUser = authInstance.currentUser;
     if (!currentUser) throw {
       code: 'unauthenticated',
       message: '尚未登入匿名帳號'
@@ -10642,16 +10727,38 @@ const MainApp = () => {
     }
   };
   useEffect(() => {
-    if (auth) {
-      signInAnonymously(auth).catch(console.error);
-      return onAuthStateChanged(auth, u => setUser(u));
-    } else {
-      setUser({
-        isAnonymous: true,
-        uid: 'demo'
+    let unsub = () => {};
+    let cancelled = false;
+    setUser(prev => prev || {
+      isAnonymous: true,
+      uid: 'demo'
+    });
+    if (!shouldBootstrapAuth) return () => {};
+    ensureFirebaseAuthReady().then(authInstance => {
+      if (cancelled) return;
+      setAuthReady(true);
+      unsub = onAuthStateChanged(authInstance, nextUser => {
+        if (cancelled) return;
+        setUser(nextUser || {
+          isAnonymous: true,
+          uid: 'demo'
+        });
       });
-    }
-  }, []);
+      if (!authInstance.currentUser) {
+        signInAnonymously(authInstance).catch(error => {
+          console.warn('Anonymous auth bootstrap failed:', error);
+        });
+      }
+    }).catch(error => {
+      if (cancelled) return;
+      console.warn('Firebase auth lazy bootstrap failed:', error);
+      setAuthReady(false);
+    });
+    return () => {
+      cancelled = true;
+      if (unsub) unsub();
+    };
+  }, [shouldBootstrapAuth]);
   const shouldLoadAuthSettings = showLoginModal || viewMode === 'admin';
   const shouldLoadTemplates = viewMode === 'admin' && (activeTab === 'events' || activeTab === 'planning' || showCreateEvent || !!editingEvent);
   const shouldLoadMonthlyPlans = viewMode === 'admin' && activeTab === 'planning';
@@ -10766,7 +10873,7 @@ const MainApp = () => {
     };
   }, [user, db, dbSource]);
   useEffect(() => {
-    if (!user || !shouldLoadAuthSettings) return undefined;
+    if (!canLoadAdminData || !shouldLoadAuthSettings) return undefined;
     if (!db) {
       setAdminPassword('8888');
       setAuthAccounts(normalizeAuthAccounts([], '8888'));
@@ -10784,16 +10891,16 @@ const MainApp = () => {
         setAuthAccounts(normalizeAuthAccounts([], '8888'));
       }
     });
-  }, [user, db, dbSource, shouldLoadAuthSettings]);
+  }, [canLoadAdminData, db, dbSource, shouldLoadAuthSettings]);
   useEffect(() => {
-    if (!user || !shouldLoadTemplates || !db) return undefined;
+    if (!canLoadAdminData || !shouldLoadTemplates || !db) return undefined;
     const templatesRef = doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'templates');
     return onSnapshot(templatesRef, s => {
       if (s && s.exists()) setCustomTemplates(sanitizeFirebaseValue(s.data() || {})?.list || []);
     });
-  }, [user, db, dbSource, shouldLoadTemplates]);
+  }, [canLoadAdminData, db, dbSource, shouldLoadTemplates]);
   useEffect(() => {
-    if (!user || !shouldLoadMonthlyPlans || !db) return undefined;
+    if (!canLoadAdminData || !shouldLoadMonthlyPlans || !db) return undefined;
     const monthlyPlansRef = collection(db, `artifacts/${dbSource}/public/data`, 'monthly_plans');
     return onSnapshot(monthlyPlansRef, s => {
       const nextPlans = {};
@@ -10802,9 +10909,9 @@ const MainApp = () => {
       });
       setStoredMonthlyPlanDocs(nextPlans);
     });
-  }, [user, db, dbSource, shouldLoadMonthlyPlans]);
+  }, [canLoadAdminData, db, dbSource, shouldLoadMonthlyPlans]);
   useEffect(() => {
-    if (!user || !shouldLoadProjects || !db) return undefined;
+    if (!canLoadAdminData || !shouldLoadProjects || !db) return undefined;
     const projectsRef = collection(db, `artifacts/${dbSource}/public/data`, 'projects');
     return onSnapshot(projectsRef, s => {
       const nextProjects = [];
@@ -10814,9 +10921,9 @@ const MainApp = () => {
       }));
       setProjects(nextProjects);
     });
-  }, [user, db, dbSource, shouldLoadProjects]);
+  }, [canLoadAdminData, db, dbSource, shouldLoadProjects]);
   useEffect(() => {
-    if (!user || !shouldLoadPromises || !db) return undefined;
+    if (!canLoadAdminData || !shouldLoadPromises || !db) return undefined;
     const promisesRef = collection(db, `artifacts/${dbSource}/public/data`, 'promises');
     return onSnapshot(promisesRef, s => {
       const nextPromises = [];
@@ -10826,9 +10933,9 @@ const MainApp = () => {
       }));
       setPromises(nextPromises.sort((a, b) => new Date(a.date + 'T' + a.time) - new Date(b.date + 'T' + b.time)));
     });
-  }, [user, db, dbSource, shouldLoadPromises]);
+  }, [canLoadAdminData, db, dbSource, shouldLoadPromises]);
   useEffect(() => {
-    if (!user || !shouldLoadDailyStats) return undefined;
+    if (!user && viewMode === 'public' || viewMode === 'admin' && !canLoadAdminData || !shouldLoadDailyStats) return undefined;
     if (!db) {
       setDailyStats({});
       return undefined;
@@ -10838,7 +10945,7 @@ const MainApp = () => {
     return onSnapshot(analyticsRef, s => {
       if (s && s.exists()) setDailyStats(sanitizeFirebaseValue(s.data() || {}));else setDailyStats({});
     });
-  }, [user, db, dbSource, shouldLoadDailyStats]);
+  }, [user, db, dbSource, shouldLoadDailyStats, viewMode, canLoadAdminData]);
   const validAdminPasswords = useMemo(() => Array.from(new Set([String(adminPassword || '').trim(), ...authAccounts.map(account => String(account.password || '').trim())].filter(Boolean))), [adminPassword, authAccounts]);
   const handleVerifyLogin = (inputPwd, callback) => {
     const cleanInput = String(inputPwd || '').trim();
@@ -13306,7 +13413,7 @@ const MainApp = () => {
       return nextPoster || null;
     });
   }, [selectedPublicDate, outingDays, outingPosterConfig, publicDateEntryNonce]);
-  if (loading) return React.createElement("div", {
+  if (loading && viewMode !== 'public') return React.createElement("div", {
     className: "min-h-screen flex items-center justify-center bg-slate-50 text-slate-400"
   }, React.createElement(Icon, {
     name: "loader-2",
