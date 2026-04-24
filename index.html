@@ -101,6 +101,17 @@
                 right: 0 !important;
             }
         }
+        @media (min-width: 1024px) {
+            .planning-palette-panel {
+                position: sticky;
+                top: 1.5rem;
+                align-self: flex-start;
+            }
+            .planning-calendar-panel {
+                grid-column: span 3 / span 3;
+                min-width: 0;
+            }
+        }
     </style>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -109,6 +120,6 @@
 <body>
     <div id="root"></div>
 
-    <script defer src="./app.bundle.js?v=bb31b74bbad9"></script>
+    <script defer src="./app.bundle.js?v=20260424-planning-sticky"></script>
 </body>
 </html>

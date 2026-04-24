@@ -3145,9 +3145,9 @@ const EventMascot = ({
   if (!gifSrc) return null;
   const luckyNumber = dailyStats && dailyStats.mascots && dailyStats.mascots[mascotCounterKey] ? dailyStats.mascots[mascotCounterKey] : 1;
   return React.createElement("div", {
-    className: "absolute bottom-0 right-0 z-10 pointer-events-none flex flex-col items-end"
+    className: "absolute bottom-0 right-0 z-10 pointer-events-none flex flex-col items-end md:flex-row md:items-end"
   }, React.createElement("div", {
-    className: "mb-2 mr-2 bg-white/95 border border-slate-200 shadow-lg rounded-2xl rounded-br-none px-3 py-2 text-[10px] leading-tight text-slate-600 animate-in fade-in slide-in-from-bottom-2 duration-700 relative z-20 max-w-[140px]"
+    className: "mb-2 mr-2 bg-white/95 border border-slate-200 shadow-lg rounded-2xl rounded-br-none px-3 py-2 text-[10px] leading-tight text-slate-600 animate-in fade-in slide-in-from-bottom-2 duration-700 relative z-20 max-w-[140px] md:mb-12 md:mr-[-10px]"
   }, "\u4F60\u662F\u4ECA\u5929\u7B2C ", React.createElement("span", {
     className: "text-orange-500 font-bold text-sm"
   }, luckyNumber), " \u4F4D", React.createElement("br", null), "\u770B\u5230", React.createElement("span", {
@@ -7024,9 +7024,9 @@ const PlanningBoard = ({
   }, React.createElement("span", {
     className: "mr-2 opacity-80"
   }, item.label), React.createElement("span", null, item.value)))), React.createElement("div", {
-    className: "grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)] gap-4"
+    className: "grid grid-cols-1 lg:grid-cols-4 gap-4"
   }, React.createElement("div", {
-    className: "bg-slate-50 border border-slate-200 rounded-2xl p-4 xl:self-start"
+    className: "planning-palette-panel bg-slate-50 border border-slate-200 rounded-2xl p-4"
   }, React.createElement("h3", {
     className: "text-sm font-bold text-slate-700 mb-2"
   }, "\u6D3B\u52D5\u6B04\u4F4D"), React.createElement("p", {
@@ -7104,7 +7104,7 @@ const PlanningBoard = ({
   }, "\u672C\u6708\u5DF2\u6392 ", formatNumber(row.activityCount), " \u5834"))), visibleActivityRows.length === 0 && React.createElement("div", {
     className: "rounded-xl border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-400"
   }, "\u9019\u500B\u5206\u985E\u76EE\u524D\u9084\u6C92\u6709\u6D3B\u52D5\uFF0C\u5148\u65B0\u589E\u4E00\u500B\u518D\u62D6\u66F3\u5B89\u6392\u3002"))), React.createElement("div", {
-    className: "bg-white border border-slate-200 rounded-2xl p-4"
+    className: "planning-calendar-panel bg-white border border-slate-200 rounded-2xl p-4"
   }, React.createElement("div", {
     className: "flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between mb-4"
   }, React.createElement("div", null, React.createElement("h3", {
