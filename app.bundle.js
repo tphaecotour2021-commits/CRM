@@ -6609,8 +6609,9 @@ const PlanningBoard = ({
     if (cell?.state === 'companyRest') return 'text-slate-600 font-semibold';
     if (cell?.state === 'rest') return 'text-slate-500 font-medium';
     if (cell?.isPast && cell?.state === 'available') return 'text-slate-300';
+    if (draggingEventName && cell?.canDrop) return 'text-emerald-700 font-bold';
     if (cell?.state === 'busy') return 'text-slate-500';
-    return draggingEventName && cell?.canDrop ? 'text-emerald-700 font-bold' : 'text-emerald-600 font-bold';
+    return 'text-emerald-600 font-bold';
   };
   const getEntryTone = type => ({
     main: 'bg-sky-50 border-sky-100 text-sky-800',
@@ -6633,8 +6634,9 @@ const PlanningBoard = ({
     if (cell?.state === 'companyRest') return '公休';
     if (cell?.state === 'rest') return '排休';
     if (cell?.isPast && cell?.state === 'available') return '已過';
+    if (draggingEventName && cell?.canDrop) return '拖到這裡';
     if (cell?.state === 'busy') return '正式已排';
-    return draggingEventName && cell?.canDrop ? '拖到這裡' : '可排';
+    return '可排';
   };
   const calendarRows = useMemo(() => planning.matrixRows.map(row => ({
     ...row,
@@ -6687,8 +6689,11 @@ const PlanningBoard = ({
       const scheduledNames = new Set();
       weekDates.forEach(dateKey => {
         calendarRows.forEach(row => {
-          const scheduledEventName = row.cellMap[dateKey]?.simulatedPlacement?.eventName;
-          if (scheduledEventName) scheduledNames.add(scheduledEventName);
+          const simulatedPlacements = Array.isArray(row.cellMap[dateKey]?.simulatedPlacements) ? row.cellMap[dateKey].simulatedPlacements : row.cellMap[dateKey]?.simulatedPlacement ? [row.cellMap[dateKey].simulatedPlacement] : [];
+          simulatedPlacements.forEach(placement => {
+            const scheduledEventName = String(placement?.eventName || '').trim();
+            if (scheduledEventName) scheduledNames.add(scheduledEventName);
+          });
           (row.cellMap[dateKey]?.entries || []).forEach(entry => {
             const entryTitle = String(entry?.title || '').trim();
             if (!entryTitle || entry?.type === 'outing') return;
@@ -6730,11 +6735,18 @@ const PlanningBoard = ({
     calendarRows.forEach(row => {
       (planning.matrixDates || []).forEach(dateKey => {
         const cell = row.cellMap[dateKey];
-        if (!cell?.simulatedPlacement?.eventName) return;
-        placementRows.push([dateKey, row.name, cell.simulatedPlacement.eventName]);
+        const simulatedPlacements = Array.isArray(cell?.simulatedPlacements) ? cell.simulatedPlacements : cell?.simulatedPlacement ? [cell.simulatedPlacement] : [];
+        simulatedPlacements.forEach(placement => {
+          if (!placement?.eventName) return;
+          placementRows.push([dateKey, row.name, placement.eventName]);
+        });
       });
     });
-    const calendarMatrixRows = [['講師', ...(planning.matrixDates || [])], ...calendarRows.map(row => [row.name, ...(planning.matrixDates || []).map(dateKey => row.cellMap[dateKey]?.simulatedPlacement?.eventName || '')])];
+    const calendarMatrixRows = [['講師', ...(planning.matrixDates || [])], ...calendarRows.map(row => [row.name, ...(planning.matrixDates || []).map(dateKey => {
+      const cell = row.cellMap[dateKey];
+      const simulatedPlacements = Array.isArray(cell?.simulatedPlacements) ? cell.simulatedPlacements : cell?.simulatedPlacement ? [cell.simulatedPlacement] : [];
+      return simulatedPlacements.map(placement => placement?.eventName).filter(Boolean).join('／');
+    })])];
     return [{
       name: `${monthLabel}模擬月曆`,
       rows: calendarMatrixRows
@@ -6835,7 +6847,8 @@ const PlanningBoard = ({
       instructorName: rowName,
       dateKey: cell.dateKey,
       sourceDateKey: payload.sourceDateKey,
-      sourceInstructorName: payload.sourceInstructorName
+      sourceInstructorName: payload.sourceInstructorName,
+      sourcePlacementId: payload.sourcePlacementId
     });
   };
   useEffect(() => {
@@ -7189,8 +7202,10 @@ const PlanningBoard = ({
       isPast: false,
       entries: [],
       canDrop: false,
+      simulatedPlacements: [],
       simulatedPlacement: null
     };
+    const simulatedPlacements = Array.isArray(cell.simulatedPlacements) ? cell.simulatedPlacements : cell.simulatedPlacement ? [cell.simulatedPlacement] : [];
     const cellKey = buildCellKey(dateKey, row.name);
     const isDropTarget = dragTargetKey === cellKey;
     return React.createElement("td", {
@@ -7212,13 +7227,15 @@ const PlanningBoard = ({
       className: "text-[10px] opacity-70 mt-0.5"
     }, entry.note))), Array.isArray(cell.entries) && cell.entries.length > 2 && React.createElement("div", {
       className: "text-[10px] text-slate-400"
-    }, "+", cell.entries.length - 2, " \u9805\u6B63\u5F0F\u5B89\u6392"), cell.simulatedPlacement && React.createElement("div", {
+    }, "+", cell.entries.length - 2, " \u9805\u6B63\u5F0F\u5B89\u6392"), simulatedPlacements.map((placement, placementIndex) => React.createElement("div", {
+      key: `simulated_${cellKey}_${placement.id || placementIndex}`,
       draggable: true,
       onDragStart: handleDragStart({
         type: 'placement',
-        eventName: cell.simulatedPlacement.eventName,
+        eventName: placement.eventName,
         sourceDateKey: cell.dateKey,
-        sourceInstructorName: row.name
+        sourceInstructorName: row.name,
+        sourcePlacementId: placement.id
       }),
       onDragEnd: handleDragEnd,
       className: `relative rounded-md border px-2 py-1.5 pr-5 pb-4 cursor-grab active:cursor-grabbing ${getEntryTone('simulated')}`
@@ -7232,7 +7249,7 @@ const PlanningBoard = ({
         WebkitBoxOrient: 'vertical',
         overflow: 'hidden'
       }
-    }, cell.simulatedPlacement.eventName), React.createElement("div", {
+    }, placement.eventName), React.createElement("div", {
       className: "text-[9px] opacity-70 mt-1"
     }, "\u6A21\u64EC\u5B89\u6392"), React.createElement("button", {
       type: "button",
@@ -7241,10 +7258,10 @@ const PlanningBoard = ({
       onClick: event => {
         event.stopPropagation();
         captureScrollSnapshot();
-        onRemovePlacement(row.name, cell.dateKey);
+        onRemovePlacement(row.name, cell.dateKey, placement.id);
       },
       className: "absolute bottom-1 right-1 inline-flex h-4 w-4 items-center justify-center rounded-full text-[11px] font-bold leading-none text-violet-500 hover:bg-violet-100/80 hover:text-violet-700"
-    }, "\xD7")), !cell.simulatedPlacement && (!Array.isArray(cell.entries) || cell.entries.length === 0) && React.createElement("div", {
+    }, "\xD7"))), simulatedPlacements.length === 0 && (!Array.isArray(cell.entries) || cell.entries.length === 0) && React.createElement("div", {
       className: `text-[11px] leading-tight ${getCalendarEmptyLabelTone(cell)}`
     }, getCalendarEmptyLabel(cell))));
   }))))), calendarRows.length === 0 && React.createElement("tr", null, React.createElement("td", {
@@ -10374,6 +10391,19 @@ const MainApp = () => {
     }
   });
   const buildPlanningCellKey = (dateKey, instructorName) => `${String(dateKey || '').trim()}__${String(instructorName || '').trim()}`;
+  const buildPlanningPlacementId = (dateKey, instructorName, eventName) => {
+    const base = [dateKey, instructorName, eventName].map(value => String(value || '').trim()).filter(Boolean).join('__').replace(/[.\s/\\#?%]+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '').toLowerCase();
+    return `${base || 'plan'}__${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  };
+  const buildPlanningPlacementIdentity = (placement, fallback = '') => {
+    const cleanId = String(placement?.id || '').trim();
+    if (cleanId) return cleanId;
+    const eventName = String(placement?.eventName || '').trim();
+    const instructorName = String(placement?.instructorName || '').trim();
+    const dateKey = String(placement?.dateKey || '').trim();
+    return [buildPlanningCellKey(dateKey, instructorName), eventName, fallback].filter(Boolean).join('__');
+  };
+  const sortPlanningPlacements = (placements = []) => [...placements].sort((a, b) => (a.dateKey || '').localeCompare(b.dateKey || '') || (a.instructorName || '').localeCompare(b.instructorName || '', 'zh-Hant') || (a.eventName || '').localeCompare(b.eventName || '', 'zh-Hant') || (a.id || '').localeCompare(b.id || ''));
   const [showAddPromise, setShowAddPromise] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -11348,7 +11378,7 @@ const MainApp = () => {
   };
   const sanitizeMonthlyPlanEntry = (raw = {}, fallbackMonthKey = '') => {
     const activityInputs = {};
-    const placementMap = {};
+    const placementList = [];
     const profitSplit = normalizePlanProfitSplit(raw?.profitSplit);
     Object.entries(raw?.activityInputs || {}).forEach(([eventName, metrics]) => {
       const cleanName = String(eventName || '').trim();
@@ -11362,16 +11392,16 @@ const MainApp = () => {
       const instructorName = String(placement?.instructorName || '').trim();
       const dateKey = String(placement?.dateKey || '').trim();
       if (!eventName || !instructorName || !dateKey) return;
-      placementMap[buildPlanningCellKey(dateKey, instructorName)] = {
-        id: String(placement?.id || `${fallbackMonthKey}_${index}`),
+      placementList.push({
+        id: String(placement?.id || `${fallbackMonthKey}_${index}_${buildPlanningCellKey(dateKey, instructorName)}`),
         eventName,
         instructorName,
         dateKey
-      };
+      });
     });
     return {
       activityInputs,
-      calendarPlacements: Object.values(placementMap).sort((a, b) => (a.dateKey || '').localeCompare(b.dateKey || '') || (a.instructorName || '').localeCompare(b.instructorName || '', 'zh-Hant') || (a.eventName || '').localeCompare(b.eventName || '', 'zh-Hant')),
+      calendarPlacements: sortPlanningPlacements(placementList),
       profitSplit
     };
   };
@@ -11406,12 +11436,12 @@ const MainApp = () => {
     const previous = previousRaw ? sanitizeMonthlyPlanEntry(previousRaw) : null;
     const next = sanitizeMonthlyPlanEntry(nextRaw);
     const details = [];
-    const previousPlacementMap = Object.fromEntries((previous?.calendarPlacements || []).map(placement => [buildPlanningCellKey(placement.dateKey, placement.instructorName), placement]));
-    const nextPlacementMap = Object.fromEntries((next.calendarPlacements || []).map(placement => [buildPlanningCellKey(placement.dateKey, placement.instructorName), placement]));
+    const previousPlacementMap = Object.fromEntries((previous?.calendarPlacements || []).map((placement, index) => [buildPlanningPlacementIdentity(placement, `prev_${index}`), placement]));
+    const nextPlacementMap = Object.fromEntries((next.calendarPlacements || []).map((placement, index) => [buildPlanningPlacementIdentity(placement, `next_${index}`), placement]));
     const placementCellKeys = Array.from(new Set([...Object.keys(previousPlacementMap), ...Object.keys(nextPlacementMap)])).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
     let addedPlacements = 0;
     let removedPlacements = 0;
-    let replacedPlacements = 0;
+    let updatedPlacements = 0;
     placementCellKeys.forEach(cellKey => {
       const before = previousPlacementMap[cellKey];
       const after = nextPlacementMap[cellKey];
@@ -11425,9 +11455,9 @@ const MainApp = () => {
         details.push(`${before.dateKey}｜${before.instructorName} 移除「${before.eventName}」`);
         return;
       }
-      if (before && after && before.eventName !== after.eventName) {
-        replacedPlacements += 1;
-        details.push(`${after.dateKey}｜${after.instructorName} 「${before.eventName}」→「${after.eventName}」`);
+      if (before && after && (before.eventName !== after.eventName || before.dateKey !== after.dateKey || before.instructorName !== after.instructorName)) {
+        updatedPlacements += 1;
+        details.push(`${before.dateKey}｜${before.instructorName}｜${before.eventName} → ${after.dateKey}｜${after.instructorName}｜${after.eventName}`);
       }
     });
     const metricNames = Array.from(new Set([...Object.keys(previous?.activityInputs || {}), ...Object.keys(next.activityInputs || {})])).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
@@ -11471,15 +11501,15 @@ const MainApp = () => {
     }
     const summaryParts = [];
     if (previous) {
-      if (addedPlacements > 0) summaryParts.push(`新增 ${addedPlacements} 格`);
-      if (removedPlacements > 0) summaryParts.push(`移除 ${removedPlacements} 格`);
-      if (replacedPlacements > 0) summaryParts.push(`改派 ${replacedPlacements} 格`);
+      if (addedPlacements > 0) summaryParts.push(`新增 ${addedPlacements} 項排班`);
+      if (removedPlacements > 0) summaryParts.push(`移除 ${removedPlacements} 項排班`);
+      if (updatedPlacements > 0) summaryParts.push(`調整 ${updatedPlacements} 項排班`);
       if (metricChanges > 0) summaryParts.push(`活動設定 ${metricChanges} 項調整`);
       if (splitChanged) summaryParts.push('毛利拆分更新');
       if (summaryParts.length === 0) summaryParts.push('內容無差異，重新儲存');
     } else {
       summaryParts.push(`建立初始版本`);
-      if (next.calendarPlacements.length > 0) summaryParts.push(`排班 ${next.calendarPlacements.length} 格`);
+      if (next.calendarPlacements.length > 0) summaryParts.push(`排班 ${next.calendarPlacements.length} 項`);
       if (Object.keys(next.activityInputs || {}).length > 0) summaryParts.push(`活動設定 ${Object.keys(next.activityInputs || {}).length} 種`);
     }
     if (options?.action === 'restore') summaryParts.unshift('還原版本');
@@ -12513,7 +12543,7 @@ const MainApp = () => {
   const currentMonthPlan = useMemo(() => {
     const raw = monthlyPlans[currentMonthKey] || {};
     const activityInputs = {};
-    const placementMap = {};
+    const placementList = [];
     Object.entries(raw?.activityInputs || {}).forEach(([name, metrics]) => {
       const cleanName = String(name || '').trim();
       if (!cleanName) return;
@@ -12524,16 +12554,16 @@ const MainApp = () => {
       const instructorName = String(placement?.instructorName || '').trim();
       const dateKey = String(placement?.dateKey || '').trim();
       if (!eventName || !instructorName || !dateKey) return;
-      placementMap[buildPlanningCellKey(dateKey, instructorName)] = {
-        id: String(placement?.id || `${currentMonthKey}_${index}`),
+      placementList.push({
+        id: String(placement?.id || `${currentMonthKey}_${index}_${buildPlanningCellKey(dateKey, instructorName)}`),
         eventName,
         instructorName,
         dateKey
-      };
+      });
     });
     return {
       activityInputs,
-      calendarPlacements: Object.values(placementMap),
+      calendarPlacements: sortPlanningPlacements(placementList),
       profitSplit: normalizePlanProfitSplit(raw?.profitSplit)
     };
   }, [monthlyPlans, currentMonthKey]);
@@ -12932,12 +12962,14 @@ const MainApp = () => {
     const placementList = Array.isArray(currentMonthPlan.calendarPlacements) ? currentMonthPlan.calendarPlacements : [];
     const profitSplit = normalizePlanProfitSplit(currentMonthPlan.profitSplit);
     const placementSessionMap = {};
-    const placementByCell = {};
+    const placementsByCell = {};
     placementList.forEach(placement => {
       if (!placement?.eventName || !placement?.instructorName || !placement?.dateKey) return;
       if (!placementSessionMap[placement.eventName]) placementSessionMap[placement.eventName] = new Set();
       placementSessionMap[placement.eventName].add(String(placement.dateKey || '').trim());
-      placementByCell[buildPlanningCellKey(placement.dateKey, placement.instructorName)] = placement;
+      const cellKey = buildPlanningCellKey(placement.dateKey, placement.instructorName);
+      if (!placementsByCell[cellKey]) placementsByCell[cellKey] = [];
+      placementsByCell[cellKey].push(placement);
     });
     const placementCountMap = Object.fromEntries(Object.entries(placementSessionMap).map(([name, dateSet]) => [name, dateSet.size]));
     const activityNames = Array.from(new Set([...allEventNames, ...Object.keys(currentMonthKpiActuals.activityMap || {}), ...Object.keys(activityInputMap || {}), ...Object.keys(placementCountMap || {})])).filter(Boolean);
@@ -12988,15 +13020,16 @@ const MainApp = () => {
       ...row,
       cells: row.cells.map(cell => ({
         ...cell,
-        simulatedPlacement: placementByCell[buildPlanningCellKey(cell.dateKey, row.name)] || null,
-        canDrop: cell.state === 'available' && !cell.isPast
+        simulatedPlacements: sortPlanningPlacements(placementsByCell[buildPlanningCellKey(cell.dateKey, row.name)] || []),
+        simulatedPlacement: sortPlanningPlacements(placementsByCell[buildPlanningCellKey(cell.dateKey, row.name)] || [])[0] || null,
+        canDrop: (cell.state === 'available' || cell.state === 'busy') && !cell.isPast
       })),
       openCount: row.cells.filter(cell => cell.state === 'available').length,
       actualBusyCount: row.cells.filter(cell => cell.state === 'busy').length,
       restCount: row.cells.filter(cell => cell.state === 'rest').length,
-      simulatedCount: row.cells.filter(cell => placementByCell[buildPlanningCellKey(cell.dateKey, row.name)]).length
+      simulatedCount: row.cells.reduce((sum, cell) => sum + ((placementsByCell[buildPlanningCellKey(cell.dateKey, row.name)] || []).length), 0)
     }));
-    const simulatedInstructorDays = placementList.length;
+    const simulatedInstructorDays = Object.keys(placementsByCell).length;
     const simulatedSessions = activityRows.reduce((sum, row) => sum + row.simulatedSessions, 0);
     const plannedPax = activityRows.reduce((sum, row) => sum + row.activityCount * (Number(row.avgPax) || 0), 0);
     const plannedGrossProfit = activityRows.reduce((sum, row) => sum + row.projectedGrossProfit, 0);
@@ -13226,47 +13259,51 @@ const MainApp = () => {
     instructorName,
     dateKey,
     sourceDateKey,
-    sourceInstructorName
+    sourceInstructorName,
+    sourcePlacementId
   }) => {
     const cleanEventName = String(eventName || '').trim();
     const cleanInstructorName = String(instructorName || '').trim();
     const cleanDateKey = String(dateKey || '').trim();
+    const cleanSourcePlacementId = String(sourcePlacementId || '').trim();
     if (!cleanEventName || !cleanInstructorName || !cleanDateKey) return;
     const sourceKey = buildPlanningCellKey(sourceDateKey, sourceInstructorName);
     const targetKey = buildPlanningCellKey(cleanDateKey, cleanInstructorName);
-    if (sourceKey && sourceKey === targetKey) return;
-    const existingPlacement = (Array.isArray(currentMonthPlan.calendarPlacements) ? currentMonthPlan.calendarPlacements : []).find(placement => buildPlanningCellKey(placement?.dateKey, placement?.instructorName) === targetKey);
-    if (existingPlacement && !confirm(`這格原本已排「${existingPlacement.eventName}」，確定要改成「${cleanEventName}」嗎？`)) return;
+    if (cleanSourcePlacementId) {
+      const sourcePlacement = (Array.isArray(currentMonthPlan.calendarPlacements) ? currentMonthPlan.calendarPlacements : []).find(placement => String(placement?.id || '').trim() === cleanSourcePlacementId);
+      if (sourcePlacement && buildPlanningCellKey(sourcePlacement.dateKey, sourcePlacement.instructorName) === targetKey) return;
+    } else if (sourceKey && sourceKey === targetKey) {
+      return;
+    }
     updateCurrentMonthPlan(current => {
       const nextInputs = {
         ...(current.activityInputs || {}),
         [cleanEventName]: current.activityInputs?.[cleanEventName] || buildDefaultPlanActivityInput(inferPlanActivityTemplateType(cleanEventName))
       };
-      const nextPlacements = (Array.isArray(current.calendarPlacements) ? current.calendarPlacements : []).filter(placement => {
-        const key = buildPlanningCellKey(placement?.dateKey, placement?.instructorName);
-        return key !== sourceKey && key !== targetKey;
-      });
+      const nextPlacements = (Array.isArray(current.calendarPlacements) ? current.calendarPlacements : []).filter(placement => String(placement?.id || '').trim() !== cleanSourcePlacementId);
       nextPlacements.push({
-        id: targetKey,
+        id: cleanSourcePlacementId || buildPlanningPlacementId(cleanDateKey, cleanInstructorName, cleanEventName),
         eventName: cleanEventName,
         instructorName: cleanInstructorName,
         dateKey: cleanDateKey
       });
-      nextPlacements.sort((a, b) => (a.dateKey || '').localeCompare(b.dateKey || '') || (a.instructorName || '').localeCompare(b.instructorName || '', 'zh-Hant') || (a.eventName || '').localeCompare(b.eventName || '', 'zh-Hant'));
       return {
         ...current,
         activityInputs: nextInputs,
-        calendarPlacements: nextPlacements
+        calendarPlacements: sortPlanningPlacements(nextPlacements)
       };
     });
   };
-  const handleRemoveCurrentMonthPlanPlacement = (instructorName, dateKey) => {
+  const handleRemoveCurrentMonthPlanPlacement = (instructorName, dateKey, placementId = '') => {
     const targetKey = buildPlanningCellKey(dateKey, instructorName);
-    const targetPlacement = (Array.isArray(currentMonthPlan.calendarPlacements) ? currentMonthPlan.calendarPlacements : []).find(placement => buildPlanningCellKey(placement?.dateKey, placement?.instructorName) === targetKey);
+    const targetPlacement = (Array.isArray(currentMonthPlan.calendarPlacements) ? currentMonthPlan.calendarPlacements : []).find(placement => {
+      if (placementId) return String(placement?.id || '').trim() === String(placementId).trim();
+      return buildPlanningCellKey(placement?.dateKey, placement?.instructorName) === targetKey;
+    });
     if (targetPlacement && !confirm(`確定要移除 ${dateKey} ${instructorName} 的「${targetPlacement.eventName}」模擬安排嗎？`)) return;
     updateCurrentMonthPlan(current => ({
       ...current,
-      calendarPlacements: (Array.isArray(current.calendarPlacements) ? current.calendarPlacements : []).filter(placement => buildPlanningCellKey(placement?.dateKey, placement?.instructorName) !== targetKey)
+      calendarPlacements: (Array.isArray(current.calendarPlacements) ? current.calendarPlacements : []).filter(placement => String(placement?.id || '').trim() !== String(targetPlacement?.id || '').trim())
     }));
   };
   const calendarOccupancy = useMemo(() => {
