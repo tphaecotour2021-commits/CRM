@@ -611,6 +611,45 @@ const inferPerformanceBucket = (name = '') => {
   if (/^下班走走/.test(normalized) || normalized.includes('下班後走走')) return 'afterwork';
   return 'theme';
 };
+const QUICK_CREATE_TEMPLATE_CATEGORY_OPTIONS = [{
+  value: 'theme',
+  label: '主題活動',
+  helper: '地名 + 動物，例如：大安鼠'
+}, {
+  value: 'afterWork',
+  label: '下班後走走',
+  helper: '下班走走 XX'
+}, {
+  value: 'special',
+  label: '特別活動',
+  helper: '其他自訂活動'
+}];
+const QUICK_CREATE_TEMPLATE_CATEGORY_LABELS = QUICK_CREATE_TEMPLATE_CATEGORY_OPTIONS.reduce((acc, item) => {
+  acc[item.value] = item.label;
+  return acc;
+}, {});
+const QUICK_CREATE_SPECIAL_ACTIVITY_NAMES = new Set(['北橫蛇']);
+const QUICK_CREATE_THEME_ANIMAL_SUFFIXES = ['貓頭鷹', '蝙蝠', '飛鼠', '松鼠', '蜥蜴', '蟾蜍', '穿山甲', '水鹿', '梅花鹿', '山羌', '夜鷺', '老鷹', '螢火蟲', '鼠', '兔', '蛇', '龜', '蛙', '蜥', '蟾', '狐', '鹿', '猴', '鳥', '蟬', '螢'];
+const normalizeQuickCreateTemplateCategory = (value, fallbackName = '') => {
+  if (value === 'afterwork') return 'afterWork';
+  if (value === 'theme' || value === 'afterWork' || value === 'special') return value;
+  const cleanName = String(fallbackName || '').trim();
+  if (!cleanName) return 'special';
+  if (QUICK_CREATE_SPECIAL_ACTIVITY_NAMES.has(cleanName)) return 'special';
+  if (cleanName.startsWith('下班走走') || cleanName.includes('下班後走走')) return 'afterWork';
+  if (cleanName.startsWith('夜訪')) return 'theme';
+  if (/^[\u3400-\u9fff]{2,10}$/.test(cleanName) && QUICK_CREATE_THEME_ANIMAL_SUFFIXES.some(suffix => cleanName.endsWith(suffix))) {
+    return 'theme';
+  }
+  return 'special';
+};
+const getTemplateEventName = (tpl = {}) => String(tpl?.eventName || tpl?.name || '').trim();
+const getTemplateEventNameKey = (tpl = {}) => getTemplateEventName(tpl).replace(/\s+/g, '');
+const normalizeQuickCreateTemplate = (tpl = {}) => ({
+  ...tpl,
+  eventName: getTemplateEventName(tpl),
+  templateCategory: normalizeQuickCreateTemplateCategory(tpl.templateCategory, getTemplateEventName(tpl))
+});
 const DEFAULT_MASCOT_THEMES = [{
   id: 'default_flying_squirrel',
   name: '飛鼠系列',
@@ -3431,7 +3470,7 @@ const EventManagerModal = ({
   const normalizedInternalName = useMemo(() => String(internalName || '').trim().replace(/\s+/g, ''), [internalName]);
   const matchedTemplate = useMemo(() => {
     if (!normalizedInternalName) return null;
-    const matches = (customTemplates || []).filter(tpl => String(tpl?.eventName || '').trim().replace(/\s+/g, '') === normalizedInternalName);
+    const matches = (customTemplates || []).filter(tpl => getTemplateEventNameKey(tpl) === normalizedInternalName);
     return matches.length > 0 ? matches[matches.length - 1] : null;
   }, [customTemplates, normalizedInternalName]);
   const matchedTemplateKey = matchedTemplate ? `${matchedTemplate.id || matchedTemplate.name || matchedTemplate.eventName}::${normalizedInternalName}` : '';
@@ -3530,12 +3569,13 @@ const EventManagerModal = ({
   };
   const applyTemplateToEvent = tpl => {
     if (!tpl) return;
+    const templateEventName = getTemplateEventName(tpl);
     setEventTime(tpl.time || '');
     setEventLink(tpl.link || '');
     setEventNote(tpl.note || '');
     setDisplayName(tpl.displayName || '');
     setActivityCategory(tpl.activityCategory || '');
-    setCarpoolDisplayMode(resolveCarpoolDisplayMode(tpl.carpoolDisplayMode, tpl.eventName));
+    setCarpoolDisplayMode(resolveCarpoolDisplayMode(tpl.carpoolDisplayMode, templateEventName));
     setCapacity(tpl.capacity || 12);
     setBackendColor(tpl.backendColor || '#eff6ff');
     setTags(tpl.tags || {
@@ -3545,10 +3585,10 @@ const EventManagerModal = ({
     });
     setStatusRules(tpl.statusRules || []);
     setIsCancelled(!!tpl.isCancelled);
-    const templateKey = `${tpl.id || tpl.name || tpl.eventName}::${String(tpl.eventName || '').trim().replace(/\s+/g, '')}`;
+    const templateKey = `${tpl.id || tpl.name || tpl.eventName}::${templateEventName.replace(/\s+/g, '')}`;
     setAppliedTemplateSuggestionKey(templateKey);
     setDismissedTemplateSuggestionKey('');
-    setTemplateAutofillNotice(`已從模板「${tpl.name || tpl.eventName}」帶入時間、連結、前台名稱、標籤與共乘設定。`);
+    setTemplateAutofillNotice(`已從模板「${tpl.name || templateEventName}」帶入時間、連結、前台名稱、標籤與共乘設定。`);
   };
   useEffect(() => {
     setDismissedTemplateSuggestionKey('');
@@ -3824,7 +3864,7 @@ const EventManagerModal = ({
     type: "button",
     onClick: () => applyTemplateToEvent(matchedTemplate),
     className: "shrink-0 px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-[11px] font-bold text-blue-700 hover:bg-blue-100",
-    title: `從模板「${toSafeDisplayText(matchedTemplate.name, toSafeDisplayText(matchedTemplate.eventName, '模板'))}」帶入設定`
+    title: `從模板「${toSafeDisplayText(matchedTemplate.name, toSafeDisplayText(getTemplateEventName(matchedTemplate), '模板'))}」帶入設定`
   }, "\u5F9E\u540C\u540D\u6A21\u677F\u88DC\u9F4A\u8A2D\u5B9A")), React.createElement("div", {
     className: "bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4"
   }, shouldShowTemplateSuggestion && React.createElement("div", {
@@ -3838,7 +3878,7 @@ const EventManagerModal = ({
     size: 12
   }), " \u627E\u5230\u540C\u540D\u6A21\u677F"), React.createElement("div", {
     className: "text-sm font-bold text-slate-700 mt-1"
-  }, toSafeDisplayText(matchedTemplate.name, toSafeDisplayText(matchedTemplate.eventName, '模板'))), React.createElement("div", {
+  }, toSafeDisplayText(matchedTemplate.name, toSafeDisplayText(getTemplateEventName(matchedTemplate), '模板'))), React.createElement("div", {
     className: "text-[11px] text-slate-500 mt-1 leading-5"
   }, "\u9019\u5834\u300C", internalName, "\u300D\u548C\u6A21\u677F\u540C\u540D\uFF0C\u7CFB\u7D71\u627E\u5230\u53EF\u88DC\u9F4A\u7684\u9810\u8A2D\u5167\u5BB9\u3002\u8981\u4E0D\u8981\u76F4\u63A5\u5E36\u5165\u6A21\u677F\u88E1\u7684\u6642\u9593\u3001\u9023\u7D50\u3001\u524D\u53F0\u540D\u7A31\u3001\u6A19\u7C64\u8207\u5171\u4E58\u8A2D\u5B9A\uFF1F")), React.createElement("div", {
     className: "shrink-0 flex gap-2"
@@ -4436,1135 +4476,313 @@ const CalendarExportModal = ({
     size: 16
   }), " ", exportMode === 'monthly' ? '匯出月統計 (CSV)' : '匯出 Excel (CSV)'))));
 };
-const CreateEventModal = ({
-  onClose,
-  onSave,
-  customTemplates,
-  onSaveTemplate,
-  onDeleteTemplate,
-  availableInstructors,
-  instructorSchedule,
-  tagDefinitions,
-  onAddTag,
-  initialDate,
-  initialInstructors = [],
-  companyRestDates = [],
-  existingScheduleByDate = {}
-}) => {
-  const normalizedInitialInstructors = Array.isArray(initialInstructors) ? initialInstructors.map(name => String(name || '').trim()).filter(Boolean) : [];
-  const [mode, setMode] = useState('template');
+const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, onDeleteTemplate, availableInstructors, instructorSchedule, tagDefinitions, onAddTag, initialDate, initialInstructors = [], companyRestDates = [], existingScheduleByDate = {} }) => {
+  const normalizedInitialInstructors = Array.isArray(initialInstructors) ? initialInstructors.map((name) => String(name || "").trim()).filter(Boolean) : [];
+  const [mode, setMode] = useState("template");
   const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
-  const [calendarMonth, setCalendarMonth] = useState(initialDate ? new Date(initialDate) : new Date());
+  const [calendarMonth, setCalendarMonth] = useState(initialDate ? new Date(initialDate) : /* @__PURE__ */ new Date());
+  const [templateCategoryFilter, setTemplateCategoryFilter] = useState("all");
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const createEmptyTemplateData = () => ({
+    id: null,
+    name: "",
+    eventName: "",
+    instructor: "",
+    time: "",
+    duration: 1,
+    prepDays: 0,
+    prepTime: "",
+    link: "",
+    note: "",
+    displayName: "",
+    activityCategory: "",
+    templateCategory: "",
+    carpoolDisplayMode: "",
+    isCancelled: false,
+    capacity: 12,
+    price: "",
+    tags: { levels: "", types: "", locations: "" },
+    backendColor: "#eff6ff",
+    statusRules: []
+  });
+  const getTemplateSelectionKey = (tpl) => String(tpl?.id || [tpl?.name, tpl?.eventName, tpl?.time, tpl?.instructor].map((value) => String(value || "").trim()).join("::"));
   const [formData, setFormData] = useState({
     dates: initialDate ? [initialDate] : [],
-    eventName: '',
+    eventName: "",
     instructors: normalizedInitialInstructors,
-    time: '',
+    time: "",
     duration: 1,
     prepDays: 0,
-    prepTime: '',
-    link: '',
-    note: '',
-    displayName: '',
-    activityCategory: '',
-    carpoolDisplayMode: '',
+    prepTime: "",
+    link: "",
+    note: "",
+    displayName: "",
+    activityCategory: "",
+    carpoolDisplayMode: "",
     isCancelled: false,
     capacity: 12,
-    price: '',
-    tags: {
-      levels: '',
-      types: '',
-      locations: ''
-    },
-    backendColor: '#eff6ff',
+    price: "",
+    // 新增價格
+    tags: { levels: "", types: "", locations: "" },
+    backendColor: "#eff6ff",
     statusRules: []
   });
-  const [tempInstructor, setTempInstructor] = useState('');
-  const [dismissedTemplateSuggestionKey, setDismissedTemplateSuggestionKey] = useState('');
-  const [appliedTemplateSuggestionKey, setAppliedTemplateSuggestionKey] = useState('');
-  const [templateAutofillNotice, setTemplateAutofillNotice] = useState('');
-  const [newTemplateData, setNewTemplateData] = useState({
-    id: null,
-    name: '',
-    eventName: '',
-    instructor: '',
-    time: '',
-    duration: 1,
-    prepDays: 0,
-    prepTime: '',
-    link: '',
-    note: '',
-    displayName: '',
-    activityCategory: '',
-    carpoolDisplayMode: '',
-    isCancelled: false,
-    capacity: 12,
-    price: '',
-    tags: {
-      levels: '',
-      types: '',
-      locations: ''
-    },
-    backendColor: '#eff6ff',
-    statusRules: []
-  });
-  const [newRule, setNewRule] = useState({
-    min: 0,
-    max: 10,
-    label: '',
-    color: 'blue'
-  });
+  const [tempInstructor, setTempInstructor] = useState("");
+  const [dismissedTemplateSuggestionKey, setDismissedTemplateSuggestionKey] = useState("");
+  const [appliedTemplateSuggestionKey, setAppliedTemplateSuggestionKey] = useState("");
+  const [templateAutofillNotice, setTemplateAutofillNotice] = useState("");
+  const normalizedTemplates = useMemo(() => (customTemplates || []).map(normalizeQuickCreateTemplate), [customTemplates]);
+  const filteredTemplates = useMemo(() => {
+    if (templateCategoryFilter === "all") return normalizedTemplates;
+    return normalizedTemplates.filter((tpl) => tpl.templateCategory === templateCategoryFilter);
+  }, [normalizedTemplates, templateCategoryFilter]);
+  const templateCategoryCounts = useMemo(() => QUICK_CREATE_TEMPLATE_CATEGORY_OPTIONS.reduce((acc, option) => {
+    acc[option.value] = normalizedTemplates.filter((tpl) => tpl.templateCategory === option.value).length;
+    return acc;
+  }, { all: normalizedTemplates.length }), [normalizedTemplates]);
+  const [newTemplateData, setNewTemplateData] = useState(createEmptyTemplateData);
+  const [newRule, setNewRule] = useState({ min: 0, max: 10, label: "", color: "blue" });
   const unavailableInstructors = useMemo(() => {
-    const unavailable = new Set();
-    formData.dates.forEach(date => {
+    const unavailable = /* @__PURE__ */ new Set();
+    formData.dates.forEach((date) => {
       const resting = instructorSchedule[date] || [];
-      resting.forEach(name => unavailable.add(name));
+      resting.forEach((name) => unavailable.add(name));
     });
     return unavailable;
   }, [formData.dates, instructorSchedule]);
-  const normalizedFormEventName = useMemo(() => String(formData.eventName || '').trim().replace(/\s+/g, ''), [formData.eventName]);
+  const normalizedFormEventName = useMemo(
+    () => String(formData.eventName || "").trim().replace(/\s+/g, ""),
+    [formData.eventName]
+  );
   const matchedTemplate = useMemo(() => {
     if (!normalizedFormEventName) return null;
-    const matches = (customTemplates || []).filter(tpl => String(tpl?.eventName || '').trim().replace(/\s+/g, '') === normalizedFormEventName);
+    const matches = normalizedTemplates.filter((tpl) => getTemplateEventNameKey(tpl) === normalizedFormEventName);
     return matches.length > 0 ? matches[matches.length - 1] : null;
-  }, [customTemplates, normalizedFormEventName]);
-  const matchedTemplateKey = matchedTemplate ? `${matchedTemplate.id || matchedTemplate.name || matchedTemplate.eventName}::${normalizedFormEventName}` : '';
+  }, [normalizedTemplates, normalizedFormEventName]);
+  const matchedTemplateKey = matchedTemplate ? `${matchedTemplate.id || matchedTemplate.name || matchedTemplate.eventName}::${normalizedFormEventName}` : "";
   const shouldShowTemplateSuggestion = !!(matchedTemplate && matchedTemplateKey && matchedTemplateKey !== dismissedTemplateSuggestionKey && matchedTemplateKey !== appliedTemplateSuggestionKey);
-  const companyRestSet = useMemo(() => new Set((companyRestDates || []).map(date => String(date || ''))), [companyRestDates]);
-  const selectedDateSchedules = useMemo(() => [...formData.dates].sort().map(dateKey => ({
+  const companyRestSet = useMemo(() => new Set((companyRestDates || []).map((date) => String(date || ""))), [companyRestDates]);
+  const selectedDateSchedules = useMemo(() => [...formData.dates].sort().map((dateKey) => ({
     dateKey,
     isCompanyRest: companyRestSet.has(dateKey),
     items: Array.isArray(existingScheduleByDate?.[dateKey]) ? existingScheduleByDate[dateKey] : []
   })), [formData.dates, existingScheduleByDate, companyRestSet]);
-  const getScheduledItemMeta = item => {
-    const type = item?.type || 'main';
-    if (type === 'prep') return {
-      label: '前置',
-      tone: 'bg-amber-50 text-amber-700 border-amber-200'
-    };
-    if (type === 'cont') return {
-      label: '跨日',
-      tone: 'bg-slate-100 text-slate-600 border-slate-200'
-    };
-    return {
-      label: '主活動',
-      tone: 'bg-blue-50 text-blue-700 border-blue-200'
-    };
+  const getScheduledItemMeta = (item) => {
+    const type = item?.type || "main";
+    if (type === "prep") return { label: "\u524D\u7F6E", tone: "bg-amber-50 text-amber-700 border-amber-200" };
+    if (type === "cont") return { label: "\u8DE8\u65E5", tone: "bg-slate-100 text-slate-600 border-slate-200" };
+    return { label: "\u4E3B\u6D3B\u52D5", tone: "bg-blue-50 text-blue-700 border-blue-200" };
   };
   const addTemplateRule = () => {
-    if (!newRule.label) return alert("請輸入顯示文字");
+    if (!newRule.label) return alert("\u8ACB\u8F38\u5165\u986F\u793A\u6587\u5B57");
     const currentRules = newTemplateData.statusRules || [];
     const updated = [...currentRules, newRule].sort((a, b) => parseInt(a.min) - parseInt(b.min));
-    setNewTemplateData({
-      ...newTemplateData,
-      statusRules: updated
-    });
-    setNewRule({
-      min: parseInt(newRule.max) + 1,
-      max: parseInt(newRule.max) + 10,
-      label: '',
-      color: 'blue'
-    });
+    setNewTemplateData({ ...newTemplateData, statusRules: updated });
+    setNewRule({ min: parseInt(newRule.max) + 1, max: parseInt(newRule.max) + 10, label: "", color: "blue" });
   };
-  const removeTemplateRule = idx => {
+  const removeTemplateRule = (idx) => {
     const currentRules = newTemplateData.statusRules || [];
-    setNewTemplateData({
-      ...newTemplateData,
-      statusRules: currentRules.filter((_, i) => i !== idx)
-    });
+    setNewTemplateData({ ...newTemplateData, statusRules: currentRules.filter((_, i) => i !== idx) });
   };
   const addFormRule = () => {
-    if (!newRule.label) return alert("請輸入顯示文字");
+    if (!newRule.label) return alert("\u8ACB\u8F38\u5165\u986F\u793A\u6587\u5B57");
     const currentRules = formData.statusRules || [];
     const updated = [...currentRules, newRule].sort((a, b) => parseInt(a.min) - parseInt(b.min));
-    setFormData({
-      ...formData,
-      statusRules: updated
-    });
-    setNewRule({
-      min: parseInt(newRule.max) + 1,
-      max: parseInt(newRule.max) + 10,
-      label: '',
-      color: 'blue'
-    });
+    setFormData({ ...formData, statusRules: updated });
+    setNewRule({ min: parseInt(newRule.max) + 1, max: parseInt(newRule.max) + 10, label: "", color: "blue" });
   };
-  const removeFormRule = idx => {
+  const removeFormRule = (idx) => {
     const currentRules = formData.statusRules || [];
-    setFormData({
-      ...formData,
-      statusRules: currentRules.filter((_, i) => i !== idx)
-    });
+    setFormData({ ...formData, statusRules: currentRules.filter((_, i) => i !== idx) });
   };
-  const applyTemplateToForm = tpl => {
+  const applyTemplateToForm = (tpl) => {
     let tplInstructors = [];
-    if (tpl.instructor) tplInstructors = tpl.instructor.split(/[&,]/).map(s => s.trim()).filter(Boolean);
-    setFormData(prev => {
+    if (tpl.instructor) tplInstructors = tpl.instructor.split(/[&,]/).map((s) => s.trim()).filter(Boolean);
+    const templateEventName = getTemplateEventName(tpl);
+    setFormData((prev) => {
       const nextInstructors = prev.instructors.length > 0 ? prev.instructors : tplInstructors;
       return {
         ...prev,
-        eventName: tpl.eventName,
+        eventName: templateEventName,
         instructors: nextInstructors,
-        time: tpl.time || '',
+        time: tpl.time || "",
         duration: parseInt(tpl.duration, 10) || 1,
         prepDays: parseInt(tpl.prepDays, 10) || 0,
-        prepTime: tpl.prepTime || '',
-        link: tpl.link || '',
-        note: tpl.note || '',
-        displayName: tpl.displayName || '',
-        activityCategory: tpl.activityCategory || '',
-        carpoolDisplayMode: resolveCarpoolDisplayMode(tpl.carpoolDisplayMode, tpl.eventName),
+        prepTime: tpl.prepTime || "",
+        link: tpl.link || "",
+        note: tpl.note || "",
+        displayName: tpl.displayName || "",
+        activityCategory: tpl.activityCategory || "",
+        carpoolDisplayMode: resolveCarpoolDisplayMode(tpl.carpoolDisplayMode, templateEventName),
         isCancelled: !!tpl.isCancelled,
         capacity: tpl.capacity || 12,
-        price: tpl.price || '',
-        tags: tpl.tags || {
-          levels: '',
-          types: '',
-          locations: ''
-        },
-        backendColor: tpl.backendColor || '#eff6ff',
+        price: tpl.price || "",
+        tags: tpl.tags || { levels: "", types: "", locations: "" },
+        backendColor: tpl.backendColor || "#eff6ff",
         statusRules: tpl.statusRules || []
       };
     });
   };
   const handleTemplateSelect = (tpl, options = {}) => {
     applyTemplateToForm(tpl);
-    const templateKey = `${tpl.id || tpl.name || tpl.eventName}::${String(tpl.eventName || '').trim().replace(/\s+/g, '')}`;
+    setSelectedTemplateId(getTemplateSelectionKey(tpl));
+    const templateEventName = getTemplateEventName(tpl);
+    const templateKey = `${tpl.id || tpl.name || tpl.eventName}::${templateEventName.replace(/\s+/g, "")}`;
     setAppliedTemplateSuggestionKey(templateKey);
-    setDismissedTemplateSuggestionKey('');
+    setDismissedTemplateSuggestionKey("");
     if (options.fromSuggestion) {
-      setTemplateAutofillNotice(`已從模板「${tpl.name || tpl.eventName}」帶入時間、連結、前台名稱等預設內容。`);
+      setTemplateAutofillNotice(`\u5DF2\u5F9E\u6A21\u677F\u300C${tpl.name || templateEventName}\u300D\u5E36\u5165\u6642\u9593\u3001\u9023\u7D50\u3001\u524D\u53F0\u540D\u7A31\u7B49\u9810\u8A2D\u5167\u5BB9\u3002`);
     } else {
-      setTemplateAutofillNotice('');
+      setTemplateAutofillNotice("");
     }
   };
   const handleEditTemplate = (e, tpl) => {
     e.stopPropagation();
+    const templateEventName = getTemplateEventName(tpl);
     setNewTemplateData({
       id: tpl.id,
       name: tpl.name,
-      eventName: tpl.eventName,
+      eventName: templateEventName,
       instructor: tpl.instructor,
-      time: tpl.time || '',
+      time: tpl.time || "",
       duration: parseInt(tpl.duration, 10) || 1,
       prepDays: parseInt(tpl.prepDays, 10) || 0,
-      prepTime: tpl.prepTime || '',
-      link: tpl.link || '',
-      note: tpl.note || '',
-      displayName: tpl.displayName || '',
-      activityCategory: tpl.activityCategory || '',
-      carpoolDisplayMode: resolveCarpoolDisplayMode(tpl.carpoolDisplayMode, tpl.eventName),
+      prepTime: tpl.prepTime || "",
+      link: tpl.link || "",
+      note: tpl.note || "",
+      displayName: tpl.displayName || "",
+      activityCategory: tpl.activityCategory || "",
+      templateCategory: normalizeQuickCreateTemplateCategory(tpl.templateCategory, templateEventName || tpl.name),
+      carpoolDisplayMode: resolveCarpoolDisplayMode(tpl.carpoolDisplayMode, templateEventName),
       isCancelled: !!tpl.isCancelled,
       capacity: tpl.capacity || 12,
-      price: tpl.price || '',
-      tags: tpl.tags || {
-        levels: '',
-        types: '',
-        locations: ''
-      },
-      backendColor: tpl.backendColor || '#eff6ff',
+      price: tpl.price || "",
+      // 載入價格
+      tags: tpl.tags || { levels: "", types: "", locations: "" },
+      backendColor: tpl.backendColor || "#eff6ff",
       statusRules: tpl.statusRules || []
+      // 載入規則
     });
     setIsCreatingTemplate(true);
   };
   useEffect(() => {
-    setDismissedTemplateSuggestionKey('');
-    setAppliedTemplateSuggestionKey('');
-    setTemplateAutofillNotice('');
+    setDismissedTemplateSuggestionKey("");
+    setAppliedTemplateSuggestionKey("");
+    setTemplateAutofillNotice("");
   }, [normalizedFormEventName]);
-  const toggleDate = dateStr => {
+  const toggleDate = (dateStr) => {
     if (companyRestSet.has(dateStr)) return;
-    let newDates = formData.dates.includes(dateStr) ? formData.dates.filter(d => d !== dateStr) : [...formData.dates, dateStr].sort();
-    setFormData({
-      ...formData,
-      dates: newDates
-    });
+    let newDates = formData.dates.includes(dateStr) ? formData.dates.filter((d) => d !== dateStr) : [...formData.dates, dateStr].sort();
+    setFormData({ ...formData, dates: newDates });
   };
-  const addInstructor = name => {
+  const addInstructor = (name) => {
     const clean = name.trim();
-    const isResting = formData.dates.some(d => instructorSchedule[d] && instructorSchedule[d].includes(clean));
+    const isResting = formData.dates.some((d) => instructorSchedule[d] && instructorSchedule[d].includes(clean));
     if (isResting) {
-      if (!confirm(`${clean} 在部分選定的日期已排休，確定要排入嗎？`)) return;
+      if (!confirm(`${clean} \u5728\u90E8\u5206\u9078\u5B9A\u7684\u65E5\u671F\u5DF2\u6392\u4F11\uFF0C\u78BA\u5B9A\u8981\u6392\u5165\u55CE\uFF1F`)) return;
     }
-    if (clean && !formData.instructors.includes(clean)) setFormData({
-      ...formData,
-      instructors: [...formData.instructors, clean]
-    });
-    setTempInstructor('');
+    if (clean && !formData.instructors.includes(clean)) setFormData({ ...formData, instructors: [...formData.instructors, clean] });
+    setTempInstructor("");
   };
-  const removeInstructor = name => {
-    setFormData({
-      ...formData,
-      instructors: formData.instructors.filter(i => i !== name)
-    });
+  const removeInstructor = (name) => {
+    setFormData({ ...formData, instructors: formData.instructors.filter((i) => i !== name) });
   };
   const handleSubmitEvent = () => {
     if (formData.dates.length === 0) {
-      alert("請至少選擇一個日期");
+      alert("\u8ACB\u81F3\u5C11\u9078\u64C7\u4E00\u500B\u65E5\u671F");
       return;
     }
     onSave(formData);
   };
   const handleSaveNewTemplate = () => {
     if (!newTemplateData.name) {
-      alert("請輸入模板名稱");
+      alert("\u8ACB\u8F38\u5165\u6A21\u677F\u540D\u7A31");
       return;
     }
-    onSaveTemplate(newTemplateData);
+    onSaveTemplate(normalizeQuickCreateTemplate(newTemplateData));
     setIsCreatingTemplate(false);
-    setNewTemplateData({
-      id: null,
-      name: '',
-      eventName: '',
-      instructor: '',
-      time: '',
-      duration: 1,
-      prepDays: 0,
-      prepTime: '',
-      link: '',
-      note: '',
-      displayName: '',
-      activityCategory: '',
-      carpoolDisplayMode: '',
-      isCancelled: false,
-      capacity: 12,
-      price: '',
-      tags: {
-        levels: '',
-        types: '',
-        locations: ''
-      },
-      backendColor: '#eff6ff',
-      statusRules: []
-    });
+    setNewTemplateData(createEmptyTemplateData());
   };
   const renderCalendar = () => {
     const year = calendarMonth.getFullYear();
     const month = calendarMonth.getMonth();
     const daysInMonth = getDaysInMonth(year, month);
     const firstDay = getFirstDayOfMonth(year, month);
-    const days = Array(firstDay).fill(null).concat([...Array(daysInMonth).keys()].map(i => i + 1));
-    return React.createElement("div", {
-      className: "bg-slate-50 p-4 rounded-xl border border-slate-200 relative"
-    }, React.createElement("div", {
-      className: "flex justify-between items-center mb-4"
-    }, React.createElement("button", {
-      onClick: () => setCalendarMonth(new Date(year, month - 1))
-    }, React.createElement(Icon, {
-      name: "chevron-left",
-      size: 20
-    })), React.createElement("span", {
-      className: "font-bold text-slate-700"
-    }, year, "\u5E74 ", month + 1, "\u6708"), React.createElement("button", {
-      onClick: () => setCalendarMonth(new Date(year, month + 1))
-    }, React.createElement(Icon, {
-      name: "chevron-right",
-      size: 20
-    }))), React.createElement("div", {
-      className: "grid grid-cols-7 text-center mb-2 text-xs font-bold text-slate-400"
-    }, ['日', '一', '二', '三', '四', '五', '六'].map(d => React.createElement("div", {
-      key: d
-    }, d))), React.createElement("div", {
-      className: "grid grid-cols-7 gap-1"
-    }, days.map((day, i) => {
-      const dateStr = day ? `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` : '';
+    const days = Array(firstDay).fill(null).concat([...Array(daysInMonth).keys()].map((i) => i + 1));
+    return /* @__PURE__ */ React.createElement("div", { className: "bg-slate-50 p-4 rounded-xl border border-slate-200 relative" }, /* @__PURE__ */ React.createElement("div", { className: "flex justify-between items-center mb-4" }, /* @__PURE__ */ React.createElement("button", { onClick: () => setCalendarMonth(new Date(year, month - 1)) }, /* @__PURE__ */ React.createElement(Icon, { name: "chevron-left", size: 20 })), /* @__PURE__ */ React.createElement("span", { className: "font-bold text-slate-700" }, year, "\u5E74 ", month + 1, "\u6708"), /* @__PURE__ */ React.createElement("button", { onClick: () => setCalendarMonth(new Date(year, month + 1)) }, /* @__PURE__ */ React.createElement(Icon, { name: "chevron-right", size: 20 }))), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-7 text-center mb-2 text-xs font-bold text-slate-400" }, ["\u65E5", "\u4E00", "\u4E8C", "\u4E09", "\u56DB", "\u4E94", "\u516D"].map((d) => /* @__PURE__ */ React.createElement("div", { key: d }, d))), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-7 gap-1" }, days.map((day, i) => {
+      const dateStr = day ? `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}` : "";
       const isCompanyRest = day ? companyRestSet.has(dateStr) : false;
       const isSelected = day ? formData.dates.includes(dateStr) : false;
-      return React.createElement("div", {
-        key: i,
-        className: "aspect-square flex items-center justify-center"
-      }, day && React.createElement("button", {
-        type: "button",
-        disabled: isCompanyRest,
-        title: isCompanyRest ? '本日為全公司公休，無法排活動' : '',
-        onClick: () => toggleDate(dateStr),
-        className: `w-8 h-8 rounded-full text-sm transition-all ${isCompanyRest ? 'bg-slate-200 text-slate-400 cursor-not-allowed line-through' : isSelected ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-blue-100 text-slate-600'}`
-      }, day));
-    })), React.createElement("div", {
-      className: "mt-3 text-[11px] text-slate-400"
-    }, "\u7070\u8272\u522A\u9664\u7DDA\u65E5\u671F\u4EE3\u8868\u5168\u516C\u53F8\u516C\u4F11\uFF0C\u5DF2\u9396\u5B9A\u4E0D\u53EF\u6392\u6D3B\u52D5\u3002"));
+      return /* @__PURE__ */ React.createElement("div", { key: i, className: "aspect-square flex items-center justify-center" }, day && /* @__PURE__ */ React.createElement(
+        "button",
+        {
+          type: "button",
+          disabled: isCompanyRest,
+          title: isCompanyRest ? "\u672C\u65E5\u70BA\u5168\u516C\u53F8\u516C\u4F11\uFF0C\u7121\u6CD5\u6392\u6D3B\u52D5" : "",
+          onClick: () => toggleDate(dateStr),
+          className: `w-8 h-8 rounded-full text-sm transition-all ${isCompanyRest ? "bg-slate-200 text-slate-400 cursor-not-allowed line-through" : isSelected ? "bg-blue-600 text-white shadow-md" : "hover:bg-blue-100 text-slate-600"}`
+        },
+        day
+      ));
+    })), /* @__PURE__ */ React.createElement("div", { className: "mt-3 text-[11px] text-slate-400" }, "\u7070\u8272\u522A\u9664\u7DDA\u65E5\u671F\u4EE3\u8868\u5168\u516C\u53F8\u516C\u4F11\uFF0C\u5DF2\u9396\u5B9A\u4E0D\u53EF\u6392\u6D3B\u52D5\u3002"));
   };
-  return React.createElement("div", {
-    className: "fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 fade-in backdrop-blur-sm"
-  }, React.createElement("div", {
-    className: "bg-white rounded-2xl w-full max-w-lg flex flex-col max-h-[90vh] shadow-2xl m-auto relative"
-  }, React.createElement("div", {
-    className: "p-6 border-b border-slate-100 flex justify-between items-center"
-  }, React.createElement("h3", {
-    className: "text-xl font-bold flex items-center gap-2"
-  }, React.createElement(Icon, {
-    name: "zap",
-    className: "text-yellow-500"
-  }), " \u5FEB\u901F\u958B\u5718"), React.createElement("button", {
-    onClick: onClose
-  }, React.createElement(Icon, {
-    name: "x",
-    className: "text-slate-400"
-  }))), React.createElement("div", {
-    className: "p-6 overflow-y-auto space-y-6 custom-scrollbar"
-  }, !isCreatingTemplate ? React.createElement(React.Fragment, null, React.createElement("div", {
-    className: "flex bg-slate-100 p-1 rounded-lg"
-  }, React.createElement("button", {
-    onClick: () => setMode('template'),
-    className: `flex-1 py-1.5 text-sm rounded-md transition-all ${mode === 'template' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`
-  }, "\u4F7F\u7528\u6A21\u677F"), React.createElement("button", {
-    onClick: () => setMode('custom'),
-    className: `flex-1 py-1.5 text-sm rounded-md transition-all ${mode === 'custom' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`
-  }, "\u5B8C\u5168\u81EA\u8A02")), mode === 'template' && React.createElement("div", {
-    className: "grid grid-cols-3 sm:grid-cols-4 gap-2"
-  }, customTemplates.length === 0 && React.createElement("div", {
-    className: "col-span-full text-center text-slate-400 text-xs py-2"
-  }, "\u7121\u6A21\u677F"), [...customTemplates].map((tpl, i) => React.createElement("div", {
-    key: i,
-    onClick: () => handleTemplateSelect(tpl),
-    className: `relative border rounded-lg p-1.5 cursor-pointer text-center hover:shadow-sm transition-all ${formData.eventName === tpl.eventName ? 'border-blue-500 ring-2 ring-blue-100 bg-blue-50' : 'border-slate-200 bg-white'}`,
-    style: formData.eventName === tpl.eventName ? {
-      borderColor: tpl.backendColor
-    } : {}
-  }, React.createElement("div", {
-    className: "font-bold text-slate-700 text-[11px] truncate mb-0.5"
-  }, toSafeDisplayText(tpl.name, toSafeDisplayText(tpl.eventName, '模板'))), React.createElement("div", {
-    className: "text-[9px] text-slate-400 truncate"
-  }, toSafeDisplayText(tpl.instructor, '')), React.createElement("button", {
-    onClick: e => {
+  return /* @__PURE__ */ React.createElement("div", { className: "fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 fade-in backdrop-blur-sm" }, /* @__PURE__ */ React.createElement("div", { className: "bg-white rounded-2xl w-full max-w-lg flex flex-col max-h-[90vh] shadow-2xl m-auto relative" }, /* @__PURE__ */ React.createElement("div", { className: "p-6 border-b border-slate-100 flex justify-between items-center" }, /* @__PURE__ */ React.createElement("h3", { className: "text-xl font-bold flex items-center gap-2" }, /* @__PURE__ */ React.createElement(Icon, { name: "zap", className: "text-yellow-500" }), " \u5FEB\u901F\u958B\u5718"), /* @__PURE__ */ React.createElement("button", { onClick: onClose }, /* @__PURE__ */ React.createElement(Icon, { name: "x", className: "text-slate-400" }))), /* @__PURE__ */ React.createElement("div", { className: "p-6 overflow-y-auto space-y-6 custom-scrollbar" }, !isCreatingTemplate ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "flex bg-slate-100 p-1 rounded-lg" }, /* @__PURE__ */ React.createElement("button", { onClick: () => setMode("template"), className: `flex-1 py-1.5 text-sm rounded-md transition-all ${mode === "template" ? "bg-white shadow text-blue-600" : "text-slate-500"}` }, "\u4F7F\u7528\u6A21\u677F"), /* @__PURE__ */ React.createElement("button", { onClick: () => setMode("custom"), className: `flex-1 py-1.5 text-sm rounded-md transition-all ${mode === "custom" ? "bg-white shadow text-blue-600" : "text-slate-500"}` }, "\u5B8C\u5168\u81EA\u8A02")), mode === "template" && /* @__PURE__ */ React.createElement("div", { className: "space-y-3" }, /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2" }, /* @__PURE__ */ React.createElement("button", { type: "button", onClick: () => setTemplateCategoryFilter("all"), className: `px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${templateCategoryFilter === "all" ? "bg-slate-800 text-white border-slate-900" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"}` }, "\u5168\u90E8 ", templateCategoryCounts.all), QUICK_CREATE_TEMPLATE_CATEGORY_OPTIONS.map((option) => /* @__PURE__ */ React.createElement("button", { key: option.value, type: "button", onClick: () => setTemplateCategoryFilter(option.value), className: `px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${templateCategoryFilter === option.value ? "bg-blue-600 text-white border-blue-700 shadow-sm" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"}` }, option.label, " ", templateCategoryCounts[option.value] || 0))), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-3 sm:grid-cols-4 gap-2" }, normalizedTemplates.length === 0 && /* @__PURE__ */ React.createElement("div", { className: "col-span-full text-center text-slate-400 text-xs py-2" }, "\u7121\u6A21\u677F"), normalizedTemplates.length > 0 && filteredTemplates.length === 0 && /* @__PURE__ */ React.createElement("div", { className: "col-span-full text-center text-slate-400 text-xs py-2" }, "\u9019\u500B\u5206\u985E\u76EE\u524D\u6C92\u6709\u6A21\u677F"), filteredTemplates.map((tpl) => {
+    const templateKey = getTemplateSelectionKey(tpl);
+    const isSelected = selectedTemplateId === templateKey;
+    return /* @__PURE__ */ React.createElement("div", { key: templateKey, onClick: () => handleTemplateSelect(tpl), className: `relative border rounded-lg p-2 cursor-pointer text-center hover:shadow-sm transition-all ${isSelected ? "border-blue-500 ring-2 ring-blue-100 bg-blue-50" : "border-slate-200 bg-white"}`, style: isSelected ? { borderColor: tpl.backendColor } : {} }, /* @__PURE__ */ React.createElement("div", { className: "font-bold text-slate-700 text-[11px] truncate mb-1" }, toSafeDisplayText(tpl.name, toSafeDisplayText(getTemplateEventName(tpl), "\u6A21\u677F"))), /* @__PURE__ */ React.createElement("div", { className: "text-[9px] text-slate-400 truncate" }, toSafeDisplayText(tpl.instructor, "")), /* @__PURE__ */ React.createElement("div", { className: "mt-1.5" }, /* @__PURE__ */ React.createElement("span", { className: "inline-flex items-center px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[9px] font-bold" }, toSafeDisplayText(QUICK_CREATE_TEMPLATE_CATEGORY_LABELS[tpl.templateCategory], "\u7279\u5225\u6D3B\u52D5"))), /* @__PURE__ */ React.createElement("button", { onClick: (e) => {
       e.stopPropagation();
       handleEditTemplate(e, tpl);
+    }, className: "absolute -top-1 -right-1 p-0.5 bg-slate-100 rounded-full text-slate-400 hover:text-blue-500 border border-white" }, /* @__PURE__ */ React.createElement(Icon, { name: "edit-2", size: 8 })));
+  }), /* @__PURE__ */ React.createElement("button", { onClick: () => setIsCreatingTemplate(true), className: "border border-dashed border-slate-300 rounded-lg p-1.5 flex flex-col items-center justify-center text-slate-400 hover:border-blue-400 hover:bg-blue-50 transition-all" }, /* @__PURE__ */ React.createElement(Icon, { name: "plus", size: 12 }), /* @__PURE__ */ React.createElement("span", { className: "text-[10px]" }, "\u65B0\u589E\u6A21\u677F")))), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-slate-100" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-sm font-medium text-slate-700 mb-2" }, "1. \u9078\u64C7\u65E5\u671F"), renderCalendar()), /* @__PURE__ */ React.createElement("div", { className: "space-y-4" }, /* @__PURE__ */ React.createElement("div", { className: "space-y-2" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between gap-3 mb-1" }, /* @__PURE__ */ React.createElement("label", { className: "block text-sm font-medium text-slate-700" }, "2. \u6D3B\u52D5\u540D\u7A31"), /* @__PURE__ */ React.createElement("span", { className: "text-[11px] text-slate-400" }, "\u8F38\u5165\u5F8C\u6703\u81EA\u52D5\u63D0\u793A\u540C\u540D\u6A21\u677F")), /* @__PURE__ */ React.createElement("input", { type: "text", className: "w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500", value: formData.eventName, onChange: (e) => setFormData({ ...formData, eventName: e.target.value }), placeholder: "\u8F38\u5165\u540D\u7A31..." })), shouldShowTemplateSuggestion && /* @__PURE__ */ React.createElement("div", { className: "rounded-xl border border-amber-200 bg-amber-50 px-3 py-3" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-start justify-between gap-3" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "text-xs font-bold text-amber-700 flex items-center gap-1" }, /* @__PURE__ */ React.createElement(Icon, { name: "sparkles", size: 12 }), " \u627E\u5230\u540C\u540D\u6A21\u677F"), /* @__PURE__ */ React.createElement("div", { className: "text-sm font-bold text-slate-700 mt-1" }, toSafeDisplayText(matchedTemplate.name, toSafeDisplayText(getTemplateEventName(matchedTemplate), "\u6A21\u677F"))), /* @__PURE__ */ React.createElement("div", { className: "text-[11px] text-slate-500 mt-1 leading-5" }, "\u9019\u500B\u6D3B\u52D5\u540D\u7A31\u548C\u6A21\u677F\u300C", toSafeDisplayText(getTemplateEventName(matchedTemplate), "\u6A21\u677F"), "\u300D\u4E00\u81F4\u3002\u8981\u4E0D\u8981\u76F4\u63A5\u5E36\u5165\u9810\u8A2D\u6642\u9593\u3001\u9023\u7D50\u3001\u524D\u53F0\u540D\u7A31\u3001\u6A19\u7C64\u548C\u5171\u4E58\u8A2D\u5B9A\uFF1F")), /* @__PURE__ */ React.createElement("div", { className: "shrink-0 flex gap-2" }, /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      type: "button",
+      onClick: () => handleTemplateSelect(matchedTemplate, { fromSuggestion: true }),
+      className: "px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-bold hover:bg-amber-600"
     },
-    className: "absolute -top-1 -right-1 p-0.5 bg-slate-100 rounded-full text-slate-400 hover:text-blue-500 border border-white"
-  }, React.createElement(Icon, {
-    name: "edit-2",
-    size: 8
-  })))), React.createElement("button", {
-    onClick: () => setIsCreatingTemplate(true),
-    className: "border border-dashed border-slate-300 rounded-lg p-1.5 flex flex-col items-center justify-center text-slate-400 hover:border-blue-400 hover:bg-blue-50 transition-all"
-  }, React.createElement(Icon, {
-    name: "plus",
-    size: 12
-  }), React.createElement("span", {
-    className: "text-[10px]"
-  }, "\u65B0\u589E\u6A21\u677F"))), React.createElement("div", {
-    className: "grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-slate-100"
-  }, React.createElement("div", null, React.createElement("label", {
-    className: "block text-sm font-medium text-slate-700 mb-2"
-  }, "1. \u9078\u64C7\u65E5\u671F"), renderCalendar()), React.createElement("div", {
-    className: "space-y-4"
-  }, React.createElement("div", {
-    className: "space-y-2"
-  }, React.createElement("div", null, React.createElement("label", {
-    className: "block text-sm font-medium text-slate-700 mb-1"
-  }, "2. \u6D3B\u52D5\u540D\u7A31"), React.createElement("input", {
-    type: "text",
-    className: "w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500",
-    value: formData.eventName,
-    onChange: e => setFormData({
-      ...formData,
-      eventName: e.target.value
-    }),
-    placeholder: "\u8F38\u5165\u540D\u7A31..."
-  })), shouldShowTemplateSuggestion && React.createElement("div", {
-    className: "rounded-xl border border-amber-200 bg-amber-50 px-3 py-3"
-  }, React.createElement("div", {
-    className: "flex items-start justify-between gap-3"
-  }, React.createElement("div", null, React.createElement("div", {
-    className: "text-xs font-bold text-amber-700 flex items-center gap-1"
-  }, React.createElement(Icon, {
-    name: "sparkles",
-    size: 12
-  }), " \u627E\u5230\u540C\u540D\u6A21\u677F"), React.createElement("div", {
-    className: "text-sm font-bold text-slate-700 mt-1"
-  }, toSafeDisplayText(matchedTemplate.name, toSafeDisplayText(matchedTemplate.eventName, '模板'))), React.createElement("div", {
-    className: "text-[11px] text-slate-500 mt-1 leading-5"
-  }, "\u9019\u500B\u6D3B\u52D5\u540D\u7A31\u548C\u6A21\u677F\u300C", toSafeDisplayText(matchedTemplate.eventName, '模板'), "\u300D\u4E00\u81F4\u3002\u8981\u4E0D\u8981\u76F4\u63A5\u5E36\u5165\u9810\u8A2D\u6642\u9593\u3001\u9023\u7D50\u3001\u524D\u53F0\u540D\u7A31\u3001\u6A19\u7C64\u548C\u5171\u4E58\u8A2D\u5B9A\uFF1F")), React.createElement("div", {
-    className: "shrink-0 flex gap-2"
-  }, React.createElement("button", {
-    type: "button",
-    onClick: () => handleTemplateSelect(matchedTemplate, {
-      fromSuggestion: true
-    }),
-    className: "px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-bold hover:bg-amber-600"
-  }, "\u5957\u7528\u5167\u5BB9"), React.createElement("button", {
-    type: "button",
-    onClick: () => setDismissedTemplateSuggestionKey(matchedTemplateKey),
-    className: "px-3 py-1.5 rounded-lg bg-white text-slate-500 text-xs font-bold border border-slate-200 hover:bg-slate-50"
-  }, "\u5148\u4E0D\u8981")))), templateAutofillNotice && React.createElement("div", {
-    className: "rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-medium text-emerald-700"
-  }, templateAutofillNotice)), React.createElement("div", null, " ", React.createElement("label", {
-    className: "block text-sm font-medium text-slate-700 mb-1"
-  }, "3. \u5E36\u5718\u8B1B\u5E2B"), " ", React.createElement("div", {
-    className: "flex flex-wrap gap-2 mb-2 min-h-[38px] p-2 bg-white border border-slate-200 rounded-lg"
-  }, formData.instructors.map(ins => React.createElement("div", {
-    key: ins,
-    className: "flex items-center bg-blue-50 text-blue-700 px-2 py-1 rounded text-sm"
-  }, React.createElement("span", {
-    className: "mr-1"
-  }, ins), React.createElement("button", {
-    onClick: () => setFormData({
-      ...formData,
-      instructors: formData.instructors.filter(i => i !== ins)
-    })
-  }, React.createElement(Icon, {
-    name: "x",
-    size: 14
-  }))))), " ", React.createElement("div", {
-    className: "flex gap-2"
-  }, React.createElement("input", {
-    type: "text",
-    className: "flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500",
-    value: tempInstructor,
-    onChange: e => setTempInstructor(e.target.value),
-    onKeyDown: e => e.key === 'Enter' && addInstructor(tempInstructor),
-    placeholder: "\u8F38\u5165\u540D\u5B57..."
-  }), React.createElement("button", {
-    onClick: () => addInstructor(tempInstructor),
-    className: "px-3 bg-slate-100 rounded-lg hover:bg-slate-200"
-  }, React.createElement(Icon, {
-    name: "plus",
-    size: 18
-  }))), " ", React.createElement("div", {
-    className: "flex flex-wrap gap-2 mt-2"
-  }, availableInstructors.slice(0, 6).map(i => React.createElement("button", {
-    key: i,
-    onClick: () => addInstructor(i),
-    className: `text-xs px-2 py-1 border rounded-full transition ${unavailableInstructors.has(i) ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-slate-50 hover:bg-blue-50 text-slate-600'}`
-  }, "+ ", i))), " "), React.createElement("div", {
-    className: "grid grid-cols-2 gap-3"
-  }, React.createElement("div", null, React.createElement("label", {
-    className: "block text-sm font-medium text-slate-700 mb-1"
-  }, "4. \u6D3B\u52D5\u6642\u9593"), React.createElement("input", {
-    type: "time",
-    className: "w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500",
-    value: formData.time,
-    onChange: e => setFormData({
-      ...formData,
-      time: e.target.value
-    })
-  })), React.createElement("div", null, React.createElement("label", {
-    className: "block text-sm font-medium text-slate-700 mb-1"
-  }, "\u4EBA\u6578\u4E0A\u9650"), React.createElement("input", {
-    type: "number",
-    className: "w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500",
-    value: formData.capacity,
-    onChange: e => setFormData({
-      ...formData,
-      capacity: e.target.value
-    })
-  }))), React.createElement("div", {
-    className: "grid grid-cols-3 gap-3"
-  }, React.createElement("div", null, React.createElement("label", {
-    className: "block text-sm font-medium text-slate-700 mb-1"
-  }, "\u6301\u7E8C\u5929\u6578"), React.createElement("input", {
-    type: "number",
-    min: "1",
-    className: "w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500",
-    value: formData.duration,
-    onChange: e => setFormData({
-      ...formData,
-      duration: e.target.value
-    })
-  })), React.createElement("div", null, React.createElement("label", {
-    className: "block text-sm font-medium text-slate-700 mb-1"
-  }, "\u524D\u7F6E\u5929\u6578"), React.createElement("input", {
-    type: "number",
-    min: "0",
-    className: "w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500",
-    value: formData.prepDays,
-    onChange: e => setFormData({
-      ...formData,
-      prepDays: e.target.value
-    })
-  })), React.createElement("div", null, React.createElement("label", {
-    className: "block text-sm font-medium text-slate-700 mb-1"
-  }, "\u524D\u7F6E\u6642\u9593"), React.createElement("input", {
-    type: "time",
-    className: "w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500",
-    value: formData.prepTime,
-    onChange: e => setFormData({
-      ...formData,
-      prepTime: e.target.value
-    })
-  }))), React.createElement("div", {
-    className: "grid grid-cols-2 gap-3"
-  }, React.createElement("div", null, React.createElement("label", {
-    className: "block text-sm font-medium text-slate-700 mb-1"
-  }, "5. \u9810\u8A2D\u50F9\u683C"), React.createElement("input", {
-    type: "number",
-    className: "w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500",
-    placeholder: "0",
-    value: formData.price,
-    onChange: e => setFormData({
-      ...formData,
-      price: e.target.value
-    })
-  })), React.createElement("div", null, React.createElement("label", {
-    className: "block text-sm font-medium text-slate-700 mb-1"
-  }, "\u5F8C\u53F0\u984F\u8272"), React.createElement("input", {
-    type: "color",
-    className: "w-full h-[40px] p-1 border border-slate-300 rounded-lg cursor-pointer",
-    value: formData.backendColor,
-    onChange: e => setFormData({
-      ...formData,
-      backendColor: e.target.value
-    }),
-    title: "\u6B64\u984F\u8272\u50C5\u5728\u5F8C\u53F0\u53EF\u898B"
-  }))), React.createElement("div", null, React.createElement("label", {
-    className: "block text-sm font-medium text-slate-700 mb-1"
-  }, "6. \u6D3B\u52D5\u7DB2\u5740"), React.createElement("input", {
-    type: "text",
-    className: "w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500",
-    placeholder: "https://...",
-    value: formData.link,
-    onChange: e => setFormData({
-      ...formData,
-      link: e.target.value
-    })
-  })), React.createElement("div", null, React.createElement("label", {
-    className: "block text-sm font-medium text-slate-700 mb-1"
-  }, "7. \u524D\u53F0\u986F\u793A\u540D\u7A31 (\u9078\u586B)"), React.createElement("input", {
-    type: "text",
-    className: "w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500",
-    placeholder: "\u4F8B\u5982: \u51AC\u5B63\u591C\u8A2A\u86D9\u985E",
-    value: formData.displayName,
-    onChange: e => setFormData({
-      ...formData,
-      displayName: e.target.value
-    })
-  })), React.createElement("div", null, React.createElement("label", {
-    className: "block text-sm font-medium text-indigo-600 mb-1"
-  }, "8. \u6D3B\u52D5\u6027\u8CEA\u540D\u7A31 (\u9078\u586B)"), React.createElement("input", {
-    type: "text",
-    className: "w-full px-3 py-2 border border-indigo-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 bg-indigo-50/20",
-    placeholder: "\u4F8B\u5982: \u8C61\u5C71\u591C\u9593\u5C0E\u89BD",
-    value: formData.activityCategory,
-    onChange: e => setFormData({
-      ...formData,
-      activityCategory: e.target.value
-    })
-  })), React.createElement("div", null, React.createElement("label", {
-    className: "block text-sm font-medium text-slate-700 mb-1"
-  }, "9. \u524D\u53F0\u5171\u4E58\u986F\u793A"), React.createElement("select", {
-    className: "w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500",
-    value: resolveCarpoolDisplayMode(formData.carpoolDisplayMode, formData.eventName),
-    onChange: e => setFormData({
-      ...formData,
-      carpoolDisplayMode: e.target.value
-    })
-  }, CARPOOL_DISPLAY_MODE_OPTIONS.map(option => React.createElement("option", {
-    key: option.value,
-    value: option.value
-  }, option.label)))), React.createElement("div", null, React.createElement("label", {
-    className: "block text-sm font-medium text-slate-700 mb-1"
-  }, "10. \u6D3B\u52D5\u5C08\u5C6C\u5099\u8A3B"), React.createElement("textarea", {
-    className: "w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 h-20 resize-none",
-    placeholder: "\u4F8B\u5982\uFF1A\u96C6\u5408\u63D0\u9192\u3001\u88DD\u5099\u8AAA\u660E...",
-    value: formData.note,
-    onChange: e => setFormData({
-      ...formData,
-      note: e.target.value
-    })
-  })), React.createElement("div", {
-    className: "bg-rose-50 border border-rose-200 rounded-lg p-3 flex items-center justify-between"
-  }, React.createElement("div", null, React.createElement("div", {
-    className: "text-sm font-medium text-rose-700"
-  }, "11. \u9810\u8A2D\u6A19\u8A18\u6D41\u5718"), React.createElement("div", {
-    className: "text-[10px] text-rose-500 mt-0.5"
-  }, "\u5EFA\u7ACB\u6D3B\u52D5\u6642\u76F4\u63A5\u5E36\u5165\u6D41\u5718\u6A19\u8A18")), React.createElement("button", {
-    type: "button",
-    onClick: () => setFormData({
-      ...formData,
-      isCancelled: !formData.isCancelled
-    }),
-    className: `px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${formData.isCancelled ? 'bg-rose-600 text-white border-rose-700' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`
-  }, formData.isCancelled ? '已標記流團' : '標記為流團')), React.createElement("div", {
-    className: "bg-slate-50 p-2 rounded-lg border border-slate-200"
-  }, React.createElement("label", {
-    className: "text-xs font-bold text-slate-500 mb-2 block"
-  }, "12. \u9810\u8A2D\u6D3B\u52D5\u6A19\u7C64"), React.createElement(TagSelector, {
-    definitions: tagDefinitions,
-    value: formData.tags,
-    onChange: (type, val) => setFormData({
-      ...formData,
-      tags: {
-        ...formData.tags,
-        [type]: val
-      }
-    }),
-    onAddTag: onAddTag
-  })), React.createElement("div", {
-    className: "bg-white border border-slate-200 rounded-lg p-3"
-  }, React.createElement("label", {
-    className: "text-xs font-bold text-slate-500 mb-2 block flex justify-between"
-  }, React.createElement("span", null, "13. \u81EA\u5B9A\u7FA9\u72C0\u614B\u898F\u5247 (\u4F9D\u7167\u4EBA\u6578\u986F\u793A)"), React.createElement("span", {
-    className: "text-[10px] bg-slate-100 px-1 rounded font-normal"
-  }, "\u5F9E\u4E0A\u5230\u4E0B\u5339\u914D")), React.createElement("div", {
-    className: "space-y-2 mb-3"
-  }, (formData.statusRules || []).map((rule, idx) => React.createElement("div", {
-    key: idx,
-    className: "flex items-center gap-2 text-xs"
-  }, React.createElement("span", {
-    className: "w-12 text-center bg-slate-100 rounded py-1"
-  }, toSafeDisplayText(rule.min, '0'), "-", toSafeDisplayText(rule.max, '999'), "\u4EBA"), React.createElement("span", {
-    className: `flex-1 px-2 py-1 rounded border text-center ${COLOR_OPTIONS.find(c => c.value === rule.color)?.bg} ${COLOR_OPTIONS.find(c => c.value === rule.color)?.text}`
-  }, toSafeDisplayText(rule.label, '報名中')), React.createElement("button", {
-    onClick: () => removeFormRule(idx),
-    className: "text-slate-400 hover:text-red-500"
-  }, React.createElement(Icon, {
-    name: "trash-2",
-    size: 14
-  }))))), React.createElement("div", {
-    className: "grid grid-cols-4 gap-2 items-end bg-slate-50 p-2 rounded border border-slate-100"
-  }, React.createElement("div", null, React.createElement("span", {
-    className: "text-[10px] text-slate-400"
-  }, "Min"), React.createElement("input", {
-    type: "number",
-    className: "w-full p-1 text-xs border rounded",
-    value: newRule.min,
-    onChange: e => setNewRule({
-      ...newRule,
-      min: e.target.value
-    })
-  })), React.createElement("div", null, React.createElement("span", {
-    className: "text-[10px] text-slate-400"
-  }, "Max"), React.createElement("input", {
-    type: "number",
-    className: "w-full p-1 text-xs border rounded",
-    value: newRule.max,
-    onChange: e => setNewRule({
-      ...newRule,
-      max: e.target.value
-    })
-  })), React.createElement("div", {
-    className: "col-span-2"
-  }, React.createElement("span", {
-    className: "text-[10px] text-slate-400"
-  }, "\u986F\u793A\u6587\u5B57"), React.createElement("input", {
-    type: "text",
-    className: "w-full p-1 text-xs border rounded",
-    placeholder: "\u5982: \u5831\u540D\u4E2D",
-    value: newRule.label,
-    onChange: e => setNewRule({
-      ...newRule,
-      label: e.target.value
-    })
-  })), React.createElement("div", {
-    className: "col-span-2"
-  }, React.createElement("span", {
-    className: "text-[10px] text-slate-400"
-  }, "\u984F\u8272"), React.createElement("select", {
-    className: "w-full p-1 text-xs border rounded",
-    value: newRule.color,
-    onChange: e => setNewRule({
-      ...newRule,
-      color: e.target.value
-    })
-  }, COLOR_OPTIONS.map(c => React.createElement("option", {
-    key: c.value,
-    value: c.value
-  }, c.label)))), React.createElement("div", {
-    className: "col-span-2"
-  }, React.createElement("button", {
-    onClick: addFormRule,
-    className: "w-full py-1 bg-slate-800 text-white text-xs rounded hover:bg-slate-700"
-  }, "\u65B0\u589E\u898F\u5247")))))), React.createElement("div", {
-    className: "bg-slate-50 border border-slate-200 rounded-xl p-4"
-  }, React.createElement("div", {
-    className: "flex items-center justify-between mb-3"
-  }, React.createElement("h4", {
-    className: "text-sm font-bold text-slate-700 flex items-center gap-2"
-  }, React.createElement(Icon, {
-    name: "list",
-    size: 16
-  }), " \u540C\u65E5\u5DF2\u6392\u6D3B\u52D5"), React.createElement("div", {
-    className: "text-[11px] text-slate-400"
-  }, "\u907F\u514D\u540C\u4E00\u5929\u91CD\u8907\u6392\u76F8\u4F3C\u884C\u7A0B")), React.createElement("div", {
-    className: "space-y-3"
-  }, selectedDateSchedules.length > 0 ? selectedDateSchedules.map(({
-    dateKey,
-    isCompanyRest,
-    items
-  }) => React.createElement("div", {
-    key: `scheduled_${dateKey}`,
-    className: "bg-white border border-slate-200 rounded-xl p-3"
-  }, React.createElement("div", {
-    className: "flex items-center justify-between mb-2"
-  }, React.createElement("div", {
-    className: "text-sm font-bold text-slate-700"
-  }, dateKey), isCompanyRest && React.createElement("span", {
-    className: "text-[10px] font-bold px-2 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200"
-  }, "\u5168\u516C\u53F8\u516C\u4F11")), items.length > 0 ? React.createElement("div", {
-    className: "space-y-2"
-  }, items.map((item, idx) => {
+    "\u5957\u7528\u5167\u5BB9"
+  ), /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      type: "button",
+      onClick: () => setDismissedTemplateSuggestionKey(matchedTemplateKey),
+      className: "px-3 py-1.5 rounded-lg bg-white text-slate-500 text-xs font-bold border border-slate-200 hover:bg-slate-50"
+    },
+    "\u5148\u4E0D\u8981"
+  )))), templateAutofillNotice && /* @__PURE__ */ React.createElement("div", { className: "rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-medium text-emerald-700" }, templateAutofillNotice)), /* @__PURE__ */ React.createElement("div", null, " ", /* @__PURE__ */ React.createElement("label", { className: "block text-sm font-medium text-slate-700 mb-1" }, "3. \u5E36\u5718\u8B1B\u5E2B"), " ", /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2 mb-2 min-h-[38px] p-2 bg-white border border-slate-200 rounded-lg" }, formData.instructors.map((ins) => /* @__PURE__ */ React.createElement("div", { key: ins, className: "flex items-center bg-blue-50 text-blue-700 px-2 py-1 rounded text-sm" }, /* @__PURE__ */ React.createElement("span", { className: "mr-1" }, ins), /* @__PURE__ */ React.createElement("button", { onClick: () => setFormData({ ...formData, instructors: formData.instructors.filter((i) => i !== ins) }) }, /* @__PURE__ */ React.createElement(Icon, { name: "x", size: 14 }))))), " ", /* @__PURE__ */ React.createElement("div", { className: "flex gap-2" }, /* @__PURE__ */ React.createElement("input", { type: "text", className: "flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500", value: tempInstructor, onChange: (e) => setTempInstructor(e.target.value), onKeyDown: (e) => e.key === "Enter" && addInstructor(tempInstructor), placeholder: "\u8F38\u5165\u540D\u5B57..." }), /* @__PURE__ */ React.createElement("button", { onClick: () => addInstructor(tempInstructor), className: "px-3 bg-slate-100 rounded-lg hover:bg-slate-200" }, /* @__PURE__ */ React.createElement(Icon, { name: "plus", size: 18 }))), " ", /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2 mt-2" }, availableInstructors.slice(0, 6).map((i) => /* @__PURE__ */ React.createElement("button", { key: i, onClick: () => addInstructor(i), className: `text-xs px-2 py-1 border rounded-full transition ${unavailableInstructors.has(i) ? "bg-slate-100 text-slate-400 border-slate-200" : "bg-slate-50 hover:bg-blue-50 text-slate-600"}` }, "+ ", i))), " "), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-2 gap-3" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-sm font-medium text-slate-700 mb-1" }, "4. \u6D3B\u52D5\u6642\u9593"), /* @__PURE__ */ React.createElement("input", { type: "time", className: "w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500", value: formData.time, onChange: (e) => setFormData({ ...formData, time: e.target.value }) })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-sm font-medium text-slate-700 mb-1" }, "\u4EBA\u6578\u4E0A\u9650"), /* @__PURE__ */ React.createElement("input", { type: "number", className: "w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500", value: formData.capacity, onChange: (e) => setFormData({ ...formData, capacity: e.target.value }) }))), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-3 gap-3" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-sm font-medium text-slate-700 mb-1" }, "\u6301\u7E8C\u5929\u6578"), /* @__PURE__ */ React.createElement("input", { type: "number", min: "1", className: "w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500", value: formData.duration, onChange: (e) => setFormData({ ...formData, duration: e.target.value }) })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-sm font-medium text-slate-700 mb-1" }, "\u524D\u7F6E\u5929\u6578"), /* @__PURE__ */ React.createElement("input", { type: "number", min: "0", className: "w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500", value: formData.prepDays, onChange: (e) => setFormData({ ...formData, prepDays: e.target.value }) })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-sm font-medium text-slate-700 mb-1" }, "\u524D\u7F6E\u6642\u9593"), /* @__PURE__ */ React.createElement("input", { type: "time", className: "w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500", value: formData.prepTime, onChange: (e) => setFormData({ ...formData, prepTime: e.target.value }) }))), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-2 gap-3" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-sm font-medium text-slate-700 mb-1" }, "5. \u9810\u8A2D\u50F9\u683C"), /* @__PURE__ */ React.createElement("input", { type: "number", className: "w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500", placeholder: "0", value: formData.price, onChange: (e) => setFormData({ ...formData, price: e.target.value }) })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-sm font-medium text-slate-700 mb-1" }, "\u5F8C\u53F0\u984F\u8272"), /* @__PURE__ */ React.createElement("input", { type: "color", className: "w-full h-[40px] p-1 border border-slate-300 rounded-lg cursor-pointer", value: formData.backendColor, onChange: (e) => setFormData({ ...formData, backendColor: e.target.value }), title: "\u6B64\u984F\u8272\u50C5\u5728\u5F8C\u53F0\u53EF\u898B" }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-sm font-medium text-slate-700 mb-1" }, "6. \u6D3B\u52D5\u7DB2\u5740"), /* @__PURE__ */ React.createElement("input", { type: "text", className: "w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500", placeholder: "https://...", value: formData.link, onChange: (e) => setFormData({ ...formData, link: e.target.value }) })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-sm font-medium text-slate-700 mb-1" }, "7. \u524D\u53F0\u986F\u793A\u540D\u7A31 (\u9078\u586B)"), /* @__PURE__ */ React.createElement("input", { type: "text", className: "w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500", placeholder: "\u4F8B\u5982: \u51AC\u5B63\u591C\u8A2A\u86D9\u985E", value: formData.displayName, onChange: (e) => setFormData({ ...formData, displayName: e.target.value }) })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-sm font-medium text-indigo-600 mb-1" }, "8. \u6D3B\u52D5\u6027\u8CEA\u540D\u7A31 (\u9078\u586B)"), /* @__PURE__ */ React.createElement("input", { type: "text", className: "w-full px-3 py-2 border border-indigo-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 bg-indigo-50/20", placeholder: "\u4F8B\u5982: \u8C61\u5C71\u591C\u9593\u5C0E\u89BD", value: formData.activityCategory, onChange: (e) => setFormData({ ...formData, activityCategory: e.target.value }) })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-sm font-medium text-slate-700 mb-1" }, "9. \u524D\u53F0\u5171\u4E58\u986F\u793A"), /* @__PURE__ */ React.createElement("select", { className: "w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500", value: resolveCarpoolDisplayMode(formData.carpoolDisplayMode, formData.eventName), onChange: (e) => setFormData({ ...formData, carpoolDisplayMode: e.target.value }) }, CARPOOL_DISPLAY_MODE_OPTIONS.map((option) => /* @__PURE__ */ React.createElement("option", { key: option.value, value: option.value }, option.label)))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-sm font-medium text-slate-700 mb-1" }, "10. \u6D3B\u52D5\u5C08\u5C6C\u5099\u8A3B"), /* @__PURE__ */ React.createElement("textarea", { className: "w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 h-20 resize-none", placeholder: "\u4F8B\u5982\uFF1A\u96C6\u5408\u63D0\u9192\u3001\u88DD\u5099\u8AAA\u660E...", value: formData.note, onChange: (e) => setFormData({ ...formData, note: e.target.value }) })), /* @__PURE__ */ React.createElement("div", { className: "bg-rose-50 border border-rose-200 rounded-lg p-3 flex items-center justify-between" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "text-sm font-medium text-rose-700" }, "11. \u9810\u8A2D\u6A19\u8A18\u6D41\u5718"), /* @__PURE__ */ React.createElement("div", { className: "text-[10px] text-rose-500 mt-0.5" }, "\u5EFA\u7ACB\u6D3B\u52D5\u6642\u76F4\u63A5\u5E36\u5165\u6D41\u5718\u6A19\u8A18")), /* @__PURE__ */ React.createElement("button", { type: "button", onClick: () => setFormData({ ...formData, isCancelled: !formData.isCancelled }), className: `px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${formData.isCancelled ? "bg-rose-600 text-white border-rose-700" : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"}` }, formData.isCancelled ? "\u5DF2\u6A19\u8A18\u6D41\u5718" : "\u6A19\u8A18\u70BA\u6D41\u5718")), /* @__PURE__ */ React.createElement("div", { className: "bg-slate-50 p-2 rounded-lg border border-slate-200" }, /* @__PURE__ */ React.createElement("label", { className: "text-xs font-bold text-slate-500 mb-2 block" }, "12. \u9810\u8A2D\u6D3B\u52D5\u6A19\u7C64"), /* @__PURE__ */ React.createElement(TagSelector, { definitions: tagDefinitions, value: formData.tags, onChange: (type, val) => setFormData({ ...formData, tags: { ...formData.tags, [type]: val } }), onAddTag })), /* @__PURE__ */ React.createElement("div", { className: "bg-white border border-slate-200 rounded-lg p-3" }, /* @__PURE__ */ React.createElement("label", { className: "text-xs font-bold text-slate-500 mb-2 block flex justify-between" }, /* @__PURE__ */ React.createElement("span", null, "13. \u81EA\u5B9A\u7FA9\u72C0\u614B\u898F\u5247 (\u4F9D\u7167\u4EBA\u6578\u986F\u793A)"), /* @__PURE__ */ React.createElement("span", { className: "text-[10px] bg-slate-100 px-1 rounded font-normal" }, "\u5F9E\u4E0A\u5230\u4E0B\u5339\u914D")), /* @__PURE__ */ React.createElement("div", { className: "space-y-2 mb-3" }, (formData.statusRules || []).map((rule, idx) => /* @__PURE__ */ React.createElement("div", { key: idx, className: "flex items-center gap-2 text-xs" }, /* @__PURE__ */ React.createElement("span", { className: "w-12 text-center bg-slate-100 rounded py-1" }, toSafeDisplayText(rule.min, "0"), "-", toSafeDisplayText(rule.max, "999"), "\u4EBA"), /* @__PURE__ */ React.createElement("span", { className: `flex-1 px-2 py-1 rounded border text-center ${COLOR_OPTIONS.find((c) => c.value === rule.color)?.bg} ${COLOR_OPTIONS.find((c) => c.value === rule.color)?.text}` }, toSafeDisplayText(rule.label, "\u5831\u540D\u4E2D")), /* @__PURE__ */ React.createElement("button", { onClick: () => removeFormRule(idx), className: "text-slate-400 hover:text-red-500" }, /* @__PURE__ */ React.createElement(Icon, { name: "trash-2", size: 14 }))))), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-4 gap-2 items-end bg-slate-50 p-2 rounded border border-slate-100" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("span", { className: "text-[10px] text-slate-400" }, "Min"), /* @__PURE__ */ React.createElement("input", { type: "number", className: "w-full p-1 text-xs border rounded", value: newRule.min, onChange: (e) => setNewRule({ ...newRule, min: e.target.value }) })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("span", { className: "text-[10px] text-slate-400" }, "Max"), /* @__PURE__ */ React.createElement("input", { type: "number", className: "w-full p-1 text-xs border rounded", value: newRule.max, onChange: (e) => setNewRule({ ...newRule, max: e.target.value }) })), /* @__PURE__ */ React.createElement("div", { className: "col-span-2" }, /* @__PURE__ */ React.createElement("span", { className: "text-[10px] text-slate-400" }, "\u986F\u793A\u6587\u5B57"), /* @__PURE__ */ React.createElement("input", { type: "text", className: "w-full p-1 text-xs border rounded", placeholder: "\u5982: \u5831\u540D\u4E2D", value: newRule.label, onChange: (e) => setNewRule({ ...newRule, label: e.target.value }) })), /* @__PURE__ */ React.createElement("div", { className: "col-span-2" }, /* @__PURE__ */ React.createElement("span", { className: "text-[10px] text-slate-400" }, "\u984F\u8272"), /* @__PURE__ */ React.createElement("select", { className: "w-full p-1 text-xs border rounded", value: newRule.color, onChange: (e) => setNewRule({ ...newRule, color: e.target.value }) }, COLOR_OPTIONS.map((c) => /* @__PURE__ */ React.createElement("option", { key: c.value, value: c.value }, c.label)))), /* @__PURE__ */ React.createElement("div", { className: "col-span-2" }, /* @__PURE__ */ React.createElement("button", { onClick: addFormRule, className: "w-full py-1 bg-slate-800 text-white text-xs rounded hover:bg-slate-700" }, "\u65B0\u589E\u898F\u5247")))))), /* @__PURE__ */ React.createElement("div", { className: "bg-slate-50 border border-slate-200 rounded-xl p-4" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between mb-3" }, /* @__PURE__ */ React.createElement("h4", { className: "text-sm font-bold text-slate-700 flex items-center gap-2" }, /* @__PURE__ */ React.createElement(Icon, { name: "list", size: 16 }), " \u540C\u65E5\u5DF2\u6392\u6D3B\u52D5"), /* @__PURE__ */ React.createElement("div", { className: "text-[11px] text-slate-400" }, "\u907F\u514D\u540C\u4E00\u5929\u91CD\u8907\u6392\u76F8\u4F3C\u884C\u7A0B")), /* @__PURE__ */ React.createElement("div", { className: "space-y-3" }, selectedDateSchedules.length > 0 ? selectedDateSchedules.map(({ dateKey, isCompanyRest, items }) => /* @__PURE__ */ React.createElement("div", { key: `scheduled_${dateKey}`, className: "bg-white border border-slate-200 rounded-xl p-3" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between mb-2" }, /* @__PURE__ */ React.createElement("div", { className: "text-sm font-bold text-slate-700" }, dateKey), isCompanyRest && /* @__PURE__ */ React.createElement("span", { className: "text-[10px] font-bold px-2 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200" }, "\u5168\u516C\u53F8\u516C\u4F11")), items.length > 0 ? /* @__PURE__ */ React.createElement("div", { className: "space-y-2" }, items.map((item, idx) => {
     const meta = getScheduledItemMeta(item);
     const evt = item.evt || {};
     const cfg = item.cfg || {};
-    return React.createElement("div", {
-      key: `${dateKey}_${evt.key || evt.eventName || idx}_${item.type || 'main'}_${idx}`,
-      className: "flex items-start justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2"
-    }, React.createElement("div", null, React.createElement("div", {
-      className: "text-sm font-bold text-slate-700"
-    }, toSafeDisplayText(evt.eventName, '未命名活動'), cfg.isCancelled && React.createElement("span", {
-      className: "ml-2 text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200"
-    }, "\u6D41\u5718")), React.createElement("div", {
-      className: "text-[11px] text-slate-500 mt-1"
-    }, toSafeDisplayText(item.displayTime, '--:--'), " \xB7 @", toSafeDisplayText(evt.instructor, '未定'))), React.createElement("span", {
-      className: `shrink-0 text-[10px] font-bold px-2 py-1 rounded-full border ${meta.tone}`
-    }, toSafeDisplayText(meta.label, '')));
-  })) : React.createElement("div", {
-    className: "text-xs text-slate-400"
-  }, "\u672C\u65E5\u5C1A\u7121\u5DF2\u6392\u6D3B\u52D5\u3002"))) : React.createElement("div", {
-    className: "text-xs text-slate-400"
-  }, "\u5148\u9078\u65E5\u671F\u5F8C\uFF0C\u9019\u88E1\u6703\u5217\u51FA\u540C\u4E00\u5929\u5DF2\u6392\u7684\u6D3B\u52D5\u3002")))) : React.createElement("div", {
-    className: "bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3"
-  }, React.createElement("div", {
-    className: "flex justify-between"
-  }, React.createElement("h4", {
-    className: "font-bold"
-  }, newTemplateData.id ? '編輯模板' : '建立新模板'), React.createElement("button", {
-    onClick: () => {
+    return /* @__PURE__ */ React.createElement("div", { key: `${dateKey}_${evt.key || evt.eventName || idx}_${item.type || "main"}_${idx}`, className: "flex items-start justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "text-sm font-bold text-slate-700" }, toSafeDisplayText(evt.eventName, "\u672A\u547D\u540D\u6D3B\u52D5"), cfg.isCancelled && /* @__PURE__ */ React.createElement("span", { className: "ml-2 text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200" }, "\u6D41\u5718")), /* @__PURE__ */ React.createElement("div", { className: "text-[11px] text-slate-500 mt-1" }, toSafeDisplayText(item.displayTime, "--:--"), " \xB7 @", toSafeDisplayText(evt.instructor, "\u672A\u5B9A"))), /* @__PURE__ */ React.createElement("span", { className: `shrink-0 text-[10px] font-bold px-2 py-1 rounded-full border ${meta.tone}` }, toSafeDisplayText(meta.label, "")));
+  })) : /* @__PURE__ */ React.createElement("div", { className: "text-xs text-slate-400" }, "\u672C\u65E5\u5C1A\u7121\u5DF2\u6392\u6D3B\u52D5\u3002"))) : /* @__PURE__ */ React.createElement("div", { className: "text-xs text-slate-400" }, "\u5148\u9078\u65E5\u671F\u5F8C\uFF0C\u9019\u88E1\u6703\u5217\u51FA\u540C\u4E00\u5929\u5DF2\u6392\u7684\u6D3B\u52D5\u3002")))) : /* @__PURE__ */ React.createElement("div", { className: "bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3" }, /* @__PURE__ */ React.createElement("div", { className: "flex justify-between" }, /* @__PURE__ */ React.createElement("h4", { className: "font-bold" }, newTemplateData.id ? "\u7DE8\u8F2F\u6A21\u677F" : "\u5EFA\u7ACB\u65B0\u6A21\u677F"), /* @__PURE__ */ React.createElement("button", { onClick: () => {
+    setIsCreatingTemplate(false);
+    setNewTemplateData(createEmptyTemplateData());
+  }, className: "text-sm text-slate-500" }, "\u53D6\u6D88")), /* @__PURE__ */ React.createElement("input", { type: "text", className: "w-full px-3 py-2 text-sm border rounded-lg", placeholder: "\u6A21\u677F\u540D\u7A31 (\u5982: \u8C6A\u83EF\u5718)", value: newTemplateData.name, onChange: (e) => setNewTemplateData({ ...newTemplateData, name: e.target.value }) }), /* @__PURE__ */ React.createElement("div", { className: "bg-white border border-slate-200 rounded-xl p-3" }, /* @__PURE__ */ React.createElement("label", { className: "block text-xs font-bold text-slate-500 mb-2" }, "\u6A21\u677F\u5206\u985E"), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-3 gap-2" }, QUICK_CREATE_TEMPLATE_CATEGORY_OPTIONS.map((option) => {
+    const isActive = normalizeQuickCreateTemplateCategory(newTemplateData.templateCategory, newTemplateData.eventName || newTemplateData.name) === option.value;
+    return /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        key: option.value,
+        type: "button",
+        onClick: () => setNewTemplateData({ ...newTemplateData, templateCategory: option.value }),
+        className: `rounded-xl border px-3 py-2 text-left transition-all ${isActive ? "border-blue-500 bg-blue-50 text-blue-700 shadow-sm" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`
+      },
+      /* @__PURE__ */ React.createElement("div", { className: "text-xs font-bold" }, option.label),
+      /* @__PURE__ */ React.createElement("div", { className: "text-[10px] mt-1 opacity-80" }, option.helper)
+    );
+  })), /* @__PURE__ */ React.createElement("div", { className: "text-[10px] text-slate-400 mt-2" }, "\u82E5\u820A\u6A21\u677F\u5C1A\u672A\u8A2D\u5B9A\u5206\u985E\uFF0C\u7CFB\u7D71\u6703\u5148\u4F9D\u6D3B\u52D5\u540D\u7A31\u81EA\u52D5\u5224\u65B7\uFF0C\u4F60\u4E5F\u53EF\u4EE5\u5728\u9019\u88E1\u624B\u52D5\u4FEE\u6B63\u3002")), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3" }, /* @__PURE__ */ React.createElement("input", { type: "text", className: "w-full px-3 py-2 text-sm border rounded-lg", placeholder: "\u9810\u8A2D\u6D3B\u52D5\u540D\u7A31", value: newTemplateData.eventName, onChange: (e) => setNewTemplateData({ ...newTemplateData, eventName: e.target.value }) }), /* @__PURE__ */ React.createElement("input", { type: "text", className: "w-full px-3 py-2 text-sm border rounded-lg", placeholder: "\u9810\u8A2D\u8B1B\u5E2B", value: newTemplateData.instructor, onChange: (e) => setNewTemplateData({ ...newTemplateData, instructor: e.target.value }) })), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-xs font-bold text-slate-500 mb-1" }, "\u9810\u8A2D\u6642\u9593"), /* @__PURE__ */ React.createElement("input", { type: "time", className: "w-full px-3 py-2 text-sm border rounded-lg", value: newTemplateData.time, onChange: (e) => setNewTemplateData({ ...newTemplateData, time: e.target.value }) })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-xs font-bold text-slate-500 mb-1" }, "\u9810\u8A2D\u4EBA\u6578"), /* @__PURE__ */ React.createElement("input", { type: "number", className: "w-full px-3 py-2 text-sm border rounded-lg", value: newTemplateData.capacity, onChange: (e) => setNewTemplateData({ ...newTemplateData, capacity: e.target.value }) }))), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-3 gap-3" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-xs font-bold text-slate-500 mb-1" }, "\u6301\u7E8C\u5929\u6578"), /* @__PURE__ */ React.createElement("input", { type: "number", min: "1", className: "w-full px-3 py-2 text-sm border rounded-lg", value: newTemplateData.duration, onChange: (e) => setNewTemplateData({ ...newTemplateData, duration: e.target.value }) })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-xs font-bold text-slate-500 mb-1" }, "\u524D\u7F6E\u5929\u6578"), /* @__PURE__ */ React.createElement("input", { type: "number", min: "0", className: "w-full px-3 py-2 text-sm border rounded-lg", value: newTemplateData.prepDays, onChange: (e) => setNewTemplateData({ ...newTemplateData, prepDays: e.target.value }) })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-xs font-bold text-slate-500 mb-1" }, "\u524D\u7F6E\u6642\u9593"), /* @__PURE__ */ React.createElement("input", { type: "time", className: "w-full px-3 py-2 text-sm border rounded-lg", value: newTemplateData.prepTime, onChange: (e) => setNewTemplateData({ ...newTemplateData, prepTime: e.target.value }) }))), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-xs font-bold text-slate-500 mb-1" }, "\u9810\u8A2D\u50F9\u683C (R\u6B04)"), /* @__PURE__ */ React.createElement("input", { type: "number", className: "w-full px-3 py-2 text-sm border rounded-lg", placeholder: "900", value: newTemplateData.price, onChange: (e) => setNewTemplateData({ ...newTemplateData, price: e.target.value }) })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-xs font-bold text-slate-500 mb-1" }, "\u5F8C\u53F0\u984F\u8272"), /* @__PURE__ */ React.createElement("input", { type: "color", className: "w-full h-[36px] p-1 border rounded-lg cursor-pointer", value: newTemplateData.backendColor, onChange: (e) => setNewTemplateData({ ...newTemplateData, backendColor: e.target.value }) }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-xs font-bold text-slate-500 mb-1" }, "\u9810\u8A2D\u7DB2\u5740"), /* @__PURE__ */ React.createElement("input", { type: "text", className: "w-full px-3 py-2 text-sm border rounded-lg", placeholder: "https://...", value: newTemplateData.link, onChange: (e) => setNewTemplateData({ ...newTemplateData, link: e.target.value }) })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-xs font-bold text-slate-500 mb-1" }, "\u9810\u8A2D\u5099\u8A3B"), /* @__PURE__ */ React.createElement("textarea", { className: "w-full px-3 py-2 text-sm border rounded-lg h-20 resize-none", placeholder: "\u4F8B\u5982\uFF1A\u96C6\u5408\u5730\u9EDE\u63D0\u9192\u3001\u88DD\u5099\u63D0\u9192...", value: newTemplateData.note, onChange: (e) => setNewTemplateData({ ...newTemplateData, note: e.target.value }) })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-xs font-bold text-slate-500 mb-1" }, "\u9810\u8A2D\u524D\u53F0\u540D\u7A31"), /* @__PURE__ */ React.createElement("input", { type: "text", className: "w-full px-3 py-2 text-sm border rounded-lg", placeholder: "\u4F8B\u5982: \u51AC\u5B63\u591C\u8A2A\u86D9\u985E", value: newTemplateData.displayName, onChange: (e) => setNewTemplateData({ ...newTemplateData, displayName: e.target.value }) })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-xs font-bold text-indigo-600 mb-1" }, "\u9810\u8A2D\u6027\u8CEA\u540D\u7A31"), /* @__PURE__ */ React.createElement("input", { type: "text", className: "w-full px-3 py-2 text-sm border rounded-lg border-indigo-200 bg-indigo-50/20", placeholder: "\u4F8B\u5982: \u8C61\u5C71\u591C\u9593\u5C0E\u89BD", value: newTemplateData.activityCategory, onChange: (e) => setNewTemplateData({ ...newTemplateData, activityCategory: e.target.value }) })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { className: "block text-xs font-bold text-slate-500 mb-1" }, "\u9810\u8A2D\u5171\u4E58\u986F\u793A"), /* @__PURE__ */ React.createElement("select", { className: "w-full px-3 py-2 text-sm border rounded-lg", value: resolveCarpoolDisplayMode(newTemplateData.carpoolDisplayMode, newTemplateData.eventName), onChange: (e) => setNewTemplateData({ ...newTemplateData, carpoolDisplayMode: e.target.value }) }, CARPOOL_DISPLAY_MODE_OPTIONS.map((option) => /* @__PURE__ */ React.createElement("option", { key: option.value, value: option.value }, option.label)))), /* @__PURE__ */ React.createElement("div", { className: "bg-rose-50 border border-rose-200 rounded-lg p-3 flex items-center justify-between" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "text-xs font-bold text-rose-700" }, "\u9810\u8A2D\u6A19\u8A18\u6D41\u5718"), /* @__PURE__ */ React.createElement("div", { className: "text-[10px] text-rose-500 mt-0.5" }, "\u4F7F\u7528\u6A21\u677F\u958B\u5718\u6642\u81EA\u52D5\u5E36\u5165")), /* @__PURE__ */ React.createElement("button", { type: "button", onClick: () => setNewTemplateData({ ...newTemplateData, isCancelled: !newTemplateData.isCancelled }), className: `px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${newTemplateData.isCancelled ? "bg-rose-600 text-white border-rose-700" : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"}` }, newTemplateData.isCancelled ? "\u5DF2\u6A19\u8A18\u6D41\u5718" : "\u6A19\u8A18\u70BA\u6D41\u5718")), /* @__PURE__ */ React.createElement("div", { className: "bg-white p-2 rounded-lg border border-slate-200" }, /* @__PURE__ */ React.createElement("label", { className: "text-xs font-bold text-slate-500 mb-2 block" }, "\u9810\u8A2D\u6D3B\u52D5\u6A19\u7C64"), /* @__PURE__ */ React.createElement(TagSelector, { definitions: tagDefinitions, value: newTemplateData.tags, onChange: (type, val) => setNewTemplateData({ ...newTemplateData, tags: { ...newTemplateData.tags, [type]: val } }), onAddTag })), /* @__PURE__ */ React.createElement("div", { className: "bg-white border border-slate-200 rounded-lg p-3" }, /* @__PURE__ */ React.createElement("label", { className: "text-xs font-bold text-slate-500 mb-2 block flex justify-between" }, /* @__PURE__ */ React.createElement("span", null, "\u9810\u8A2D\u72C0\u614B\u898F\u5247 (\u4F9D\u7167\u4EBA\u6578\u986F\u793A)"), /* @__PURE__ */ React.createElement("span", { className: "text-[10px] bg-slate-100 px-1 rounded font-normal" }, "\u5F9E\u4E0A\u5230\u4E0B\u5339\u914D")), /* @__PURE__ */ React.createElement("div", { className: "space-y-2 mb-3" }, (newTemplateData.statusRules || []).map((rule, idx) => /* @__PURE__ */ React.createElement("div", { key: idx, className: "flex items-center gap-2 text-xs" }, /* @__PURE__ */ React.createElement("span", { className: "w-12 text-center bg-slate-100 rounded py-1" }, toSafeDisplayText(rule.min, "0"), "-", toSafeDisplayText(rule.max, "999"), "\u4EBA"), /* @__PURE__ */ React.createElement("span", { className: `flex-1 px-2 py-1 rounded border text-center ${COLOR_OPTIONS.find((c) => c.value === rule.color)?.bg} ${COLOR_OPTIONS.find((c) => c.value === rule.color)?.text}` }, toSafeDisplayText(rule.label, "\u5831\u540D\u4E2D")), /* @__PURE__ */ React.createElement("button", { onClick: () => removeTemplateRule(idx), className: "text-slate-400 hover:text-red-500" }, /* @__PURE__ */ React.createElement(Icon, { name: "trash-2", size: 14 }))))), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-4 gap-2 items-end bg-slate-50 p-2 rounded border border-slate-100" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("span", { className: "text-[10px] text-slate-400" }, "Min"), /* @__PURE__ */ React.createElement("input", { type: "number", className: "w-full p-1 text-xs border rounded", value: newRule.min, onChange: (e) => setNewRule({ ...newRule, min: e.target.value }) })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("span", { className: "text-[10px] text-slate-400" }, "Max"), /* @__PURE__ */ React.createElement("input", { type: "number", className: "w-full p-1 text-xs border rounded", value: newRule.max, onChange: (e) => setNewRule({ ...newRule, max: e.target.value }) })), /* @__PURE__ */ React.createElement("div", { className: "col-span-2" }, /* @__PURE__ */ React.createElement("span", { className: "text-[10px] text-slate-400" }, "\u986F\u793A\u6587\u5B57"), /* @__PURE__ */ React.createElement("input", { type: "text", className: "w-full p-1 text-xs border rounded", placeholder: "\u5982: \u5831\u540D\u4E2D", value: newRule.label, onChange: (e) => setNewRule({ ...newRule, label: e.target.value }) })), /* @__PURE__ */ React.createElement("div", { className: "col-span-2" }, /* @__PURE__ */ React.createElement("span", { className: "text-[10px] text-slate-400" }, "\u984F\u8272"), /* @__PURE__ */ React.createElement("select", { className: "w-full p-1 text-xs border rounded", value: newRule.color, onChange: (e) => setNewRule({ ...newRule, color: e.target.value }) }, COLOR_OPTIONS.map((c) => /* @__PURE__ */ React.createElement("option", { key: c.value, value: c.value }, c.label)))), /* @__PURE__ */ React.createElement("div", { className: "col-span-2" }, /* @__PURE__ */ React.createElement("button", { onClick: addTemplateRule, className: "w-full py-1 bg-slate-800 text-white text-xs rounded hover:bg-slate-700" }, "\u65B0\u589E\u898F\u5247")))), /* @__PURE__ */ React.createElement("div", { className: "flex gap-2" }, newTemplateData.id && /* @__PURE__ */ React.createElement("button", { onClick: () => {
+    if (confirm("\u78BA\u5B9A\u522A\u9664?")) {
+      onDeleteTemplate(newTemplateData.id);
       setIsCreatingTemplate(false);
-      setNewTemplateData({
-        id: null,
-        name: '',
-        eventName: '',
-        instructor: '',
-        time: '',
-        duration: 1,
-        prepDays: 0,
-        prepTime: '',
-        link: '',
-        note: '',
-        displayName: '',
-        activityCategory: '',
-        carpoolDisplayMode: '',
-        isCancelled: false,
-        capacity: 12,
-        price: '',
-        tags: {
-          levels: '',
-          types: '',
-          locations: ''
-        },
-        backendColor: '#eff6ff',
-        statusRules: []
-      });
-    },
-    className: "text-sm text-slate-500"
-  }, "\u53D6\u6D88")), React.createElement("input", {
-    type: "text",
-    className: "w-full px-3 py-2 text-sm border rounded-lg",
-    placeholder: "\u6A21\u677F\u540D\u7A31 (\u5982: \u8C6A\u83EF\u5718)",
-    value: newTemplateData.name,
-    onChange: e => setNewTemplateData({
-      ...newTemplateData,
-      name: e.target.value
-    })
-  }), React.createElement("div", {
-    className: "grid grid-cols-1 sm:grid-cols-2 gap-3"
-  }, React.createElement("input", {
-    type: "text",
-    className: "w-full px-3 py-2 text-sm border rounded-lg",
-    placeholder: "\u9810\u8A2D\u6D3B\u52D5\u540D\u7A31",
-    value: newTemplateData.eventName,
-    onChange: e => setNewTemplateData({
-      ...newTemplateData,
-      eventName: e.target.value
-    })
-  }), React.createElement("input", {
-    type: "text",
-    className: "w-full px-3 py-2 text-sm border rounded-lg",
-    placeholder: "\u9810\u8A2D\u8B1B\u5E2B",
-    value: newTemplateData.instructor,
-    onChange: e => setNewTemplateData({
-      ...newTemplateData,
-      instructor: e.target.value
-    })
-  })), React.createElement("div", {
-    className: "grid grid-cols-1 sm:grid-cols-2 gap-3"
-  }, React.createElement("div", null, React.createElement("label", {
-    className: "block text-xs font-bold text-slate-500 mb-1"
-  }, "\u9810\u8A2D\u6642\u9593"), React.createElement("input", {
-    type: "time",
-    className: "w-full px-3 py-2 text-sm border rounded-lg",
-    value: newTemplateData.time,
-    onChange: e => setNewTemplateData({
-      ...newTemplateData,
-      time: e.target.value
-    })
-  })), React.createElement("div", null, React.createElement("label", {
-    className: "block text-xs font-bold text-slate-500 mb-1"
-  }, "\u9810\u8A2D\u4EBA\u6578"), React.createElement("input", {
-    type: "number",
-    className: "w-full px-3 py-2 text-sm border rounded-lg",
-    value: newTemplateData.capacity,
-    onChange: e => setNewTemplateData({
-      ...newTemplateData,
-      capacity: e.target.value
-    })
-  }))), React.createElement("div", {
-    className: "grid grid-cols-1 sm:grid-cols-3 gap-3"
-  }, React.createElement("div", null, React.createElement("label", {
-    className: "block text-xs font-bold text-slate-500 mb-1"
-  }, "\u6301\u7E8C\u5929\u6578"), React.createElement("input", {
-    type: "number",
-    min: "1",
-    className: "w-full px-3 py-2 text-sm border rounded-lg",
-    value: newTemplateData.duration,
-    onChange: e => setNewTemplateData({
-      ...newTemplateData,
-      duration: e.target.value
-    })
-  })), React.createElement("div", null, React.createElement("label", {
-    className: "block text-xs font-bold text-slate-500 mb-1"
-  }, "\u524D\u7F6E\u5929\u6578"), React.createElement("input", {
-    type: "number",
-    min: "0",
-    className: "w-full px-3 py-2 text-sm border rounded-lg",
-    value: newTemplateData.prepDays,
-    onChange: e => setNewTemplateData({
-      ...newTemplateData,
-      prepDays: e.target.value
-    })
-  })), React.createElement("div", null, React.createElement("label", {
-    className: "block text-xs font-bold text-slate-500 mb-1"
-  }, "\u524D\u7F6E\u6642\u9593"), React.createElement("input", {
-    type: "time",
-    className: "w-full px-3 py-2 text-sm border rounded-lg",
-    value: newTemplateData.prepTime,
-    onChange: e => setNewTemplateData({
-      ...newTemplateData,
-      prepTime: e.target.value
-    })
-  }))), React.createElement("div", {
-    className: "grid grid-cols-1 sm:grid-cols-2 gap-3"
-  }, React.createElement("div", null, React.createElement("label", {
-    className: "block text-xs font-bold text-slate-500 mb-1"
-  }, "\u9810\u8A2D\u50F9\u683C (R\u6B04)"), React.createElement("input", {
-    type: "number",
-    className: "w-full px-3 py-2 text-sm border rounded-lg",
-    placeholder: "900",
-    value: newTemplateData.price,
-    onChange: e => setNewTemplateData({
-      ...newTemplateData,
-      price: e.target.value
-    })
-  })), React.createElement("div", null, React.createElement("label", {
-    className: "block text-xs font-bold text-slate-500 mb-1"
-  }, "\u5F8C\u53F0\u984F\u8272"), React.createElement("input", {
-    type: "color",
-    className: "w-full h-[36px] p-1 border rounded-lg cursor-pointer",
-    value: newTemplateData.backendColor,
-    onChange: e => setNewTemplateData({
-      ...newTemplateData,
-      backendColor: e.target.value
-    })
-  }))), React.createElement("div", null, React.createElement("label", {
-    className: "block text-xs font-bold text-slate-500 mb-1"
-  }, "\u9810\u8A2D\u7DB2\u5740"), React.createElement("input", {
-    type: "text",
-    className: "w-full px-3 py-2 text-sm border rounded-lg",
-    placeholder: "https://...",
-    value: newTemplateData.link,
-    onChange: e => setNewTemplateData({
-      ...newTemplateData,
-      link: e.target.value
-    })
-  })), React.createElement("div", null, React.createElement("label", {
-    className: "block text-xs font-bold text-slate-500 mb-1"
-  }, "\u9810\u8A2D\u5099\u8A3B"), React.createElement("textarea", {
-    className: "w-full px-3 py-2 text-sm border rounded-lg h-20 resize-none",
-    placeholder: "\u4F8B\u5982\uFF1A\u96C6\u5408\u5730\u9EDE\u63D0\u9192\u3001\u88DD\u5099\u63D0\u9192...",
-    value: newTemplateData.note,
-    onChange: e => setNewTemplateData({
-      ...newTemplateData,
-      note: e.target.value
-    })
-  })), React.createElement("div", null, React.createElement("label", {
-    className: "block text-xs font-bold text-slate-500 mb-1"
-  }, "\u9810\u8A2D\u524D\u53F0\u540D\u7A31"), React.createElement("input", {
-    type: "text",
-    className: "w-full px-3 py-2 text-sm border rounded-lg",
-    placeholder: "\u4F8B\u5982: \u51AC\u5B63\u591C\u8A2A\u86D9\u985E",
-    value: newTemplateData.displayName,
-    onChange: e => setNewTemplateData({
-      ...newTemplateData,
-      displayName: e.target.value
-    })
-  })), React.createElement("div", null, React.createElement("label", {
-    className: "block text-xs font-bold text-indigo-600 mb-1"
-  }, "\u9810\u8A2D\u6027\u8CEA\u540D\u7A31"), React.createElement("input", {
-    type: "text",
-    className: "w-full px-3 py-2 text-sm border rounded-lg border-indigo-200 bg-indigo-50/20",
-    placeholder: "\u4F8B\u5982: \u8C61\u5C71\u591C\u9593\u5C0E\u89BD",
-    value: newTemplateData.activityCategory,
-    onChange: e => setNewTemplateData({
-      ...newTemplateData,
-      activityCategory: e.target.value
-    })
-  })), React.createElement("div", null, React.createElement("label", {
-    className: "block text-xs font-bold text-slate-500 mb-1"
-  }, "\u9810\u8A2D\u5171\u4E58\u986F\u793A"), React.createElement("select", {
-    className: "w-full px-3 py-2 text-sm border rounded-lg",
-    value: resolveCarpoolDisplayMode(newTemplateData.carpoolDisplayMode, newTemplateData.eventName),
-    onChange: e => setNewTemplateData({
-      ...newTemplateData,
-      carpoolDisplayMode: e.target.value
-    })
-  }, CARPOOL_DISPLAY_MODE_OPTIONS.map(option => React.createElement("option", {
-    key: option.value,
-    value: option.value
-  }, option.label)))), React.createElement("div", {
-    className: "bg-rose-50 border border-rose-200 rounded-lg p-3 flex items-center justify-between"
-  }, React.createElement("div", null, React.createElement("div", {
-    className: "text-xs font-bold text-rose-700"
-  }, "\u9810\u8A2D\u6A19\u8A18\u6D41\u5718"), React.createElement("div", {
-    className: "text-[10px] text-rose-500 mt-0.5"
-  }, "\u4F7F\u7528\u6A21\u677F\u958B\u5718\u6642\u81EA\u52D5\u5E36\u5165")), React.createElement("button", {
-    type: "button",
-    onClick: () => setNewTemplateData({
-      ...newTemplateData,
-      isCancelled: !newTemplateData.isCancelled
-    }),
-    className: `px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${newTemplateData.isCancelled ? 'bg-rose-600 text-white border-rose-700' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`
-  }, newTemplateData.isCancelled ? '已標記流團' : '標記為流團')), React.createElement("div", {
-    className: "bg-white p-2 rounded-lg border border-slate-200"
-  }, React.createElement("label", {
-    className: "text-xs font-bold text-slate-500 mb-2 block"
-  }, "\u9810\u8A2D\u6D3B\u52D5\u6A19\u7C64"), React.createElement(TagSelector, {
-    definitions: tagDefinitions,
-    value: newTemplateData.tags,
-    onChange: (type, val) => setNewTemplateData({
-      ...newTemplateData,
-      tags: {
-        ...newTemplateData.tags,
-        [type]: val
-      }
-    }),
-    onAddTag: onAddTag
-  })), React.createElement("div", {
-    className: "bg-white border border-slate-200 rounded-lg p-3"
-  }, React.createElement("label", {
-    className: "text-xs font-bold text-slate-500 mb-2 block flex justify-between"
-  }, React.createElement("span", null, "\u9810\u8A2D\u72C0\u614B\u898F\u5247 (\u4F9D\u7167\u4EBA\u6578\u986F\u793A)"), React.createElement("span", {
-    className: "text-[10px] bg-slate-100 px-1 rounded font-normal"
-  }, "\u5F9E\u4E0A\u5230\u4E0B\u5339\u914D")), React.createElement("div", {
-    className: "space-y-2 mb-3"
-  }, (newTemplateData.statusRules || []).map((rule, idx) => React.createElement("div", {
-    key: idx,
-    className: "flex items-center gap-2 text-xs"
-  }, React.createElement("span", {
-    className: "w-12 text-center bg-slate-100 rounded py-1"
-  }, toSafeDisplayText(rule.min, '0'), "-", toSafeDisplayText(rule.max, '999'), "\u4EBA"), React.createElement("span", {
-    className: `flex-1 px-2 py-1 rounded border text-center ${COLOR_OPTIONS.find(c => c.value === rule.color)?.bg} ${COLOR_OPTIONS.find(c => c.value === rule.color)?.text}`
-  }, toSafeDisplayText(rule.label, '報名中')), React.createElement("button", {
-    onClick: () => removeTemplateRule(idx),
-    className: "text-slate-400 hover:text-red-500"
-  }, React.createElement(Icon, {
-    name: "trash-2",
-    size: 14
-  }))))), React.createElement("div", {
-    className: "grid grid-cols-4 gap-2 items-end bg-slate-50 p-2 rounded border border-slate-100"
-  }, React.createElement("div", null, React.createElement("span", {
-    className: "text-[10px] text-slate-400"
-  }, "Min"), React.createElement("input", {
-    type: "number",
-    className: "w-full p-1 text-xs border rounded",
-    value: newRule.min,
-    onChange: e => setNewRule({
-      ...newRule,
-      min: e.target.value
-    })
-  })), React.createElement("div", null, React.createElement("span", {
-    className: "text-[10px] text-slate-400"
-  }, "Max"), React.createElement("input", {
-    type: "number",
-    className: "w-full p-1 text-xs border rounded",
-    value: newRule.max,
-    onChange: e => setNewRule({
-      ...newRule,
-      max: e.target.value
-    })
-  })), React.createElement("div", {
-    className: "col-span-2"
-  }, React.createElement("span", {
-    className: "text-[10px] text-slate-400"
-  }, "\u986F\u793A\u6587\u5B57"), React.createElement("input", {
-    type: "text",
-    className: "w-full p-1 text-xs border rounded",
-    placeholder: "\u5982: \u5831\u540D\u4E2D",
-    value: newRule.label,
-    onChange: e => setNewRule({
-      ...newRule,
-      label: e.target.value
-    })
-  })), React.createElement("div", {
-    className: "col-span-2"
-  }, React.createElement("span", {
-    className: "text-[10px] text-slate-400"
-  }, "\u984F\u8272"), React.createElement("select", {
-    className: "w-full p-1 text-xs border rounded",
-    value: newRule.color,
-    onChange: e => setNewRule({
-      ...newRule,
-      color: e.target.value
-    })
-  }, COLOR_OPTIONS.map(c => React.createElement("option", {
-    key: c.value,
-    value: c.value
-  }, c.label)))), React.createElement("div", {
-    className: "col-span-2"
-  }, React.createElement("button", {
-    onClick: addTemplateRule,
-    className: "w-full py-1 bg-slate-800 text-white text-xs rounded hover:bg-slate-700"
-  }, "\u65B0\u589E\u898F\u5247")))), React.createElement("div", {
-    className: "flex gap-2"
-  }, newTemplateData.id && React.createElement("button", {
-    onClick: () => {
-      if (confirm("確定刪除?")) {
-        onDeleteTemplate(newTemplateData.id);
-        setIsCreatingTemplate(false);
-        setNewTemplateData({
-          id: null,
-          name: '',
-          eventName: '',
-          instructor: '',
-          time: '',
-          duration: 1,
-          prepDays: 0,
-          prepTime: '',
-          link: '',
-          note: '',
-          displayName: '',
-          activityCategory: '',
-          carpoolDisplayMode: '',
-          isCancelled: false,
-          capacity: 12,
-          price: '',
-          tags: {
-            levels: '',
-            types: '',
-            locations: ''
-          },
-          backendColor: '#eff6ff',
-          statusRules: []
-        });
-      }
-    },
-    className: "flex-1 py-2 bg-red-100 text-red-600 rounded-lg text-sm"
-  }, "\u522A\u9664"), React.createElement("button", {
-    onClick: handleSaveNewTemplate,
-    className: "flex-[2] py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-  }, "\u5132\u5B58\u6A21\u677F")))), !isCreatingTemplate && React.createElement("div", {
-    className: "p-4 border-t border-slate-100 flex justify-end items-center gap-4 bg-slate-50/50 rounded-b-2xl"
-  }, React.createElement("span", {
-    className: "text-xs text-slate-500"
-  }, "\u5C07\u5EFA\u7ACB ", formData.dates.length, " \u5834\u6D3B\u52D5"), React.createElement("button", {
-    onClick: () => {
-      if (formData.dates.length === 0) {
-        alert("請至少選擇一個日期！");
-        return;
-      }
-      onSave(formData);
-    },
-    className: "px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-md"
-  }, "\u6279\u91CF\u5EFA\u7ACB"))));
+      setNewTemplateData(createEmptyTemplateData());
+    }
+  }, className: "flex-1 py-2 bg-red-100 text-red-600 rounded-lg text-sm" }, "\u522A\u9664"), /* @__PURE__ */ React.createElement("button", { onClick: handleSaveNewTemplate, className: "flex-[2] py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm" }, "\u5132\u5B58\u6A21\u677F")))), !isCreatingTemplate && /* @__PURE__ */ React.createElement("div", { className: "p-4 border-t border-slate-100 flex justify-end items-center gap-4 bg-slate-50/50 rounded-b-2xl" }, /* @__PURE__ */ React.createElement("span", { className: "text-xs text-slate-500" }, "\u5C07\u5EFA\u7ACB ", formData.dates.length, " \u5834\u6D3B\u52D5"), /* @__PURE__ */ React.createElement("button", { onClick: () => {
+    if (formData.dates.length === 0) {
+      alert("\u8ACB\u81F3\u5C11\u9078\u64C7\u4E00\u500B\u65E5\u671F\uFF01");
+      return;
+    }
+    onSave(formData);
+  }, className: "px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-md" }, "\u6279\u91CF\u5EFA\u7ACB"))));
 };
 const TaskDetailModal = ({
   task,
@@ -11058,10 +10276,13 @@ const MainApp = () => {
   const handleTogglePosterSelectedName = name => {
     setPosterSelectedNames(prev => prev.includes(name) ? prev.filter(item => item !== name) : [...prev, name]);
   };
-  const handleOpenMonthlyPosterGenerator = () => {
-    handleGenerateMonthlyPoster();
+  const resetPosterActivitySelection = () => {
+    setShowPosterActivitySelection(false);
+    setPosterActivityOptions([]);
+    setPosterSelectedNames([]);
+    setPendingPosterData(null);
   };
-  const handleGenerateMonthlyPoster = async () => {
+  const handleOpenMonthlyPosterGenerator = async () => {
     try {
       setPosterGenerating(true);
       await ensurePosterAssetsLoaded();
@@ -11072,6 +10293,36 @@ const MainApp = () => {
       });
       if (posterData.entryCount === 0) {
         alert(`目前 ${posterData.year} 年 ${posterData.month + 1} 月沒有可生成的活動資料。`);
+        return;
+      }
+      const options = buildPosterActivityOptions(posterData);
+      setPendingPosterData(posterData);
+      setPosterActivityOptions(options);
+      setPosterSelectedNames(options.map(option => option.name));
+      setShowPosterActivitySelection(true);
+    } catch (e) {
+      console.error('Prepare monthly poster failed', e);
+      alert(`月曆海報準備失敗：${e?.message || e}`);
+    } finally {
+      setPosterGenerating(false);
+    }
+  };
+  const handleGenerateMonthlyPoster = async () => {
+    if (!pendingPosterData) {
+      await handleOpenMonthlyPosterGenerator();
+      return;
+    }
+    const selectedNames = posterSelectedNames.length > 0 ? posterSelectedNames : posterActivityOptions.map(option => option.name);
+    if (selectedNames.length === 0) {
+      alert('請至少選擇一個要顯示在月曆海報上的活動。');
+      return;
+    }
+    try {
+      setPosterGenerating(true);
+      await ensurePosterAssetsLoaded();
+      const posterData = filterMonthlySchedulePosterData(pendingPosterData, selectedNames);
+      if (posterData.entryCount === 0) {
+        alert('你目前勾選的活動沒有可輸出的月曆內容，請重新選擇。');
         return;
       }
       const canvas = await renderMonthlySchedulePosterCanvas(posterData);
@@ -11102,6 +10353,7 @@ const MainApp = () => {
       downloadBlobFile(new Blob([htmlMarkup], {
         type: 'text/html;charset=utf-8'
       }), `${filename}.html`);
+      resetPosterActivitySelection();
     } catch (e) {
       console.error('Generate monthly poster failed', e);
       alert(`月曆海報生成失敗：${e?.message || e}`);
@@ -12093,17 +11345,19 @@ const MainApp = () => {
     }
   };
   const handleSaveTemplate = tpl => {
+    const normalizedTemplate = normalizeQuickCreateTemplate(tpl);
+    const templateList = Array.isArray(customTemplates) ? customTemplates : [];
     let newList;
-    if (tpl.id) {
-      newList = customTemplates.map(t => t.id === tpl.id ? tpl : t);
+    if (normalizedTemplate.id) {
+      newList = templateList.map(t => t.id === normalizedTemplate.id ? normalizedTemplate : normalizeQuickCreateTemplate(t));
     } else {
-      newList = [...customTemplates, {
-        ...tpl,
+      newList = [...templateList.map(normalizeQuickCreateTemplate), {
+        ...normalizedTemplate,
         id: `custom_${Date.now()}`
       }];
     }
     setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'templates'), {
-      list: newList
+      list: newList.map(normalizeQuickCreateTemplate)
     }, {
       merge: true
     });
@@ -12111,7 +11365,7 @@ const MainApp = () => {
   const handleAddTemplate = tpl => handleSaveTemplate(tpl);
   const onDeleteTemplate = id => {
     if (confirm("確定刪除?")) setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'templates'), {
-      list: customTemplates.filter(t => t.id !== id)
+      list: (Array.isArray(customTemplates) ? customTemplates : []).filter(t => t.id !== id)
     }, {
       merge: true
     });
@@ -15739,16 +14993,13 @@ const MainApp = () => {
       });
       setShowOutingPosterSettings(false);
     }
-  }), false && showPosterActivitySelection && React.createElement(PosterActivitySelectionModal, {
+  }), showPosterActivitySelection && React.createElement(PosterActivitySelectionModal, {
     options: posterActivityOptions,
     selectedNames: posterSelectedNames,
     onToggle: handleTogglePosterSelectedName,
     onSelectAll: () => setPosterSelectedNames(posterActivityOptions.map(option => option.name)),
     onClearAll: () => setPosterSelectedNames([]),
-    onClose: () => {
-      setShowPosterActivitySelection(false);
-      setPendingPosterData(null);
-    },
+    onClose: resetPosterActivitySelection,
     onConfirm: handleGenerateMonthlyPoster,
     generating: posterGenerating
   }), editingRow && React.createElement(EditRowModal, {
