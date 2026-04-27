@@ -3415,6 +3415,7 @@ const EventManagerModal = ({
   config,
   onClose,
   onSaveConfig,
+  onSaveTemplate,
   availableInstructors,
   instructorSchedule,
   onCheckInToggle,
@@ -3566,6 +3567,46 @@ const EventManagerModal = ({
   };
   const removeStatusRule = idx => {
     setStatusRules(statusRules.filter((_, i) => i !== idx));
+  };
+  const handleSaveCurrentEventAsTemplate = async () => {
+    const cleanInternalName = String(internalName || '').trim();
+    if (!cleanInternalName) return alert('請先填寫活動後台名稱，再存成模板。');
+    if (matchedTemplate && !confirm(`要用這場活動目前的設定，覆蓋同名模板「${matchedTemplate.name || getTemplateEventName(matchedTemplate)}」嗎？`)) return;
+    const currentInstructorStr = Array.from(new Set([...leadInstructors, ...supportInstructors].map(name => String(name || '').trim()).filter(Boolean))).sort().join(' & ');
+    const templatePayload = normalizeQuickCreateTemplate({
+      id: matchedTemplate?.id || null,
+      name: matchedTemplate?.name || cleanInternalName,
+      eventName: cleanInternalName,
+      instructor: currentInstructorStr || event.instructor || '',
+      time: eventTime || '',
+      duration: parseInt(config?.duration, 10) || 1,
+      prepDays: parseInt(config?.prepDays, 10) || 0,
+      prepTime: config?.prepTime || '',
+      link: eventLink || '',
+      note: eventNote || '',
+      displayName: displayName || '',
+      activityCategory: activityCategory || '',
+      templateCategory: normalizeQuickCreateTemplateCategory(matchedTemplate?.templateCategory, cleanInternalName),
+      carpoolDisplayMode,
+      isCancelled,
+      capacity: parseInt(capacity, 10) || 12,
+      price: config?.price ?? matchedTemplate?.price ?? '',
+      tags: tags || {
+        levels: '',
+        types: '',
+        locations: ''
+      },
+      backendColor: backendColor || '#eff6ff',
+      statusRules: statusRules || []
+    });
+    try {
+      await Promise.resolve(onSaveTemplate?.(templatePayload));
+      const targetTemplateName = templatePayload.name || templatePayload.eventName || '模板';
+      setTemplateAutofillNotice(`已將這場活動${matchedTemplate ? '更新到' : '存成'}模板「${targetTemplateName}」。`);
+    } catch (e) {
+      console.error('Save current event as template failed', e);
+      alert(`❌ 存成模板失敗：${formatFirestoreError(e)}`);
+    }
   };
   const applyTemplateToEvent = tpl => {
     if (!tpl) return;
@@ -3860,10 +3901,17 @@ const EventManagerModal = ({
     name: "settings",
     size: 18,
     className: "mr-2"
-  }), " \u6D3B\u52D5\u8A2D\u5B9A"), matchedTemplate && React.createElement("button", {
+  }), " \u6D3B\u52D5\u8A2D\u5B9A"), React.createElement("div", {
+    className: "shrink-0 flex flex-wrap justify-end gap-2"
+  }, React.createElement("button", {
+    type: "button",
+    onClick: handleSaveCurrentEventAsTemplate,
+    className: "px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100",
+    title: matchedTemplate ? `用這場活動目前的設定，更新同名模板「${toSafeDisplayText(matchedTemplate.name, toSafeDisplayText(getTemplateEventName(matchedTemplate), '模板'))}」` : '把這場活動目前的設定存成新模板'
+  }, matchedTemplate ? "\u66F4\u65B0\u540C\u540D\u6A21\u677F" : "\u5B58\u6210\u6A21\u677F"), matchedTemplate && React.createElement("button", {
     type: "button",
     onClick: () => applyTemplateToEvent(matchedTemplate),
-    className: "shrink-0 px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-[11px] font-bold text-blue-700 hover:bg-blue-100",
+    className: "px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-[11px] font-bold text-blue-700 hover:bg-blue-100",
     title: `從模板「${toSafeDisplayText(matchedTemplate.name, toSafeDisplayText(getTemplateEventName(matchedTemplate), '模板'))}」帶入設定`
   }, "\u5F9E\u540C\u540D\u6A21\u677F\u88DC\u9F4A\u8A2D\u5B9A")), React.createElement("div", {
     className: "bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4"
@@ -4180,7 +4228,7 @@ const EventManagerModal = ({
     historicalData: parsedData,
     onClose: () => setShowAddRegModal(false),
     onSave: handleSaveNewReg
-  })));
+  }))));
 };
 const CalendarExportModal = ({
   events,
@@ -4476,7 +4524,7 @@ const CalendarExportModal = ({
     size: 16
   }), " ", exportMode === 'monthly' ? '匯出月統計 (CSV)' : '匯出 Excel (CSV)'))));
 };
-const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, onDeleteTemplate, availableInstructors, instructorSchedule, tagDefinitions, onAddTag, initialDate, initialInstructors = [], companyRestDates = [], existingScheduleByDate = {} }) => {
+const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, onDeleteTemplate, availableInstructors, instructorSchedule, tagDefinitions, onAddTag, initialDate, initialInstructors = [], companyRestDates = [], existingScheduleByDate = {}, templatesLoadState = 'idle', onRetryTemplatesLoad }) => {
   const normalizedInitialInstructors = Array.isArray(initialInstructors) ? initialInstructors.map((name) => String(name || "").trim()).filter(Boolean) : [];
   const [mode, setMode] = useState("template");
   const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
@@ -4532,6 +4580,8 @@ const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, on
   const [appliedTemplateSuggestionKey, setAppliedTemplateSuggestionKey] = useState("");
   const [templateAutofillNotice, setTemplateAutofillNotice] = useState("");
   const normalizedTemplates = useMemo(() => (customTemplates || []).map(normalizeQuickCreateTemplate), [customTemplates]);
+  const isTemplatesLoading = templatesLoadState === "loading";
+  const isTemplatesLoadError = templatesLoadState === "error";
   const filteredTemplates = useMemo(() => {
     if (templateCategoryFilter === "all") return normalizedTemplates;
     return normalizedTemplates.filter((tpl) => tpl.templateCategory === templateCategoryFilter);
@@ -4726,7 +4776,7 @@ const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, on
       ));
     })), /* @__PURE__ */ React.createElement("div", { className: "mt-3 text-[11px] text-slate-400" }, "\u7070\u8272\u522A\u9664\u7DDA\u65E5\u671F\u4EE3\u8868\u5168\u516C\u53F8\u516C\u4F11\uFF0C\u5DF2\u9396\u5B9A\u4E0D\u53EF\u6392\u6D3B\u52D5\u3002"));
   };
-  return /* @__PURE__ */ React.createElement("div", { className: "fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 fade-in backdrop-blur-sm" }, /* @__PURE__ */ React.createElement("div", { className: "bg-white rounded-2xl w-full max-w-lg flex flex-col max-h-[90vh] shadow-2xl m-auto relative" }, /* @__PURE__ */ React.createElement("div", { className: "p-6 border-b border-slate-100 flex justify-between items-center" }, /* @__PURE__ */ React.createElement("h3", { className: "text-xl font-bold flex items-center gap-2" }, /* @__PURE__ */ React.createElement(Icon, { name: "zap", className: "text-yellow-500" }), " \u5FEB\u901F\u958B\u5718"), /* @__PURE__ */ React.createElement("button", { onClick: onClose }, /* @__PURE__ */ React.createElement(Icon, { name: "x", className: "text-slate-400" }))), /* @__PURE__ */ React.createElement("div", { className: "p-6 overflow-y-auto space-y-6 custom-scrollbar" }, !isCreatingTemplate ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "flex bg-slate-100 p-1 rounded-lg" }, /* @__PURE__ */ React.createElement("button", { onClick: () => setMode("template"), className: `flex-1 py-1.5 text-sm rounded-md transition-all ${mode === "template" ? "bg-white shadow text-blue-600" : "text-slate-500"}` }, "\u4F7F\u7528\u6A21\u677F"), /* @__PURE__ */ React.createElement("button", { onClick: () => setMode("custom"), className: `flex-1 py-1.5 text-sm rounded-md transition-all ${mode === "custom" ? "bg-white shadow text-blue-600" : "text-slate-500"}` }, "\u5B8C\u5168\u81EA\u8A02")), mode === "template" && /* @__PURE__ */ React.createElement("div", { className: "space-y-3" }, /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2" }, /* @__PURE__ */ React.createElement("button", { type: "button", onClick: () => setTemplateCategoryFilter("all"), className: `px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${templateCategoryFilter === "all" ? "bg-slate-800 text-white border-slate-900" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"}` }, "\u5168\u90E8 ", templateCategoryCounts.all), QUICK_CREATE_TEMPLATE_CATEGORY_OPTIONS.map((option) => /* @__PURE__ */ React.createElement("button", { key: option.value, type: "button", onClick: () => setTemplateCategoryFilter(option.value), className: `px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${templateCategoryFilter === option.value ? "bg-blue-600 text-white border-blue-700 shadow-sm" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"}` }, option.label, " ", templateCategoryCounts[option.value] || 0))), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-3 sm:grid-cols-4 gap-2" }, normalizedTemplates.length === 0 && /* @__PURE__ */ React.createElement("div", { className: "col-span-full text-center text-slate-400 text-xs py-2" }, "\u7121\u6A21\u677F"), normalizedTemplates.length > 0 && filteredTemplates.length === 0 && /* @__PURE__ */ React.createElement("div", { className: "col-span-full text-center text-slate-400 text-xs py-2" }, "\u9019\u500B\u5206\u985E\u76EE\u524D\u6C92\u6709\u6A21\u677F"), filteredTemplates.map((tpl) => {
+  return /* @__PURE__ */ React.createElement("div", { className: "fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 fade-in backdrop-blur-sm" }, /* @__PURE__ */ React.createElement("div", { className: "bg-white rounded-2xl w-full max-w-lg flex flex-col max-h-[90vh] shadow-2xl m-auto relative" }, /* @__PURE__ */ React.createElement("div", { className: "p-6 border-b border-slate-100 flex justify-between items-center" }, /* @__PURE__ */ React.createElement("h3", { className: "text-xl font-bold flex items-center gap-2" }, /* @__PURE__ */ React.createElement(Icon, { name: "zap", className: "text-yellow-500" }), " \u5FEB\u901F\u958B\u5718"), /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-2" }, mode === "template" && !isCreatingTemplate && /* @__PURE__ */ React.createElement("button", { type: "button", onClick: () => (onRetryTemplatesLoad || (() => {}))(), disabled: isTemplatesLoading, className: `inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${isTemplatesLoading ? "bg-blue-50 text-blue-500 border-blue-100 cursor-wait" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"}` }, /* @__PURE__ */ React.createElement(Icon, { name: isTemplatesLoading ? "loader-2" : "refresh-cw", size: 12, className: isTemplatesLoading ? "animate-spin" : "" }), isTemplatesLoading ? "\u6A21\u677F\u8F09\u5165\u4E2D" : "\u91CD\u65B0\u6574\u7406\u6A21\u677F"), /* @__PURE__ */ React.createElement("button", { onClick: onClose }, /* @__PURE__ */ React.createElement(Icon, { name: "x", className: "text-slate-400" })))), /* @__PURE__ */ React.createElement("div", { className: "p-6 overflow-y-auto space-y-6 custom-scrollbar" }, !isCreatingTemplate ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "flex bg-slate-100 p-1 rounded-lg" }, /* @__PURE__ */ React.createElement("button", { onClick: () => setMode("template"), className: `flex-1 py-1.5 text-sm rounded-md transition-all ${mode === "template" ? "bg-white shadow text-blue-600" : "text-slate-500"}` }, "\u4F7F\u7528\u6A21\u677F"), /* @__PURE__ */ React.createElement("button", { onClick: () => setMode("custom"), className: `flex-1 py-1.5 text-sm rounded-md transition-all ${mode === "custom" ? "bg-white shadow text-blue-600" : "text-slate-500"}` }, "\u5B8C\u5168\u81EA\u8A02")), mode === "template" && /* @__PURE__ */ React.createElement("div", { className: "space-y-3" }, /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2" }, /* @__PURE__ */ React.createElement("button", { type: "button", onClick: () => setTemplateCategoryFilter("all"), className: `px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${templateCategoryFilter === "all" ? "bg-slate-800 text-white border-slate-900" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"}` }, "\u5168\u90E8 ", templateCategoryCounts.all), QUICK_CREATE_TEMPLATE_CATEGORY_OPTIONS.map((option) => /* @__PURE__ */ React.createElement("button", { key: option.value, type: "button", onClick: () => setTemplateCategoryFilter(option.value), className: `px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${templateCategoryFilter === option.value ? "bg-blue-600 text-white border-blue-700 shadow-sm" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"}` }, option.label, " ", templateCategoryCounts[option.value] || 0))), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-3 sm:grid-cols-4 gap-2" }, normalizedTemplates.length === 0 && /* @__PURE__ */ React.createElement("div", { className: `col-span-full text-center text-xs py-2 ${isTemplatesLoadError ? "text-red-500" : isTemplatesLoading ? "text-blue-500" : "text-slate-400"}` }, isTemplatesLoadError ? "\u6A21\u677F\u8B80\u53D6\u5931\u6557\uFF0C\u8ACB\u6309\u4E0A\u65B9\u6309\u9215\u91CD\u65B0\u6574\u7406" : isTemplatesLoading ? "\u6A21\u677F\u8F09\u5165\u4E2D..." : "\u7121\u6A21\u677F"), normalizedTemplates.length > 0 && filteredTemplates.length === 0 && /* @__PURE__ */ React.createElement("div", { className: "col-span-full text-center text-slate-400 text-xs py-2" }, "\u9019\u500B\u5206\u985E\u76EE\u524D\u6C92\u6709\u6A21\u677F"), filteredTemplates.map((tpl) => {
     const templateKey = getTemplateSelectionKey(tpl);
     const isSelected = selectedTemplateId === templateKey;
     return /* @__PURE__ */ React.createElement("div", { key: templateKey, onClick: () => handleTemplateSelect(tpl), className: `relative border rounded-lg p-2 cursor-pointer text-center hover:shadow-sm transition-all ${isSelected ? "border-blue-500 ring-2 ring-blue-100 bg-blue-50" : "border-slate-200 bg-white"}`, style: isSelected ? { borderColor: tpl.backendColor } : {} }, /* @__PURE__ */ React.createElement("div", { className: "font-bold text-slate-700 text-[11px] truncate mb-1" }, toSafeDisplayText(tpl.name, toSafeDisplayText(getTemplateEventName(tpl), "\u6A21\u677F"))), /* @__PURE__ */ React.createElement("div", { className: "text-[9px] text-slate-400 truncate" }, toSafeDisplayText(tpl.instructor, "")), /* @__PURE__ */ React.createElement("div", { className: "mt-1.5" }, /* @__PURE__ */ React.createElement("span", { className: "inline-flex items-center px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[9px] font-bold" }, toSafeDisplayText(QUICK_CREATE_TEMPLATE_CATEGORY_LABELS[tpl.templateCategory], "\u7279\u5225\u6D3B\u52D5"))), /* @__PURE__ */ React.createElement("button", { onClick: (e) => {
@@ -9680,6 +9730,8 @@ const MainApp = () => {
   const [parsedData, setParsedData] = useState([]);
   const [eventConfigs, setEventConfigs] = useState({});
   const [customTemplates, setCustomTemplates] = useState([]);
+  const [templatesLoadState, setTemplatesLoadState] = useState('idle');
+  const [templatesReloadSeed, setTemplatesReloadSeed] = useState(0);
   const [projects, setProjects] = useState([]);
   const [promises, setPromises] = useState([]);
   const [instructorSchedule, setInstructorSchedule] = useState({});
@@ -10141,12 +10193,25 @@ const MainApp = () => {
     });
   }, [canLoadAdminData, db, dbSource, shouldLoadAuthSettings]);
   useEffect(() => {
-    if (!canLoadAdminData || !shouldLoadTemplates || !db) return undefined;
+    if (!canLoadAdminData || !shouldLoadTemplates) return undefined;
+    if (!db) {
+      setTemplatesLoadState('error');
+      return undefined;
+    }
+    setTemplatesLoadState('loading');
     const templatesRef = doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'templates');
     return onSnapshot(templatesRef, s => {
-      if (s && s.exists()) setCustomTemplates(sanitizeFirebaseValue(s.data() || {})?.list || []);
+      if (s && s.exists()) {
+        setCustomTemplates(sanitizeFirebaseValue(s.data() || {})?.list || []);
+      } else {
+        setCustomTemplates([]);
+      }
+      setTemplatesLoadState('success');
+    }, error => {
+      console.error('Template subscription failed', error);
+      setTemplatesLoadState('error');
     });
-  }, [canLoadAdminData, db, dbSource, shouldLoadTemplates]);
+  }, [canLoadAdminData, db, dbSource, shouldLoadTemplates, templatesReloadSeed]);
   useEffect(() => {
     if (!canLoadAdminData || !shouldLoadMonthlyPlans || !db) return undefined;
     const monthlyPlansRef = collection(db, `artifacts/${dbSource}/public/data`, 'monthly_plans');
@@ -10513,6 +10578,9 @@ const MainApp = () => {
       alert(`${date} 已設為全公司公休，無法直接排活動。`);
       return;
     }
+    if (templatesLoadState !== 'success') {
+      setTemplatesLoadState('loading');
+    }
     setScheduleDate(date || '');
     setCreateEventPrefillInstructors(Array.isArray(instructors) ? instructors.map(name => String(name || '').trim()).filter(Boolean) : []);
     setShowCreateEvent(true);
@@ -10521,6 +10589,10 @@ const MainApp = () => {
     setShowCreateEvent(false);
     setScheduleDate('');
     setCreateEventPrefillInstructors([]);
+  };
+  const handleRetryTemplatesLoad = () => {
+    setTemplatesLoadState('loading');
+    setTemplatesReloadSeed((seed) => seed + 1);
   };
   const handleOpenCreateEventFromMatrix = (instructorName, dateKey) => {
     if (!instructorName || !dateKey) return;
@@ -11344,31 +11416,56 @@ const MainApp = () => {
       alert(`❌ 活動設定更新失敗：${formatFirestoreError(e)}`);
     }
   };
-  const handleSaveTemplate = tpl => {
+  const handleSaveTemplate = async tpl => {
+    if (templatesLoadState !== 'success') {
+      throw new Error('模板尚未載入完成，請稍候再試。');
+    }
     const normalizedTemplate = normalizeQuickCreateTemplate(tpl);
-    const templateList = Array.isArray(customTemplates) ? customTemplates : [];
-    let newList;
+    const templateList = (Array.isArray(customTemplates) ? customTemplates : []).map(normalizeQuickCreateTemplate);
+    const normalizedTemplateKey = getTemplateEventNameKey(normalizedTemplate);
+    let updateIndex = -1;
     if (normalizedTemplate.id) {
-      newList = templateList.map(t => t.id === normalizedTemplate.id ? normalizedTemplate : normalizeQuickCreateTemplate(t));
-    } else {
-      newList = [...templateList.map(normalizeQuickCreateTemplate), {
+      updateIndex = templateList.findIndex(t => t.id === normalizedTemplate.id);
+    }
+    if (updateIndex < 0 && normalizedTemplateKey) {
+      updateIndex = templateList.map(getTemplateEventNameKey).lastIndexOf(normalizedTemplateKey);
+    }
+    let newList = templateList.map((t, idx) => {
+      if (idx !== updateIndex) return t;
+      return {
         ...normalizedTemplate,
-        id: `custom_${Date.now()}`
+        id: t.id || normalizedTemplate.id || `custom_${Date.now()}`
+      };
+    });
+    if (updateIndex < 0) {
+      newList = [...templateList, {
+        ...normalizedTemplate,
+        id: normalizedTemplate.id || `custom_${Date.now()}`
       }];
     }
-    setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'templates'), {
-      list: newList.map(normalizeQuickCreateTemplate)
+    const normalizedList = newList.map(normalizeQuickCreateTemplate);
+    setCustomTemplates(normalizedList);
+    return setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'templates'), {
+      list: normalizedList
     }, {
       merge: true
     });
   };
   const handleAddTemplate = tpl => handleSaveTemplate(tpl);
-  const onDeleteTemplate = id => {
-    if (confirm("確定刪除?")) setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'templates'), {
-      list: (Array.isArray(customTemplates) ? customTemplates : []).filter(t => t.id !== id)
-    }, {
-      merge: true
-    });
+  const onDeleteTemplate = async id => {
+    if (templatesLoadState !== 'success') {
+      alert('模板尚未載入完成，請稍候再試。');
+      return;
+    }
+    if (confirm("確定刪除?")) {
+      const nextList = (Array.isArray(customTemplates) ? customTemplates : []).filter(t => t.id !== id);
+      setCustomTemplates(nextList);
+      return setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'templates'), {
+        list: nextList
+      }, {
+        merge: true
+      });
+    }
   };
   const handleUpdateProject = async (pid, newData) => {
     await updateDoc(doc(db, `artifacts/${dbSource}/public/data`, 'projects', pid), newData);
@@ -14896,6 +14993,8 @@ const MainApp = () => {
     initialInstructors: createEventPrefillInstructors,
     companyRestDates: companyRestDates,
     existingScheduleByDate: calendarOccupancy,
+    templatesLoadState: templatesLoadState,
+    onRetryTemplatesLoad: handleRetryTemplatesLoad,
     onClose: closeCreateEventModal,
     onSave: handleCreateEvent,
     customTemplates: customTemplates,
@@ -14932,6 +15031,7 @@ const MainApp = () => {
     config: eventConfigs[editingEvent.key],
     onClose: () => setEditingEvent(null),
     onSaveConfig: (cfg, newInstr, newInternalName) => handleSaveEventConfig(editingEvent.key, cfg, newInstr, newInternalName),
+    onSaveTemplate: handleSaveTemplate,
     availableInstructors: Object.keys(stats.instrs).sort(),
     instructorSchedule: instructorSchedule,
     onCheckInToggle: handleCheckInToggle,
