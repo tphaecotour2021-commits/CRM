@@ -13009,6 +13009,31 @@ const MainApp = () => {
       });
       return map;
     }, new Map()).values());
+    const publicMonthTonePalette = [{
+      bg: '#f1f5f9',
+      text: '#475569'
+    }, {
+      bg: '#dbeafe',
+      text: '#1d4ed8'
+    }, {
+      bg: '#fef3c7',
+      text: '#b45309'
+    }, {
+      bg: '#dcfce7',
+      text: '#047857'
+    }, {
+      bg: '#f3e8ff',
+      text: '#7e22ce'
+    }, {
+      bg: '#ffe4e6',
+      text: '#be123c'
+    }];
+    const publicMonthToneMap = publicVisibleMonthBadges.reduce((map, badge) => {
+      const monthNumber = parseInt(String(badge.key || '').split('-')[1], 10);
+      const paletteIndex = Number.isFinite(monthNumber) ? (monthNumber - 1) % publicMonthTonePalette.length : 0;
+      map[badge.key] = publicMonthTonePalette[paletteIndex];
+      return map;
+    }, {});
     const appliedTheme = normalizePublicTheme(publicTheme);
     const appliedSideDecor = normalizePublicSideDecor(publicSideDecor);
     return React.createElement("div", {
@@ -13320,8 +13345,12 @@ const MainApp = () => {
       const isSearchMatch = publicSearchTerm && matchingDates.includes(dateStr);
       const isFilterMatch = hasActiveFilters && hasEvents;
       const shouldHighlight = isSearchMatch || isFilterMatch;
-      const isAnchorMonth = dayInfo.monthKey === currentMonthStr;
       const isPastDay = dateStr < todayDateKey;
+      const monthTone = publicMonthToneMap[dayInfo.monthKey] || publicMonthTonePalette[0];
+      const isMonthLabelCell = i === 0 || publicRollingCalendarDays[i - 1]?.monthKey !== dayInfo.monthKey || day === 1;
+      const cellStyle = {
+        backgroundColor: isSelected ? '#1e293b' : isRestDay || isPastDay ? '#f8fafc' : shouldHighlight ? '#fef9c3' : monthTone.bg
+      };
       let cellClass = "cursor-pointer relative transition-all border-b border-r border-slate-50";
       const dateNumberBaseClass = "text-sm sm:text-lg font-bold leading-none z-10 relative";
       let numClass = `${dateNumberBaseClass} text-slate-700`;
@@ -13344,13 +13373,17 @@ const MainApp = () => {
             setPublicDateEntryNonce(n => n + 1);
           }
         },
-        className: cellClass
+        className: cellClass,
+        style: cellStyle
       }, React.createElement("div", {
         className: `h-full w-full flex flex-col items-center ${isSelected ? 'justify-center' : 'justify-start pt-4'}`
       }, React.createElement("div", {
         className: "flex h-6 items-center justify-center gap-1 relative z-10"
       }, React.createElement("span", {
-        className: `text-[10px] font-bold leading-none ${isSelected ? 'text-white/70' : isPastDay || isRestDay ? 'text-slate-300' : isAnchorMonth ? 'text-slate-400' : 'text-slate-500'}`
+        className: `text-[10px] font-bold leading-none ${isMonthLabelCell ? '' : 'hidden'} ${isSelected ? 'text-white/70' : isPastDay || isRestDay ? 'text-slate-300' : ''}`,
+        style: !isSelected && !isPastDay && !isRestDay ? {
+          color: monthTone.text
+        } : undefined
       }, dayInfo.monthLabel), React.createElement("span", {
         className: numClass
       }, day)), isRestDay ? React.createElement("div", {
