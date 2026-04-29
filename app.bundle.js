@@ -13323,7 +13323,7 @@ const MainApp = () => {
       const isAnchorMonth = dayInfo.monthKey === currentMonthStr;
       const isPastDay = dateStr < todayDateKey;
       let cellClass = "cursor-pointer relative transition-all border-b border-r border-slate-50";
-      const dateNumberBaseClass = "text-base sm:text-lg font-bold leading-none z-10 relative";
+      const dateNumberBaseClass = "text-sm sm:text-lg font-bold leading-none z-10 relative";
       let numClass = `${dateNumberBaseClass} text-slate-700`;
       if (isRestDay || isPastDay) {
         cellClass += isRestDay ? " bg-slate-50 cursor-not-allowed" : " bg-slate-50/70 hover:bg-slate-100/80";
