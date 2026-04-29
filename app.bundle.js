@@ -645,6 +645,7 @@ const normalizeQuickCreateTemplateCategory = (value, fallbackName = '') => {
 };
 const getTemplateEventName = (tpl = {}) => String(tpl?.eventName || tpl?.name || '').trim();
 const getTemplateEventNameKey = (tpl = {}) => getTemplateEventName(tpl).replace(/\s+/g, '');
+const getQuickCreateTemplateStableKey = (tpl = {}) => String(tpl?.id || [tpl?.name, tpl?.eventName, tpl?.time, tpl?.instructor].map(value => String(value || '').trim()).join('::'));
 const normalizeQuickCreateTemplate = (tpl = {}) => ({
   ...tpl,
   eventName: getTemplateEventName(tpl),
@@ -3726,7 +3727,19 @@ const EventManagerModal = ({
   }, React.createElement(Icon, {
     name: "info",
     size: 10
-  }), " \u5F8C\u53F0\u539F\u59CB\u540D\u7A31 (\u4FEE\u6539\u5C07\u9023\u52D5\u6240\u6709\u5831\u540D\u8CC7\u6599)")), React.createElement("button", {
+  }), " \u5F8C\u53F0\u539F\u59CB\u540D\u7A31 (\u4FEE\u6539\u5C07\u9023\u52D5\u6240\u6709\u5831\u540D\u8CC7\u6599)"), React.createElement("div", {
+    className: "mt-3 flex flex-wrap gap-2"
+  }, React.createElement("button", {
+    type: "button",
+    onClick: handleSaveCurrentEventAsTemplate,
+    className: "px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-xs font-bold text-emerald-700 hover:bg-emerald-100",
+    title: matchedTemplate ? `用這場活動目前的設定，更新同名模板「${toSafeDisplayText(matchedTemplate.name, toSafeDisplayText(getTemplateEventName(matchedTemplate), '模板'))}」` : '把這場活動目前的設定存成新模板'
+  }, matchedTemplate ? "\u66F4\u65B0\u540C\u540D\u6A21\u677F" : "\u5B58\u6210\u6A21\u677F"), matchedTemplate && React.createElement("button", {
+    type: "button",
+    onClick: () => applyTemplateToEvent(matchedTemplate),
+    className: "px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-xs font-bold text-blue-700 hover:bg-blue-100",
+    title: `從模板「${toSafeDisplayText(matchedTemplate.name, toSafeDisplayText(getTemplateEventName(matchedTemplate), '模板'))}」帶入設定`
+  }, "\u5F9E\u540C\u540D\u6A21\u677F\u88DC\u9F4A\u8A2D\u5B9A"))), React.createElement("button", {
     onClick: handleRequestClose
   }, React.createElement(Icon, {
     name: "x",
@@ -3893,27 +3906,13 @@ const EventManagerModal = ({
     size: 14
   })))))) : React.createElement("div", {
     className: "text-slate-400 text-center text-sm py-2"
-  }, "\u76EE\u524D\u5C1A\u7121\u5831\u540D"))), React.createElement("section", null, React.createElement("div", {
-    className: "flex items-center justify-between gap-3 mb-3"
-  }, React.createElement("h4", {
-    className: "font-bold text-slate-700 flex items-center"
+  }, "\u76EE\u524D\u5C1A\u7121\u5831\u540D"))), React.createElement("section", null, React.createElement("h4", {
+    className: "font-bold text-slate-700 mb-3 flex items-center"
   }, React.createElement(Icon, {
     name: "settings",
     size: 18,
     className: "mr-2"
   }), " \u6D3B\u52D5\u8A2D\u5B9A"), React.createElement("div", {
-    className: "shrink-0 flex flex-wrap justify-end gap-2"
-  }, React.createElement("button", {
-    type: "button",
-    onClick: handleSaveCurrentEventAsTemplate,
-    className: "px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100",
-    title: matchedTemplate ? `用這場活動目前的設定，更新同名模板「${toSafeDisplayText(matchedTemplate.name, toSafeDisplayText(getTemplateEventName(matchedTemplate), '模板'))}」` : '把這場活動目前的設定存成新模板'
-  }, matchedTemplate ? "\u66F4\u65B0\u540C\u540D\u6A21\u677F" : "\u5B58\u6210\u6A21\u677F"), matchedTemplate && React.createElement("button", {
-    type: "button",
-    onClick: () => applyTemplateToEvent(matchedTemplate),
-    className: "px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-[11px] font-bold text-blue-700 hover:bg-blue-100",
-    title: `從模板「${toSafeDisplayText(matchedTemplate.name, toSafeDisplayText(getTemplateEventName(matchedTemplate), '模板'))}」帶入設定`
-  }, "\u5F9E\u540C\u540D\u6A21\u677F\u88DC\u9F4A\u8A2D\u5B9A")), React.createElement("div", {
     className: "bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4"
   }, shouldShowTemplateSuggestion && React.createElement("div", {
     className: "rounded-xl border border-amber-200 bg-amber-50 px-4 py-3"
@@ -4228,7 +4227,7 @@ const EventManagerModal = ({
     historicalData: parsedData,
     onClose: () => setShowAddRegModal(false),
     onSave: handleSaveNewReg
-  }))));
+  })));
 };
 const CalendarExportModal = ({
   events,
@@ -4524,7 +4523,7 @@ const CalendarExportModal = ({
     size: 16
   }), " ", exportMode === 'monthly' ? '匯出月統計 (CSV)' : '匯出 Excel (CSV)'))));
 };
-const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, onDeleteTemplate, availableInstructors, instructorSchedule, tagDefinitions, onAddTag, initialDate, initialInstructors = [], companyRestDates = [], existingScheduleByDate = {}, templatesLoadState = 'idle', onRetryTemplatesLoad }) => {
+const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, onDeleteTemplate, onReorderTemplates, availableInstructors, instructorSchedule, tagDefinitions, onAddTag, initialDate, initialInstructors = [], companyRestDates = [], existingScheduleByDate = {}, templatesLoadState = 'idle', onRetryTemplatesLoad }) => {
   const normalizedInitialInstructors = Array.isArray(initialInstructors) ? initialInstructors.map((name) => String(name || "").trim()).filter(Boolean) : [];
   const [mode, setMode] = useState("template");
   const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
@@ -4553,7 +4552,7 @@ const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, on
     backendColor: "#eff6ff",
     statusRules: []
   });
-  const getTemplateSelectionKey = (tpl) => String(tpl?.id || [tpl?.name, tpl?.eventName, tpl?.time, tpl?.instructor].map((value) => String(value || "").trim()).join("::"));
+  const getTemplateSelectionKey = getQuickCreateTemplateStableKey;
   const [formData, setFormData] = useState({
     dates: initialDate ? [initialDate] : [],
     eventName: "",
@@ -4715,6 +4714,11 @@ const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, on
     });
     setIsCreatingTemplate(true);
   };
+  const handleMoveTemplate = (e, tpl, direction) => {
+    e.stopPropagation();
+    if (!onReorderTemplates) return;
+    onReorderTemplates(tpl, direction, templateCategoryFilter);
+  };
   useEffect(() => {
     setDismissedTemplateSuggestionKey("");
     setAppliedTemplateSuggestionKey("");
@@ -4776,10 +4780,12 @@ const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, on
       ));
     })), /* @__PURE__ */ React.createElement("div", { className: "mt-3 text-[11px] text-slate-400" }, "\u7070\u8272\u522A\u9664\u7DDA\u65E5\u671F\u4EE3\u8868\u5168\u516C\u53F8\u516C\u4F11\uFF0C\u5DF2\u9396\u5B9A\u4E0D\u53EF\u6392\u6D3B\u52D5\u3002"));
   };
-  return /* @__PURE__ */ React.createElement("div", { className: "fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 fade-in backdrop-blur-sm" }, /* @__PURE__ */ React.createElement("div", { className: "bg-white rounded-2xl w-full max-w-lg flex flex-col max-h-[90vh] shadow-2xl m-auto relative" }, /* @__PURE__ */ React.createElement("div", { className: "p-6 border-b border-slate-100 flex justify-between items-center" }, /* @__PURE__ */ React.createElement("h3", { className: "text-xl font-bold flex items-center gap-2" }, /* @__PURE__ */ React.createElement(Icon, { name: "zap", className: "text-yellow-500" }), " \u5FEB\u901F\u958B\u5718"), /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-2" }, mode === "template" && !isCreatingTemplate && /* @__PURE__ */ React.createElement("button", { type: "button", onClick: () => (onRetryTemplatesLoad || (() => {}))(), disabled: isTemplatesLoading, className: `inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${isTemplatesLoading ? "bg-blue-50 text-blue-500 border-blue-100 cursor-wait" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"}` }, /* @__PURE__ */ React.createElement(Icon, { name: isTemplatesLoading ? "loader-2" : "refresh-cw", size: 12, className: isTemplatesLoading ? "animate-spin" : "" }), isTemplatesLoading ? "\u6A21\u677F\u8F09\u5165\u4E2D" : "\u91CD\u65B0\u6574\u7406\u6A21\u677F"), /* @__PURE__ */ React.createElement("button", { onClick: onClose }, /* @__PURE__ */ React.createElement(Icon, { name: "x", className: "text-slate-400" })))), /* @__PURE__ */ React.createElement("div", { className: "p-6 overflow-y-auto space-y-6 custom-scrollbar" }, !isCreatingTemplate ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "flex bg-slate-100 p-1 rounded-lg" }, /* @__PURE__ */ React.createElement("button", { onClick: () => setMode("template"), className: `flex-1 py-1.5 text-sm rounded-md transition-all ${mode === "template" ? "bg-white shadow text-blue-600" : "text-slate-500"}` }, "\u4F7F\u7528\u6A21\u677F"), /* @__PURE__ */ React.createElement("button", { onClick: () => setMode("custom"), className: `flex-1 py-1.5 text-sm rounded-md transition-all ${mode === "custom" ? "bg-white shadow text-blue-600" : "text-slate-500"}` }, "\u5B8C\u5168\u81EA\u8A02")), mode === "template" && /* @__PURE__ */ React.createElement("div", { className: "space-y-3" }, /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2" }, /* @__PURE__ */ React.createElement("button", { type: "button", onClick: () => setTemplateCategoryFilter("all"), className: `px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${templateCategoryFilter === "all" ? "bg-slate-800 text-white border-slate-900" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"}` }, "\u5168\u90E8 ", templateCategoryCounts.all), QUICK_CREATE_TEMPLATE_CATEGORY_OPTIONS.map((option) => /* @__PURE__ */ React.createElement("button", { key: option.value, type: "button", onClick: () => setTemplateCategoryFilter(option.value), className: `px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${templateCategoryFilter === option.value ? "bg-blue-600 text-white border-blue-700 shadow-sm" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"}` }, option.label, " ", templateCategoryCounts[option.value] || 0))), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-3 sm:grid-cols-4 gap-2" }, normalizedTemplates.length === 0 && /* @__PURE__ */ React.createElement("div", { className: `col-span-full text-center text-xs py-2 ${isTemplatesLoadError ? "text-red-500" : isTemplatesLoading ? "text-blue-500" : "text-slate-400"}` }, isTemplatesLoadError ? "\u6A21\u677F\u8B80\u53D6\u5931\u6557\uFF0C\u8ACB\u6309\u4E0A\u65B9\u6309\u9215\u91CD\u65B0\u6574\u7406" : isTemplatesLoading ? "\u6A21\u677F\u8F09\u5165\u4E2D..." : "\u7121\u6A21\u677F"), normalizedTemplates.length > 0 && filteredTemplates.length === 0 && /* @__PURE__ */ React.createElement("div", { className: "col-span-full text-center text-slate-400 text-xs py-2" }, "\u9019\u500B\u5206\u985E\u76EE\u524D\u6C92\u6709\u6A21\u677F"), filteredTemplates.map((tpl) => {
+  return /* @__PURE__ */ React.createElement("div", { className: "fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 fade-in backdrop-blur-sm" }, /* @__PURE__ */ React.createElement("div", { className: "bg-white rounded-2xl w-full max-w-lg flex flex-col max-h-[90vh] shadow-2xl m-auto relative" }, /* @__PURE__ */ React.createElement("div", { className: "p-6 border-b border-slate-100 flex justify-between items-center" }, /* @__PURE__ */ React.createElement("h3", { className: "text-xl font-bold flex items-center gap-2" }, /* @__PURE__ */ React.createElement(Icon, { name: "zap", className: "text-yellow-500" }), " \u5FEB\u901F\u958B\u5718"), /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-2" }, mode === "template" && !isCreatingTemplate && /* @__PURE__ */ React.createElement("button", { type: "button", onClick: () => (onRetryTemplatesLoad || (() => {}))(), disabled: isTemplatesLoading, className: `inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${isTemplatesLoading ? "bg-blue-50 text-blue-500 border-blue-100 cursor-wait" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"}` }, /* @__PURE__ */ React.createElement(Icon, { name: isTemplatesLoading ? "loader-2" : "refresh-cw", size: 12, className: isTemplatesLoading ? "animate-spin" : "" }), isTemplatesLoading ? "\u6A21\u677F\u8F09\u5165\u4E2D" : "\u91CD\u65B0\u6574\u7406\u6A21\u677F"), /* @__PURE__ */ React.createElement("button", { onClick: onClose }, /* @__PURE__ */ React.createElement(Icon, { name: "x", className: "text-slate-400" })))), /* @__PURE__ */ React.createElement("div", { className: "p-6 overflow-y-auto space-y-6 custom-scrollbar" }, !isCreatingTemplate ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "flex bg-slate-100 p-1 rounded-lg" }, /* @__PURE__ */ React.createElement("button", { onClick: () => setMode("template"), className: `flex-1 py-1.5 text-sm rounded-md transition-all ${mode === "template" ? "bg-white shadow text-blue-600" : "text-slate-500"}` }, "\u4F7F\u7528\u6A21\u677F"), /* @__PURE__ */ React.createElement("button", { onClick: () => setMode("custom"), className: `flex-1 py-1.5 text-sm rounded-md transition-all ${mode === "custom" ? "bg-white shadow text-blue-600" : "text-slate-500"}` }, "\u5B8C\u5168\u81EA\u8A02")), mode === "template" && /* @__PURE__ */ React.createElement("div", { className: "space-y-3" }, /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2" }, /* @__PURE__ */ React.createElement("button", { type: "button", onClick: () => setTemplateCategoryFilter("all"), className: `px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${templateCategoryFilter === "all" ? "bg-slate-800 text-white border-slate-900" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"}` }, "\u5168\u90E8 ", templateCategoryCounts.all), QUICK_CREATE_TEMPLATE_CATEGORY_OPTIONS.map((option) => /* @__PURE__ */ React.createElement("button", { key: option.value, type: "button", onClick: () => setTemplateCategoryFilter(option.value), className: `px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${templateCategoryFilter === option.value ? "bg-blue-600 text-white border-blue-700 shadow-sm" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"}` }, option.label, " ", templateCategoryCounts[option.value] || 0))), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-3 sm:grid-cols-4 gap-2" }, normalizedTemplates.length === 0 && /* @__PURE__ */ React.createElement("div", { className: `col-span-full text-center text-xs py-2 ${isTemplatesLoadError ? "text-red-500" : isTemplatesLoading ? "text-blue-500" : "text-slate-400"}` }, isTemplatesLoadError ? "\u6A21\u677F\u8B80\u53D6\u5931\u6557\uFF0C\u8ACB\u6309\u4E0A\u65B9\u6309\u9215\u91CD\u65B0\u6574\u7406" : isTemplatesLoading ? "\u6A21\u677F\u8F09\u5165\u4E2D..." : "\u7121\u6A21\u677F"), normalizedTemplates.length > 0 && filteredTemplates.length === 0 && /* @__PURE__ */ React.createElement("div", { className: "col-span-full text-center text-slate-400 text-xs py-2" }, "\u9019\u500B\u5206\u985E\u76EE\u524D\u6C92\u6709\u6A21\u677F"), filteredTemplates.map((tpl, templateIndex) => {
+    const canMoveTemplateUp = templateIndex > 0;
+    const canMoveTemplateDown = templateIndex < filteredTemplates.length - 1;
     const templateKey = getTemplateSelectionKey(tpl);
     const isSelected = selectedTemplateId === templateKey;
-    return /* @__PURE__ */ React.createElement("div", { key: templateKey, onClick: () => handleTemplateSelect(tpl), className: `relative border rounded-lg p-2 cursor-pointer text-center hover:shadow-sm transition-all ${isSelected ? "border-blue-500 ring-2 ring-blue-100 bg-blue-50" : "border-slate-200 bg-white"}`, style: isSelected ? { borderColor: tpl.backendColor } : {} }, /* @__PURE__ */ React.createElement("div", { className: "font-bold text-slate-700 text-[11px] truncate mb-1" }, toSafeDisplayText(tpl.name, toSafeDisplayText(getTemplateEventName(tpl), "\u6A21\u677F"))), /* @__PURE__ */ React.createElement("div", { className: "text-[9px] text-slate-400 truncate" }, toSafeDisplayText(tpl.instructor, "")), /* @__PURE__ */ React.createElement("div", { className: "mt-1.5" }, /* @__PURE__ */ React.createElement("span", { className: "inline-flex items-center px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[9px] font-bold" }, toSafeDisplayText(QUICK_CREATE_TEMPLATE_CATEGORY_LABELS[tpl.templateCategory], "\u7279\u5225\u6D3B\u52D5"))), /* @__PURE__ */ React.createElement("button", { onClick: (e) => {
+    return /* @__PURE__ */ React.createElement("div", { key: templateKey, onClick: () => handleTemplateSelect(tpl), className: `relative border rounded-lg p-2 cursor-pointer text-center hover:shadow-sm transition-all ${isSelected ? "border-blue-500 ring-2 ring-blue-100 bg-blue-50" : "border-slate-200 bg-white"}`, style: isSelected ? { borderColor: tpl.backendColor } : {} }, /* @__PURE__ */ React.createElement("div", { className: "absolute -top-1 -left-1 flex gap-0.5" }, /* @__PURE__ */ React.createElement("button", { type: "button", disabled: !canMoveTemplateUp, title: "\u5F80\u524D\u79FB", onClick: (e) => handleMoveTemplate(e, tpl, "up"), className: `p-0.5 rounded-full border border-white bg-slate-100 text-slate-500 hover:text-blue-600 hover:bg-blue-50 ${!canMoveTemplateUp ? "opacity-35 cursor-not-allowed" : ""}` }, /* @__PURE__ */ React.createElement(Icon, { name: "chevron-up", size: 8 })), /* @__PURE__ */ React.createElement("button", { type: "button", disabled: !canMoveTemplateDown, title: "\u5F80\u5F8C\u79FB", onClick: (e) => handleMoveTemplate(e, tpl, "down"), className: `p-0.5 rounded-full border border-white bg-slate-100 text-slate-500 hover:text-blue-600 hover:bg-blue-50 ${!canMoveTemplateDown ? "opacity-35 cursor-not-allowed" : ""}` }, /* @__PURE__ */ React.createElement(Icon, { name: "chevron-down", size: 8 }))), /* @__PURE__ */ React.createElement("div", { className: "font-bold text-slate-700 text-[11px] truncate mb-1" }, toSafeDisplayText(tpl.name, toSafeDisplayText(getTemplateEventName(tpl), "\u6A21\u677F"))), /* @__PURE__ */ React.createElement("div", { className: "text-[9px] text-slate-400 truncate" }, toSafeDisplayText(tpl.instructor, "")), /* @__PURE__ */ React.createElement("div", { className: "mt-1.5" }, /* @__PURE__ */ React.createElement("span", { className: "inline-flex items-center px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[9px] font-bold" }, toSafeDisplayText(QUICK_CREATE_TEMPLATE_CATEGORY_LABELS[tpl.templateCategory], "\u7279\u5225\u6D3B\u52D5"))), /* @__PURE__ */ React.createElement("button", { onClick: (e) => {
       e.stopPropagation();
       handleEditTemplate(e, tpl);
     }, className: "absolute -top-1 -right-1 p-0.5 bg-slate-100 rounded-full text-slate-400 hover:text-blue-500 border border-white" }, /* @__PURE__ */ React.createElement(Icon, { name: "edit-2", size: 8 })));
@@ -7865,11 +7871,132 @@ const EditRowModal = ({
   onClose,
   onSave,
   onDelete,
-  existingTransports
+  existingTransports,
+  availableEvents = []
 }) => {
   const [form, setForm] = useState({
     ...rowData
   });
+  const getInitialEventCalendarMonth = () => {
+    const parsed = form.date ? new Date(`${form.date}T00:00:00`) : new Date();
+    return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  };
+  const [eventCalendarMonth, setEventCalendarMonth] = useState(getInitialEventCalendarMonth);
+  const [selectedEventDate, setSelectedEventDate] = useState(form.date || '');
+  const selectableEventsByDate = useMemo(() => {
+    const sourceEvents = Array.isArray(availableEvents) ? availableEvents : Object.values(availableEvents || {});
+    const map = {};
+    sourceEvents.forEach(evt => {
+      const dateKey = String(evt?.date || '').trim();
+      const eventName = String(evt?.eventName || '').trim();
+      if (!dateKey || !eventName) return;
+      if (!map[dateKey]) map[dateKey] = [];
+      map[dateKey].push(evt);
+    });
+    Object.values(map).forEach(items => {
+      items.sort((a, b) => String(a.time || a.config?.time || '').localeCompare(String(b.time || b.config?.time || '')) || String(a.eventName || '').localeCompare(String(b.eventName || ''), 'zh-Hant') || String(a.instructor || '').localeCompare(String(b.instructor || ''), 'zh-Hant'));
+    });
+    return map;
+  }, [availableEvents]);
+  const selectedDateEvents = selectableEventsByDate[selectedEventDate] || [];
+  const handleSelectTargetEvent = evt => {
+    setSelectedEventDate(evt.date || selectedEventDate);
+    setForm(prev => ({
+      ...prev,
+      date: evt.date || prev.date,
+      eventName: evt.eventName || prev.eventName,
+      instructor: evt.instructor || prev.instructor
+    }));
+  };
+  const renderTargetEventCalendar = () => {
+    const year = eventCalendarMonth.getFullYear();
+    const month = eventCalendarMonth.getMonth();
+    const daysInMonth = getDaysInMonth(year, month);
+    const firstDay = getFirstDayOfMonth(year, month);
+    const days = [...Array(firstDay).fill(null), ...Array.from({
+      length: daysInMonth
+    }, (_, i) => i + 1)];
+    return React.createElement("div", {
+      className: "rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3"
+    }, React.createElement("div", {
+      className: "flex items-center justify-between"
+    }, React.createElement("button", {
+      type: "button",
+      className: "w-8 h-8 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-500 hover:bg-slate-100",
+      onClick: () => setEventCalendarMonth(new Date(year, month - 1, 1))
+    }, React.createElement(Icon, {
+      name: "chevron-left",
+      size: 16
+    })), React.createElement("div", {
+      className: "font-bold text-slate-800"
+    }, year, "\u5E74 ", month + 1, "\u6708"), React.createElement("button", {
+      type: "button",
+      className: "w-8 h-8 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-500 hover:bg-slate-100",
+      onClick: () => setEventCalendarMonth(new Date(year, month + 1, 1))
+    }, React.createElement(Icon, {
+      name: "chevron-right",
+      size: 16
+    }))), React.createElement("div", {
+      className: "grid grid-cols-7 text-center text-[11px] font-bold text-slate-400"
+    }, ['日', '一', '二', '三', '四', '五', '六'].map(day => React.createElement("div", {
+      key: day
+    }, day))), React.createElement("div", {
+      className: "grid grid-cols-7 gap-1"
+    }, days.map((day, idx) => {
+      if (!day) return React.createElement("div", {
+        key: `empty-${idx}`,
+        className: "min-h-10"
+      });
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const dateEvents = selectableEventsByDate[dateStr] || [];
+      const isSelected = selectedEventDate === dateStr;
+      const isCurrent = form.date === dateStr;
+      return React.createElement("button", {
+        key: dateStr,
+        type: "button",
+        disabled: dateEvents.length === 0,
+        onClick: () => setSelectedEventDate(dateStr),
+        className: `min-h-10 rounded-lg border text-xs flex flex-col items-center justify-center transition-all ${isSelected ? 'bg-blue-600 border-blue-600 text-white shadow-sm' : isCurrent ? 'bg-blue-50 border-blue-300 text-blue-700' : dateEvents.length > 0 ? 'bg-white border-slate-200 text-slate-700 hover:border-blue-300 hover:bg-blue-50' : 'bg-slate-100 border-transparent text-slate-300 cursor-not-allowed'}`
+      }, React.createElement("span", {
+        className: "font-bold leading-none"
+      }, day), dateEvents.length > 0 && React.createElement("span", {
+        className: `mt-1 rounded-full px-1.5 py-0.5 text-[10px] leading-none ${isSelected ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-700'}`
+      }, dateEvents.length, "\u5834"));
+    })), React.createElement("div", {
+      className: "rounded-lg border border-slate-200 bg-white p-3"
+    }, React.createElement("div", {
+      className: "flex items-center justify-between gap-2 mb-2"
+    }, React.createElement("div", {
+      className: "text-xs font-bold text-slate-500"
+    }, selectedEventDate || "\u5148\u9078\u64C7\u65E5\u671F"), form.date && React.createElement("div", {
+      className: "text-[11px] text-blue-600 font-bold"
+    }, "\u76EE\u524D\uFF1A", form.date, " \u00B7 ", form.eventName || "\u672A\u547D\u540D")), selectedEventDate ? selectedDateEvents.length > 0 ? React.createElement("div", {
+      className: "space-y-2"
+    }, selectedDateEvents.map((evt, idx) => {
+      const isPicked = form.date === evt.date && form.eventName === evt.eventName && String(form.instructor || '') === String(evt.instructor || '');
+      const capacityText = Number.isFinite(Number(evt.capacity)) ? `${evt.count || 0}/${evt.capacity}\u4EBA` : `${evt.count || 0}\u4EBA`;
+      return React.createElement("button", {
+        key: evt.key || `${evt.date}-${evt.eventName}-${evt.instructor}-${idx}`,
+        type: "button",
+        onClick: () => handleSelectTargetEvent(evt),
+        className: `w-full text-left rounded-lg border p-2 transition-all ${isPicked ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-slate-200 hover:border-blue-300 hover:bg-blue-50'}`
+      }, React.createElement("div", {
+        className: "flex items-start justify-between gap-2"
+      }, React.createElement("div", {
+        className: "min-w-0"
+      }, React.createElement("div", {
+        className: "font-bold text-sm text-slate-800 truncate"
+      }, evt.eventName || "\u672A\u547D\u540D\u6D3B\u52D5"), React.createElement("div", {
+        className: "text-xs text-slate-500 mt-0.5"
+      }, evt.instructor ? `@${evt.instructor}` : "\u672A\u6307\u5B9A\u8B1B\u5E2B")), React.createElement("span", {
+        className: "text-[11px] font-bold text-slate-500 bg-slate-100 rounded-full px-2 py-1 flex-shrink-0"
+      }, capacityText)));
+    })) : React.createElement("div", {
+      className: "text-sm text-slate-400 py-3 text-center"
+    }, "\u9019\u5929\u6C92\u6709\u53EF\u9078\u5834\u6B21") : React.createElement("div", {
+      className: "text-sm text-slate-400 py-3 text-center"
+    }, "\u8ACB\u5148\u5728\u6708\u66C6\u4E0A\u9078\u64C7\u65E5\u671F")));
+  };
   const toggleTransport = () => {
     setForm(prev => ({
       ...prev,
@@ -7890,29 +8017,9 @@ const EditRowModal = ({
     name: "x"
   }))), React.createElement("div", {
     className: "space-y-4 max-h-[70vh] overflow-y-auto p-1"
-  }, React.createElement("div", {
-    className: "grid grid-cols-1 sm:grid-cols-2 gap-3"
   }, React.createElement("div", null, React.createElement("label", {
-    className: "text-xs font-bold"
-  }, "\u65E5\u671F"), React.createElement("input", {
-    type: "date",
-    className: "w-full p-2 border rounded",
-    value: form.date,
-    onChange: e => setForm({
-      ...form,
-      date: e.target.value
-    })
-  })), React.createElement("div", null, React.createElement("label", {
-    className: "text-xs font-bold"
-  }, "\u6D3B\u52D5\u540D\u7A31"), React.createElement("input", {
-    type: "text",
-    className: "w-full p-2 border rounded",
-    value: form.eventName,
-    onChange: e => setForm({
-      ...form,
-      eventName: e.target.value
-    })
-  }))), React.createElement("div", null, React.createElement("label", {
+    className: "text-xs font-bold block mb-2"
+  }, "\u5831\u540D\u5834\u6B21"), renderTargetEventCalendar()), React.createElement("div", null, React.createElement("label", {
     className: "text-xs font-bold"
   }, "\u5BA2\u6236\u59D3\u540D"), React.createElement("input", {
     type: "text",
@@ -11467,6 +11574,34 @@ const MainApp = () => {
       });
     }
   };
+  const handleReorderTemplates = async (targetTemplate, direction, categoryFilter = 'all') => {
+    if (templatesLoadState !== 'success') {
+      alert('模板尚未載入完成，請稍候再試。');
+      return;
+    }
+    const currentList = (Array.isArray(customTemplates) ? customTemplates : []).map(normalizeQuickCreateTemplate);
+    const visibleIndices = currentList.map((tpl, idx) => ({ tpl, idx })).filter(({ tpl }) => categoryFilter === 'all' || tpl.templateCategory === categoryFilter).map(({ idx }) => idx);
+    const targetKey = getQuickCreateTemplateStableKey(targetTemplate);
+    const currentVisibleIndex = visibleIndices.findIndex(idx => getQuickCreateTemplateStableKey(currentList[idx]) === targetKey);
+    const nextVisibleIndex = currentVisibleIndex + (direction === 'up' ? -1 : 1);
+    if (currentVisibleIndex < 0 || nextVisibleIndex < 0 || nextVisibleIndex >= visibleIndices.length) return;
+    const fromIndex = visibleIndices[currentVisibleIndex];
+    const toIndex = visibleIndices[nextVisibleIndex];
+    const nextList = [...currentList];
+    [nextList[fromIndex], nextList[toIndex]] = [nextList[toIndex], nextList[fromIndex]];
+    setCustomTemplates(nextList);
+    try {
+      await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'templates'), {
+        list: nextList
+      }, {
+        merge: true
+      });
+    } catch (e) {
+      setCustomTemplates(currentList);
+      console.error('Reorder templates failed', e);
+      alert(`❌ 模板排序儲存失敗：${formatFirestoreError(e)}`);
+    }
+  };
   const handleUpdateProject = async (pid, newData) => {
     await updateDoc(doc(db, `artifacts/${dbSource}/public/data`, 'projects', pid), newData);
   };
@@ -11876,6 +12011,34 @@ const MainApp = () => {
     const daysInMonth = getDaysInMonth(year, month);
     const firstDay = getFirstDayOfMonth(year, month);
     return Array(firstDay).fill(null).concat([...Array(daysInMonth).keys()].map(i => i + 1));
+  }, [currentDate]);
+  const publicRollingCalendarDays = useMemo(() => {
+    const anchorDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+    const thisWeekStart = new Date(anchorDate);
+    thisWeekStart.setDate(anchorDate.getDate() - anchorDate.getDay());
+    const visibleStart = new Date(thisWeekStart);
+    visibleStart.setDate(thisWeekStart.getDate() - 7);
+    return Array.from({
+      length: 35
+    }, (_, index) => {
+      const dateObj = new Date(visibleStart);
+      dateObj.setDate(visibleStart.getDate() + index);
+      const year = dateObj.getFullYear();
+      const month = dateObj.getMonth();
+      const day = dateObj.getDate();
+      const weekIndex = Math.floor(index / 7);
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      return {
+        dateObj,
+        dateStr,
+        year,
+        month,
+        day,
+        monthKey: `${year}-${String(month + 1).padStart(2, '0')}`,
+        monthLabel: `${month + 1}月`,
+        weekIndex
+      };
+    });
   }, [currentDate]);
   const currentMonthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
   const currentMonthLabel = `${currentDate.getFullYear()}年 ${currentDate.getMonth() + 1}月`;
@@ -12711,6 +12874,8 @@ const MainApp = () => {
   }, [stats.events, eventConfigs]);
   const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
   const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+  const nextPublicWeekWindow = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() + 7));
+  const prevPublicWeekWindow = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() - 7));
   const checkEventMatchesFilters = (eventKey, filters = publicFilters) => {
     if (filters.level.length === 0 && filters.type.length === 0 && filters.location.length === 0) return true;
     const cfg = eventConfigs[eventKey] || {};
@@ -12827,7 +12992,23 @@ const MainApp = () => {
       filename: selectedOuting.posterFilename,
       label: '指定場刊'
     } : selectedOutingPosterRandom : null;
+    const todayDateKey = getLocalDateStr();
     const currentMonthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+    const publicRangeStart = publicRollingCalendarDays[0];
+    const publicRangeEnd = publicRollingCalendarDays[publicRollingCalendarDays.length - 1];
+    const publicRangeLabel = publicRangeStart && publicRangeEnd ? `${publicRangeStart.year}/${publicRangeStart.month + 1}/${publicRangeStart.day} - ${publicRangeEnd.year}/${publicRangeEnd.month + 1}/${publicRangeEnd.day}` : '';
+    const anchorMonthIndex = currentDate.getFullYear() * 12 + currentDate.getMonth();
+    const publicVisibleMonthBadges = Array.from(publicRollingCalendarDays.reduce((map, dayInfo) => {
+      if (!dayInfo || map.has(dayInfo.monthKey)) return map;
+      const monthIndex = dayInfo.year * 12 + dayInfo.month;
+      const relation = monthIndex < anchorMonthIndex ? '前月' : monthIndex > anchorMonthIndex ? '下月' : '當月';
+      map.set(dayInfo.monthKey, {
+        key: dayInfo.monthKey,
+        relation,
+        label: `${dayInfo.year}年${dayInfo.month + 1}月`
+      });
+      return map;
+    }, new Map()).values());
     const appliedTheme = normalizePublicTheme(publicTheme);
     const appliedSideDecor = normalizePublicSideDecor(publicSideDecor);
     return React.createElement("div", {
@@ -13095,14 +13276,21 @@ const MainApp = () => {
     }, React.createElement("div", {
       className: "flex items-center gap-4 w-full justify-between px-2"
     }, React.createElement("button", {
-      onClick: prevMonth,
+      onClick: prevPublicWeekWindow,
       className: "p-2 hover:bg-white hover:shadow-sm rounded-full transition-all text-slate-500"
     }, React.createElement(Icon, {
       name: "chevron-left"
-    })), React.createElement("h2", {
+    })), React.createElement("div", {
+      className: "text-center min-w-0"
+    }, React.createElement("h2", {
       className: "text-lg font-bold text-slate-800"
-    }, currentDate.getFullYear(), "\u5E74 ", currentDate.getMonth() + 1, "\u6708"), React.createElement("button", {
-      onClick: nextMonth,
+    }, publicRangeLabel), React.createElement("div", {
+      className: "mt-1 flex flex-wrap justify-center gap-1"
+    }, publicVisibleMonthBadges.map(badge => React.createElement("span", {
+      key: badge.key,
+      className: `text-[10px] px-2 py-0.5 rounded-full font-bold ${badge.relation === '當月' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-500'}`
+    }, badge.relation, " \u00B7 ", badge.label)))), React.createElement("button", {
+      onClick: nextPublicWeekWindow,
       className: "p-2 hover:bg-white hover:shadow-sm rounded-full transition-all text-slate-500"
     }, React.createElement(Icon, {
       name: "chevron-right"
@@ -13111,10 +13299,14 @@ const MainApp = () => {
     }, ['日', '一', '二', '三', '四', '五', '六'].map(d => React.createElement("div", {
       key: d
     }, d))), React.createElement("div", {
-      className: "grid grid-cols-7 auto-rows-[60px] bg-white"
-    }, calendarDays.map((day, i) => {
-      const dateStr = day ? `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` : '';
-      const dayItems = day ? (calendarOccupancy[dateStr] || []).filter(item => checkEventMatchesFilters(item.evt.key)) : [];
+      className: "grid grid-cols-7 bg-white pb-6",
+      style: {
+        gridAutoRows: '76px'
+      }
+    }, publicRollingCalendarDays.map((dayInfo, i) => {
+      const day = dayInfo.day;
+      const dateStr = dayInfo.dateStr;
+      const dayItems = (calendarOccupancy[dateStr] || []).filter(item => checkEventMatchesFilters(item.evt.key));
       const hasEvents = dayItems.length > 0;
       const areAllFull = hasEvents && dayItems.every(item => {
         const cfg = eventConfigs[item.evt.key] || {};
@@ -13128,40 +13320,47 @@ const MainApp = () => {
       const isSearchMatch = publicSearchTerm && matchingDates.includes(dateStr);
       const isFilterMatch = hasActiveFilters && hasEvents;
       const shouldHighlight = isSearchMatch || isFilterMatch;
+      const isAnchorMonth = dayInfo.monthKey === currentMonthStr;
+      const isPastDay = dateStr < todayDateKey;
       let cellClass = "cursor-pointer relative transition-all border-b border-r border-slate-50";
-      let numClass = "text-sm font-medium text-slate-700 z-10 relative";
-      if (isRestDay) {
-        cellClass += " bg-slate-50 cursor-not-allowed";
-        numClass = "text-slate-300";
+      const dateNumberBaseClass = "text-base sm:text-lg font-bold leading-none z-10 relative";
+      let numClass = `${dateNumberBaseClass} text-slate-700`;
+      if (isRestDay || isPastDay) {
+        cellClass += isRestDay ? " bg-slate-50 cursor-not-allowed" : " bg-slate-50/70 hover:bg-slate-100/80";
+        numClass = `${dateNumberBaseClass} text-slate-300`;
       } else if (isSelected) {
         cellClass += " bg-slate-800 text-white hover:bg-slate-900 shadow-md z-20";
-        numClass = "text-white font-bold";
+        numClass = `${dateNumberBaseClass} text-white`;
       } else if (shouldHighlight) {
         cellClass += " bg-yellow-100 text-yellow-800 z-10";
       } else {
         cellClass += " hover:bg-slate-50";
       }
       return React.createElement("div", {
-        key: i,
+        key: dateStr,
         onClick: () => {
-          if (day && !isRestDay) {
+          if (!isRestDay) {
             setSelectedPublicDate(dateStr);
             setPublicDateEntryNonce(n => n + 1);
           }
         },
         className: cellClass
-      }, day && React.createElement("div", {
-        className: `h-full w-full flex flex-col items-center ${isSelected ? 'justify-center' : 'justify-start pt-3'}`
       }, React.createElement("div", {
+        className: `h-full w-full flex flex-col items-center ${isSelected ? 'justify-center' : 'justify-start pt-4'}`
+      }, React.createElement("div", {
+        className: "flex h-6 items-center justify-center gap-1 relative z-10"
+      }, React.createElement("span", {
+        className: `text-[10px] font-bold leading-none ${isSelected ? 'text-white/70' : isPastDay || isRestDay ? 'text-slate-300' : isAnchorMonth ? 'text-slate-400' : 'text-slate-500'}`
+      }, dayInfo.monthLabel), React.createElement("span", {
         className: numClass
-      }, day), isRestDay ? React.createElement("div", {
+      }, day)), isRestDay ? React.createElement("div", {
         className: "text-slate-300 font-bold text-lg select-none mt-1"
       }, "\u2715") : isOutingDay && !isSelected ? React.createElement("div", {
         className: "text-[9px] font-bold text-amber-500 mt-1 scale-90 relative z-10"
       }, "\u5916\u51FA") : hasEvents && !isSelected && (areAllFull ? React.createElement("div", {
         className: "text-[9px] font-bold text-red-500 mt-1 scale-90 relative z-10"
       }, "\u984D\u6EFF") : (() => {
-        const dObj = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+        const dObj = new Date(dayInfo.dateObj);
         dObj.setDate(dObj.getDate() + 1);
         const nextDateStr = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, '0')}-${String(dObj.getDate()).padStart(2, '0')}`;
         const nextDayItems = calendarOccupancy[nextDateStr] || [];
@@ -13272,7 +13471,7 @@ const MainApp = () => {
         }, "\u76EE\u524D: ", React.createElement("span", {
           className: "text-blue-600"
         }, e.count), " \u4EBA"), React.createElement("span", {
-          className: `max-w-[160px] text-right text-[10px] font-bold leading-4 ${carpoolDisplayMode === 'none' ? 'text-slate-400' : remainingCarpoolSeats > 0 ? 'text-orange-500' : 'text-rose-500'}`
+          className: `whitespace-nowrap text-right text-[10px] font-bold leading-4 ${carpoolDisplayMode === 'none' ? 'text-slate-400' : remainingCarpoolSeats > 0 ? 'text-orange-500' : 'text-rose-500'}`
         }, carpoolHint)))), (tags.levels || tags.types || tags.locations) && React.createElement("div", {
           className: "flex gap-2 mb-3"
         }, tags.levels && React.createElement("span", {
@@ -15000,6 +15199,7 @@ const MainApp = () => {
     customTemplates: customTemplates,
     onSaveTemplate: handleSaveTemplate,
     onDeleteTemplate: onDeleteTemplate,
+    onReorderTemplates: handleReorderTemplates,
     availableInstructors: Object.keys(stats.instrs).sort(),
     instructorSchedule: instructorSchedule,
     tagDefinitions: tagDefinitions,
@@ -15105,6 +15305,7 @@ const MainApp = () => {
   }), editingRow && React.createElement(EditRowModal, {
     rowData: editingRow,
     existingTransports: uniqueTransports,
+    availableEvents: stats.events,
     onClose: () => setEditingRow(null),
     onSave: handleUpdateRow,
     onDelete: id => {
