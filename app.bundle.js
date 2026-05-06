@@ -7902,6 +7902,10 @@ const EditRowModal = ({
     return map;
   }, [availableEvents]);
   const selectedDateEvents = selectableEventsByDate[selectedEventDate] || [];
+  const transportOptions = useMemo(() => {
+    const options = ['', '共乘', '自行前往', ...(Array.isArray(existingTransports) ? existingTransports : [])];
+    return Array.from(new Set(options.map(value => String(value || '').trim()))).filter((value, index) => value || index === 0);
+  }, [existingTransports]);
   const handleSelectTargetEvent = evt => {
     setSelectedEventDate(evt.date || selectedEventDate);
     setForm(prev => ({
@@ -8000,12 +8004,6 @@ const EditRowModal = ({
       className: "text-sm text-slate-400 py-3 text-center"
     }, "\u8ACB\u5148\u5728\u6708\u66C6\u4E0A\u9078\u64C7\u65E5\u671F")));
   };
-  const toggleTransport = () => {
-    setForm(prev => ({
-      ...prev,
-      transport: prev.transport === '共乘' ? '自行前往' : '共乘'
-    }));
-  };
   return React.createElement("div", {
     className: "fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-4 fade-in backdrop-blur-sm"
   }, React.createElement("div", {
@@ -8046,17 +8044,27 @@ const EditRowModal = ({
     })
   })), React.createElement("div", null, React.createElement("label", {
     className: "text-xs font-bold mb-1.5 block"
-  }, "\u4EA4\u901A"), React.createElement("div", {
-    onClick: toggleTransport,
-    className: `w-full p-2 border rounded cursor-pointer flex items-center gap-2 select-none transition-all ${form.transport === '共乘' ? 'bg-orange-50 border-orange-300 shadow-sm' : 'bg-white border-slate-300 hover:bg-slate-50'}`
-  }, React.createElement("div", {
-    className: `w-5 h-5 rounded border flex items-center justify-center transition-all flex-shrink-0 ${form.transport === '共乘' ? 'bg-orange-500 border-orange-500 text-white' : 'bg-white border-slate-300'}`
-  }, form.transport === '共乘' && React.createElement(Icon, {
-    name: "check",
-    size: 14
-  })), React.createElement("span", {
-    className: `text-sm ${form.transport === '共乘' ? 'text-orange-700 font-bold' : 'text-slate-500'}`
-  }, form.transport === '共乘' ? '共乘' : '自行前往')))), React.createElement("div", {
+  }, "\u4EA4\u901A"), React.createElement("select", {
+    className: `w-full p-2 border rounded outline-none focus:ring-2 focus:ring-orange-400 ${form.transport === '共乘' ? 'bg-orange-50 border-orange-300 text-orange-700 font-bold' : 'bg-white border-slate-300 text-slate-600'}`,
+    value: String(form.transport || '').trim(),
+    onChange: e => setForm({
+      ...form,
+      transport: e.target.value
+    })
+  }, transportOptions.map(option => React.createElement("option", {
+    key: option || 'unset',
+    value: option
+  }, option || "\u672A\u5B9A"))), React.createElement("div", {
+    className: "flex flex-wrap gap-1.5 mt-2"
+  }, ['共乘', '自行前往', ''].map(option => React.createElement("button", {
+    key: option || 'unset-button',
+    type: "button",
+    onClick: () => setForm({
+      ...form,
+      transport: option
+    }),
+    className: `px-2 py-1 rounded-full border text-[11px] font-bold transition ${String(form.transport || '').trim() === option ? option === '共乘' ? 'bg-orange-500 border-orange-500 text-white' : 'bg-slate-700 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`
+  }, option || "\u672A\u5B9A"))))), React.createElement("div", {
     className: "grid grid-cols-1 sm:grid-cols-2 gap-3"
   }, React.createElement("div", null, React.createElement("label", {
     className: "text-xs font-bold"
@@ -8158,7 +8166,10 @@ const EditRowModal = ({
     onClick: onClose,
     className: "px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg"
   }, "\u53D6\u6D88"), React.createElement("button", {
-    onClick: () => onSave(form),
+    onClick: () => onSave({
+      ...form,
+      transport: String(form.transport || '').trim()
+    }),
     className: "px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-md"
   }, "\u5132\u5B58\u8B8A\u66F4")))));
 };
