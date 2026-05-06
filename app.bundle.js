@@ -464,19 +464,19 @@ const DEFAULT_TASKS_TEMPLATE = [{
 }];
 const DEFAULT_STATUS_RULES = [{
   min: 0,
-  max: 10,
-  label: '報名中',
+  max: 8,
+  label: '舒適體驗｜8人以下',
   color: 'green'
 }, {
-  min: 11,
-  max: 20,
-  label: '最後席次',
+  min: 9,
+  max: 11,
+  label: '即將額滿',
   color: 'orange'
 }, {
-  min: 21,
+  min: 12,
   max: 999,
   label: '已額滿',
-  color: 'red'
+  color: 'slate'
 }];
 const DEFAULT_TAG_DEFS = {
   levels: ['一般大眾', '進階', '親子限定', '社群限定', '包團'],
@@ -919,6 +919,8 @@ const getPromiseStatus = (date, time) => {
   };
 };
 const getEventStatus = (count, capacity, config, dateStr, globalRules) => {
+  const participantCount = Math.max(0, parseInt(count, 10) || 0);
+  const fullThreshold = Math.max(1, parseInt(capacity, 10) || 12);
   if (dateStr) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -933,29 +935,26 @@ const getEventStatus = (count, capacity, config, dateStr, globalRules) => {
       };
     }
   }
-  if (capacity > 0 && count >= capacity) {
+  if (participantCount >= fullThreshold) {
     return {
-      label: '🈵 已額滿',
+      label: '已額滿',
       color: 'slate',
       colorObj: COLOR_OPTIONS.find(c => c.value === 'slate'),
       isFull: true
     };
   }
-  const rules = Array.isArray(config?.statusRules) && config.statusRules.length > 0 ? config.statusRules : Array.isArray(globalRules) ? globalRules : DEFAULT_STATUS_RULES;
-  const matchedRule = rules.find(r => r && count >= parseInt(r.min) && count <= parseInt(r.max));
-  if (matchedRule) {
-    const colorObj = COLOR_OPTIONS.find(c => c.value === matchedRule.color) || COLOR_OPTIONS[0];
+  if (participantCount >= 9) {
     return {
-      label: toSafeDisplayText(matchedRule.label, '報名中'),
-      color: toSafeDisplayText(matchedRule.color, 'blue'),
-      colorObj: colorObj || COLOR_OPTIONS[0],
+      label: `即將額滿｜目前 ${participantCount} 人`,
+      color: 'orange',
+      colorObj: COLOR_OPTIONS.find(c => c.value === 'orange'),
       isFull: false
     };
   }
   return {
-    label: '報名中',
-    color: 'blue',
-    colorObj: COLOR_OPTIONS[0],
+    label: '舒適體驗｜8人以下',
+    color: 'green',
+    colorObj: COLOR_OPTIONS.find(c => c.value === 'green'),
     isFull: false
   };
 };
@@ -13552,10 +13551,6 @@ const MainApp = () => {
         }, toSafeDisplayText(status.label, '報名中')), !status.isEnded && React.createElement("div", {
           className: "flex flex-col items-end gap-1"
         }, React.createElement("span", {
-          className: "text-[10px] text-slate-500 font-bold bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100"
-        }, "\u76EE\u524D: ", React.createElement("span", {
-          className: "text-blue-600"
-        }, e.count), " \u4EBA"), React.createElement("span", {
           className: `whitespace-nowrap text-right text-[10px] font-bold leading-4 ${carpoolDisplayMode === 'none' ? 'text-slate-400' : remainingCarpoolSeats > 0 ? 'text-orange-500' : 'text-rose-500'}`
         }, carpoolHint)))), (tags.levels || tags.types || tags.locations) && React.createElement("div", {
           className: "flex gap-2 mb-3"
