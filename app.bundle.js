@@ -344,6 +344,57 @@ const readFlag = (key, defaultValue = false) => {
 const ANALYTICS_WRITE_ENABLED = readFlag('crm_enable_analytics_write', true);
 const MASCOT_WRITE_ENABLED = readFlag('crm_enable_mascot_write', true);
 const CSV_HEADER = "日期,活動名稱,講師,客戶姓名,金額,交通方式,身分證字號,生日,Email,報名管道,社群暱稱,備註,訂購日,手機,報到狀態";
+const parseCsvLine = line => {
+  const cells = [];
+  let current = '';
+  let inQuotes = false;
+  const text = String(line || '');
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    if (char === '"') {
+      if (inQuotes && text[i + 1] === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      cells.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  cells.push(current);
+  return cells;
+};
+const parseCsvDataRows = raw => {
+  const normalizedRaw = String(raw || '').trim();
+  if (!normalizedRaw) return [];
+  const lines = normalizedRaw.split(/\r?\n/);
+  return lines.slice(1).map((line, i) => {
+    const v = parseCsvLine(line);
+    if (v.length < 5) return null;
+    return {
+      id: i,
+      date: v[0]?.trim(),
+      eventName: v[1]?.trim(),
+      instructor: v[2]?.trim(),
+      customerName: v[3]?.trim(),
+      price: parseInt(v[4], 10) || 0,
+      transport: v[5]?.trim(),
+      idNo: v[6]?.trim(),
+      birthday: v[7]?.trim(),
+      email: v[8]?.trim(),
+      source: v[9]?.trim(),
+      socialName: v[10]?.trim(),
+      notes: v[11]?.trim(),
+      orderDate: v[12]?.trim(),
+      phone: v[13]?.trim(),
+      isCheckedIn: v[14]?.trim() === '1'
+    };
+  }).filter(row => row && row.date);
+};
 const getLocalDateStr = () => {
   const d = new Date();
   const offset = d.getTimezoneOffset() * 60000;
@@ -10199,35 +10250,7 @@ const MainApp = () => {
     }
     const updateParsedData = raw => {
       try {
-        const normalizedRaw = String(raw || '').trim();
-        if (!normalizedRaw) {
-          setParsedData([]);
-          return;
-        }
-        const lines = normalizedRaw.split('\n');
-        const data = lines.slice(1).map((line, i) => {
-          const v = line.split(',');
-          if (v.length < 5) return null;
-          return {
-            id: i,
-            date: v[0]?.trim(),
-            eventName: v[1]?.trim(),
-            instructor: v[2]?.trim(),
-            customerName: v[3]?.trim(),
-            price: parseInt(v[4]) || 0,
-            transport: v[5]?.trim(),
-            idNo: v[6]?.trim(),
-            birthday: v[7]?.trim(),
-            email: v[8]?.trim(),
-            source: v[9]?.trim(),
-            socialName: v[10]?.trim(),
-            notes: v[11]?.trim(),
-            orderDate: v[12]?.trim(),
-            phone: v[13]?.trim(),
-            isCheckedIn: v[14]?.trim() === '1'
-          };
-        }).filter(row => row && row.date);
-        setParsedData(data);
+        setParsedData(parseCsvDataRows(raw));
       } catch (e) {
         console.error(e);
       }
@@ -11231,6 +11254,7 @@ const MainApp = () => {
         merge: true
       });
       setCsvInput(newData);
+      setParsedData(parseCsvDataRows(newData));
       setCsvSaveStatus('success');
       setTimeout(() => setCsvSaveStatus('idle'), 3000);
     } catch (e) {
