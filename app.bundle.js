@@ -317,15 +317,12 @@ const addDoc = async (collRef, data) => {
   }
 };
 const writeBatch = dbInstance => dbInstance.batch();
-const getOnce = async ref => {
-  if (!ref) return null;
-  try {
-    const snap = await ref.get();
-    return wrapSnapshot(snap);
-  } catch (error) {
-    console.warn("Firestore 一次性讀取失敗:", error);
-    return null;
-  }
+const onSnapshot = (ref, callback, onError) => {
+  if (!ref) return () => {};
+  return ref.onSnapshot(snap => callback(wrapSnapshot(snap)), error => {
+    console.warn("Firestore 即時讀取失敗:", error);
+    if (onError) onError(error);
+  });
 };
 const signInAnonymously = authInstance => authInstance.signInAnonymously();
 const onAuthStateChanged = (authInstance, callback) => authInstance.onAuthStateChanged(callback);
@@ -8966,41 +8963,36 @@ const AnalyticsDashboard = ({
       setLoading(false);
       return;
     }
-    let cancelled = false;
     const basePath = `artifacts/${dbSource}/analytics`;
     const todayStr = getLocalDateStr();
-    const loadAnalyticsOnce = async () => {
-      try {
-        const totalSnap = await getOnce(doc(db, basePath, 'stats', 'overview', 'total'));
-        if (cancelled) return;
-        const totalData = totalSnap && totalSnap.exists() ? sanitizeFirebaseValue(totalSnap.data() || {}) : {};
-        setStats(prev => ({
-          ...prev,
-          total: totalData.count || 0
-        }));
-        const dailySnap = await getOnce(doc(db, basePath, 'stats', 'daily', todayStr));
-        if (cancelled) return;
-        const dailyData = dailySnap && dailySnap.exists() ? sanitizeFirebaseValue(dailySnap.data() || {}) : {};
-        setStats(prev => ({
-          ...prev,
-          today: dailyData.count || 0
-        }));
-        const sessionsSnap = await getOnce(collection(db, basePath, 'traffic', 'sessions'));
-        if (cancelled) return;
-        const list = [];
-        if (sessionsSnap) sessionsSnap.forEach(doc => list.push({
-          id: doc.id,
-          ...sanitizeFirebaseValue(doc.data() || {})
-        }));
-        list.sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
-        setSessions(list);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    loadAnalyticsOnce();
+    const unsubTotal = onSnapshot(doc(db, basePath, 'stats', 'overview', 'total'), s => {
+      const totalData = s && s.exists() ? sanitizeFirebaseValue(s.data() || {}) : {};
+      setStats(prev => ({
+        ...prev,
+        total: totalData.count || 0
+      }));
+    });
+    const unsubDaily = onSnapshot(doc(db, basePath, 'stats', 'daily', todayStr), s => {
+      const dailyData = s && s.exists() ? sanitizeFirebaseValue(s.data() || {}) : {};
+      setStats(prev => ({
+        ...prev,
+        today: dailyData.count || 0
+      }));
+    });
+    const unsubSessions = onSnapshot(collection(db, basePath, 'traffic', 'sessions'), snapshot => {
+      const list = [];
+      if (snapshot) snapshot.forEach(doc => list.push({
+        id: doc.id,
+        ...sanitizeFirebaseValue(doc.data() || {})
+      }));
+      list.sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
+      setSessions(list);
+      setLoading(false);
+    });
     return () => {
-      cancelled = true;
+      if (unsubTotal) unsubTotal();
+      if (unsubDaily) unsubDaily();
+      if (unsubSessions) unsubSessions();
     };
   }, [db, dbSource]);
   const processHourlyData = useMemo(() => {
@@ -10258,69 +10250,64 @@ const MainApp = () => {
     const mainRef = doc(db, basePath, 'settings', 'main');
     const configsRef = collection(db, basePath, 'event_configs');
     const scheduleRef = doc(db, basePath, 'settings', 'schedule');
-    let cancelled = false;
-    const loadBaseDataOnce = async () => {
-      try {
-        const s = await getOnce(mainRef);
-        if (cancelled) return;
-        if (s && s.exists()) {
-          const data = sanitizeFirebaseValue(s.data() || {});
-          const d = data.csvData || '';
-          if (data.globalRules) setGlobalRules(normalizeStatusRulesForDisplay(data.globalRules));
-          if (data.tagDefinitions) setTagDefinitions(normalizeTagDefinitionsForDisplay(data.tagDefinitions));
-          setPerformanceProductSettings(data.performanceProductSettings || {});
-          setMonthlyKpis(data.monthlyKpis || {});
-          setLegacyMonthlyPlans(data.monthlyPlans || {});
-          if (data.latestNews) setLatestNews(data.latestNews);
-          if (data.marqueeSpeed) setMarqueeSpeed(data.marqueeSpeed);
-          if (data.marqueeIcon) setMarqueeIcon(data.marqueeIcon);
-          if (data.marqueeIconHistory) setMarqueeIconHistory(data.marqueeIconHistory);
-          if (data.marqueeBgColor) setMarqueeBgColor(data.marqueeBgColor);
-          if (data.marqueeTextColor) setMarqueeTextColor(data.marqueeTextColor);
-          if (data.marqueeIconSize) setMarqueeIconSize(data.marqueeIconSize);
-          if (data.mascotConfig) setMascotConfig(data.mascotConfig);
-          if (Array.isArray(data.outingPosterConfig)) setOutingPosterConfig(data.outingPosterConfig);
-          if (data.publicTheme) setPublicTheme(normalizePublicTheme(data.publicTheme));
-          if (data.publicSideDecor) setPublicSideDecor(normalizePublicSideDecor(data.publicSideDecor));
-          if (!isEditingRef.current) {
-            setCsvInput(d);
-            updateParsedData(d);
-          }
-        } else {
-          setPerformanceProductSettings({});
-          setMonthlyKpis({});
-          setLegacyMonthlyPlans({});
-          if (!isEditingRef.current) {
-            setCsvInput('');
-            setParsedData([]);
-          }
+    const unsubMain = onSnapshot(mainRef, s => {
+      if (s && s.exists()) {
+        const data = sanitizeFirebaseValue(s.data() || {});
+        const d = data.csvData || '';
+        if (data.globalRules) setGlobalRules(normalizeStatusRulesForDisplay(data.globalRules));
+        if (data.tagDefinitions) setTagDefinitions(normalizeTagDefinitionsForDisplay(data.tagDefinitions));
+        setPerformanceProductSettings(data.performanceProductSettings || {});
+        setMonthlyKpis(data.monthlyKpis || {});
+        setLegacyMonthlyPlans(data.monthlyPlans || {});
+        if (data.latestNews) setLatestNews(data.latestNews);
+        if (data.marqueeSpeed) setMarqueeSpeed(data.marqueeSpeed);
+        if (data.marqueeIcon) setMarqueeIcon(data.marqueeIcon);
+        if (data.marqueeIconHistory) setMarqueeIconHistory(data.marqueeIconHistory);
+        if (data.marqueeBgColor) setMarqueeBgColor(data.marqueeBgColor);
+        if (data.marqueeTextColor) setMarqueeTextColor(data.marqueeTextColor);
+        if (data.marqueeIconSize) setMarqueeIconSize(data.marqueeIconSize);
+        if (data.mascotConfig) setMascotConfig(data.mascotConfig);
+        if (Array.isArray(data.outingPosterConfig)) setOutingPosterConfig(data.outingPosterConfig);
+        if (data.publicTheme) setPublicTheme(normalizePublicTheme(data.publicTheme));
+        if (data.publicSideDecor) setPublicSideDecor(normalizePublicSideDecor(data.publicSideDecor));
+        if (!isEditingRef.current) {
+          setCsvInput(d);
+          updateParsedData(d);
         }
-        const configsSnap = await getOnce(configsRef);
-        if (cancelled) return;
-        const cfgs = {};
-        if (configsSnap) configsSnap.forEach(d => {
-          cfgs[d.id] = normalizeEventConfigForDisplay(sanitizeFirebaseValue(d.data() || {}));
-        });
-        setEventConfigs(cfgs);
-        const scheduleSnap = await getOnce(scheduleRef);
-        if (cancelled) return;
-        if (scheduleSnap && scheduleSnap.exists()) {
-          const scheduleData = sanitizeFirebaseValue(scheduleSnap.data() || {});
-          setInstructorSchedule(scheduleData.resting || {});
-          setCompanyRestDates(scheduleData.companyRest || []);
-          setOutingDays(scheduleData.outingDays || {});
-        } else {
-          setInstructorSchedule({});
-          setCompanyRestDates([]);
-          setOutingDays({});
+      } else {
+        setPerformanceProductSettings({});
+        setMonthlyKpis({});
+        setLegacyMonthlyPlans({});
+        if (!isEditingRef.current) {
+          setCsvInput('');
+          setParsedData([]);
         }
-      } finally {
-        if (!cancelled) setLoading(false);
       }
-    };
-    loadBaseDataOnce();
+      setLoading(false);
+    });
+    const unsubConfigs = onSnapshot(configsRef, s => {
+      const cfgs = {};
+      if (s) s.forEach(d => {
+        cfgs[d.id] = normalizeEventConfigForDisplay(sanitizeFirebaseValue(d.data() || {}));
+      });
+      setEventConfigs(cfgs);
+    });
+    const unsubSchedule = onSnapshot(scheduleRef, s => {
+      if (s && s.exists()) {
+        const scheduleData = sanitizeFirebaseValue(s.data() || {});
+        setInstructorSchedule(scheduleData.resting || {});
+        setCompanyRestDates(scheduleData.companyRest || []);
+        setOutingDays(scheduleData.outingDays || {});
+      } else {
+        setInstructorSchedule({});
+        setCompanyRestDates([]);
+        setOutingDays({});
+      }
+    });
     return () => {
-      cancelled = true;
+      if (unsubMain) unsubMain();
+      if (unsubConfigs) unsubConfigs();
+      if (unsubSchedule) unsubSchedule();
     };
   }, [user, db, dbSource]);
   useEffect(() => {
@@ -10331,9 +10318,7 @@ const MainApp = () => {
       return undefined;
     }
     const settingsRef = doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'auth');
-    let cancelled = false;
-    getOnce(settingsRef).then(s => {
-      if (cancelled) return;
+    return onSnapshot(settingsRef, s => {
       if (s && s.exists()) {
         const authData = sanitizeFirebaseValue(s.data() || {});
         const fallbackPassword = authData.password || '8888';
@@ -10344,9 +10329,6 @@ const MainApp = () => {
         setAuthAccounts(normalizeAuthAccounts([], '8888'));
       }
     });
-    return () => {
-      cancelled = true;
-    };
   }, [canLoadAdminData, db, dbSource, shouldLoadAuthSettings]);
   useEffect(() => {
     if (!canLoadAdminData || !shouldLoadTemplates) return undefined;
@@ -10356,46 +10338,33 @@ const MainApp = () => {
     }
     setTemplatesLoadState('loading');
     const templatesRef = doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'templates');
-    let cancelled = false;
-    getOnce(templatesRef).then(s => {
-      if (cancelled) return;
+    return onSnapshot(templatesRef, s => {
       if (s && s.exists()) {
         setCustomTemplates(sanitizeFirebaseValue(s.data() || {})?.list || []);
       } else {
         setCustomTemplates([]);
       }
       setTemplatesLoadState('success');
-    }).catch(error => {
-      if (cancelled) return;
+    }, error => {
       console.error('Template subscription failed', error);
       setTemplatesLoadState('error');
     });
-    return () => {
-      cancelled = true;
-    };
   }, [canLoadAdminData, db, dbSource, shouldLoadTemplates, templatesReloadSeed]);
   useEffect(() => {
     if (!canLoadAdminData || !shouldLoadMonthlyPlans || !db) return undefined;
     const monthlyPlansRef = collection(db, `artifacts/${dbSource}/public/data`, 'monthly_plans');
-    let cancelled = false;
-    getOnce(monthlyPlansRef).then(s => {
-      if (cancelled) return;
+    return onSnapshot(monthlyPlansRef, s => {
       const nextPlans = {};
       if (s) s.forEach(d => {
         nextPlans[d.id] = sanitizeFirebaseValue(d.data() || {});
       });
       setStoredMonthlyPlanDocs(nextPlans);
     });
-    return () => {
-      cancelled = true;
-    };
   }, [canLoadAdminData, db, dbSource, shouldLoadMonthlyPlans]);
   useEffect(() => {
     if (!canLoadAdminData || !shouldLoadProjects || !db) return undefined;
     const projectsRef = collection(db, `artifacts/${dbSource}/public/data`, 'projects');
-    let cancelled = false;
-    getOnce(projectsRef).then(s => {
-      if (cancelled) return;
+    return onSnapshot(projectsRef, s => {
       const nextProjects = [];
       if (s) s.forEach(d => nextProjects.push({
         id: d.id,
@@ -10403,16 +10372,11 @@ const MainApp = () => {
       }));
       setProjects(nextProjects);
     });
-    return () => {
-      cancelled = true;
-    };
   }, [canLoadAdminData, db, dbSource, shouldLoadProjects]);
   useEffect(() => {
     if (!canLoadAdminData || !shouldLoadPromises || !db) return undefined;
     const promisesRef = collection(db, `artifacts/${dbSource}/public/data`, 'promises');
-    let cancelled = false;
-    getOnce(promisesRef).then(s => {
-      if (cancelled) return;
+    return onSnapshot(promisesRef, s => {
       const nextPromises = [];
       if (s) s.forEach(d => nextPromises.push({
         id: d.id,
@@ -10420,9 +10384,6 @@ const MainApp = () => {
       }));
       setPromises(nextPromises.sort((a, b) => new Date(a.date + 'T' + a.time) - new Date(b.date + 'T' + b.time)));
     });
-    return () => {
-      cancelled = true;
-    };
   }, [canLoadAdminData, db, dbSource, shouldLoadPromises]);
   useEffect(() => {
     if (!user && viewMode === 'public' || viewMode === 'admin' && !canLoadAdminData || !shouldLoadDailyStats) return undefined;
@@ -10432,14 +10393,9 @@ const MainApp = () => {
     }
     const todayStr = getLocalDateStr();
     const analyticsRef = doc(db, `artifacts/${dbSource}/analytics`, 'stats', 'daily', todayStr);
-    let cancelled = false;
-    getOnce(analyticsRef).then(s => {
-      if (cancelled) return;
+    return onSnapshot(analyticsRef, s => {
       if (s && s.exists()) setDailyStats(sanitizeFirebaseValue(s.data() || {}));else setDailyStats({});
     });
-    return () => {
-      cancelled = true;
-    };
   }, [user, db, dbSource, shouldLoadDailyStats, viewMode, canLoadAdminData]);
   const validAdminPasswords = useMemo(() => Array.from(new Set([String(adminPassword || '').trim(), ...authAccounts.map(account => String(account.password || '').trim())].filter(Boolean))), [adminPassword, authAccounts]);
   const handleVerifyLogin = (inputPwd, callback) => {
@@ -12219,9 +12175,7 @@ const MainApp = () => {
     const basePath = `artifacts/${dbSource}/public/data`;
     const versionsRef = collection(db, basePath, 'monthly_plans', currentMonthKey, 'versions');
     const versionsQuery = versionsRef && typeof versionsRef.orderBy === 'function' ? versionsRef.orderBy('savedAtMs', 'desc').limit(8) : versionsRef;
-    let cancelled = false;
-    getOnce(versionsQuery).then(snapshot => {
-      if (cancelled) return;
+    return onSnapshot(versionsQuery, snapshot => {
       const nextVersions = [];
       if (snapshot) snapshot.forEach(d => nextVersions.push({
         id: d.id,
@@ -12230,9 +12184,6 @@ const MainApp = () => {
       nextVersions.sort((a, b) => (Number(b.savedAtMs) || 0) - (Number(a.savedAtMs) || 0));
       setCurrentMonthPlanVersions(nextVersions);
     });
-    return () => {
-      cancelled = true;
-    };
   }, [db, user, dbSource, currentMonthKey, viewMode, activeTab]);
   useEffect(() => {
     if (!db || !user || viewMode !== 'admin' || activeTab !== 'events') {
@@ -12241,9 +12192,7 @@ const MainApp = () => {
     }
     const basePath = `artifacts/${dbSource}/public/data`;
     const versionsRef = collection(db, basePath, 'event_schedule_versions');
-    let cancelled = false;
-    getOnce(versionsRef).then(snapshot => {
-      if (cancelled) return;
+    return onSnapshot(versionsRef, snapshot => {
       const nextVersions = [];
       if (snapshot) snapshot.forEach(d => nextVersions.push({
         id: d.id,
@@ -12255,9 +12204,6 @@ const MainApp = () => {
         return monthKeys.includes(currentMonthKey);
       }).slice(0, 8));
     });
-    return () => {
-      cancelled = true;
-    };
   }, [db, user, dbSource, currentMonthKey, viewMode, activeTab]);
   useEffect(() => {
     setEventVersionStatus({
