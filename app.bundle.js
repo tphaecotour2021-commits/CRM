@@ -615,6 +615,12 @@ const DEFAULT_OUTING_POSTER_CONFIG = [{
   label: '野外觀察',
   weight: 25
 }];
+const DEFAULT_POSTER_NAME_OVERRIDES = [];
+const normalizePosterNameOverrides = list => (Array.isArray(list) ? list : []).map((item, index) => ({
+  id: String(item?.id || `poster_name_${index}_${Date.now()}`),
+  sourceName: String(item?.sourceName || item?.backendName || item?.from || '').trim(),
+  posterName: String(item?.posterName || item?.displayName || item?.to || '').trim()
+})).filter(item => item.sourceName && item.posterName);
 const DEFAULT_CARPOOL_CAPACITY = 4;
 const CARPOOL_DISPLAY_MODE_OPTIONS = [{
   value: 'normal',
@@ -1409,10 +1415,14 @@ const normalizeEventConfigForDisplay = (config = {}) => {
     statusRules: normalizeStatusRulesForDisplay(rawRules)
   };
 };
-const resolvePosterEventName = (evt = {}, cfg = {}) => {
+const resolvePosterEventName = (evt = {}, cfg = {}, posterNameOverrides = []) => {
   const rawInternalName = String(evt?.eventName || cfg?.eventName || '').trim();
   const rawDisplayName = String(cfg?.displayName || '').trim();
   const rawCategoryName = String(cfg?.activityCategory || '').trim();
+  const normalizeNameKey = value => String(value || '').trim().replace(/\s+/g, '');
+  const overrideMap = new Map(normalizePosterNameOverrides(posterNameOverrides).map(item => [normalizeNameKey(item.sourceName), item.posterName]));
+  const overrideName = overrideMap.get(normalizeNameKey(rawInternalName)) || overrideMap.get(normalizeNameKey(rawDisplayName)) || overrideMap.get(normalizeNameKey(rawCategoryName));
+  if (overrideName) return overrideName;
   const bucket = inferSchedulePosterBucket(evt, cfg);
   const exactReserved = ['預定中', '包團'];
   if (exactReserved.includes(rawInternalName)) return rawInternalName;
@@ -1427,7 +1437,8 @@ const resolvePosterEventName = (evt = {}, cfg = {}) => {
 const buildMonthlySchedulePosterData = ({
   currentDate,
   events,
-  eventConfigs
+  eventConfigs,
+  posterNameOverrides = []
 }) => {
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -1441,7 +1452,7 @@ const buildMonthlySchedulePosterData = ({
     if (!evt?.date) return;
     const cfg = eventConfigs?.[evt.key] || {};
     if (cfg.isCancelled) return;
-    const displayName = resolvePosterEventName(evt, cfg);
+    const displayName = resolvePosterEventName(evt, cfg, posterNameOverrides);
     const time = String(cfg.time || '').trim();
     if (!displayName) return;
     const bucket = inferSchedulePosterBucket(evt, cfg);
@@ -2837,6 +2848,157 @@ const OutingPosterSettingsModal = ({
     onClick: () => onSave(list),
     className: "px-5 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm font-bold"
   }, "\u5132\u5B58\u8A2D\u5B9A"))));
+};
+const PosterNameOverrideSettingsModal = ({
+  currentList,
+  eventNames = [],
+  onClose,
+  onSave
+}) => {
+  const [list, setList] = useState(normalizePosterNameOverrides(currentList));
+  const [draft, setDraft] = useState({
+    sourceName: '',
+    posterName: ''
+  });
+  const [editIdx, setEditIdx] = useState(null);
+  const suggestions = useMemo(() => Array.from(new Set((eventNames || []).map(name => String(name || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'zh-Hant')), [eventNames]);
+  const resetDraft = () => {
+    setDraft({
+      sourceName: '',
+      posterName: ''
+    });
+    setEditIdx(null);
+  };
+  const handleAddOrUpdate = () => {
+    const row = {
+      id: editIdx === null ? `poster_name_${Date.now()}` : list[editIdx]?.id || `poster_name_${Date.now()}`,
+      sourceName: String(draft.sourceName || '').trim(),
+      posterName: String(draft.posterName || '').trim()
+    };
+    if (!row.sourceName || !row.posterName) return alert('請填寫後台名稱與圖片顯示名稱。');
+    const next = [...list];
+    if (editIdx === null) {
+      const existingIndex = next.findIndex(item => item.sourceName.replace(/\s+/g, '') === row.sourceName.replace(/\s+/g, ''));
+      if (existingIndex >= 0) next[existingIndex] = row;else next.push(row);
+    } else {
+      next[editIdx] = row;
+    }
+    setList(normalizePosterNameOverrides(next));
+    resetDraft();
+  };
+  const handleEdit = idx => {
+    setEditIdx(idx);
+    setDraft({
+      sourceName: list[idx]?.sourceName || '',
+      posterName: list[idx]?.posterName || ''
+    });
+  };
+  const handleDelete = idx => {
+    setList(list.filter((_, i) => i !== idx));
+    if (editIdx === idx) resetDraft();
+  };
+  return React.createElement("div", {
+    className: "fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 fade-in backdrop-blur-sm"
+  }, React.createElement("div", {
+    className: "bg-white rounded-2xl w-full shadow-2xl overflow-hidden flex flex-col",
+    style: {
+      maxWidth: 520,
+      maxHeight: 'calc(100vh - 32px)'
+    }
+  }, React.createElement("div", {
+    className: "p-3 border-b flex justify-between items-center bg-slate-50 flex-shrink-0"
+  }, React.createElement("div", null, React.createElement("h3", {
+    className: "text-lg font-bold text-slate-800 flex items-center gap-2"
+  }, React.createElement(Icon, {
+    name: "type"
+  }), " \u6708\u66C6\u6D77\u5831\u540D\u7A31\u5C0D\u7167"), React.createElement("p", {
+    className: "text-xs text-slate-500 mt-1"
+  }, "\u53EA\u5F71\u97FF\u6708\u66C6\u5716\u4E0A\u7684\u6D3B\u52D5\u540D\u7A31\uFF0C\u4E0D\u6703\u6539\u5F8C\u53F0\u540D\u7A31\u6216\u524D\u53F0\u8A02\u7968\u8CC7\u6599\u3002")), React.createElement("button", {
+    onClick: onClose
+  }, React.createElement(Icon, {
+    name: "x",
+    className: "text-slate-400 hover:text-slate-600"
+  }))), React.createElement("div", {
+    className: "p-4 space-y-3 overflow-y-auto"
+  }, React.createElement("datalist", {
+    id: "poster-name-source-suggestions"
+  }, suggestions.map(name => React.createElement("option", {
+    key: name,
+    value: name
+  }))), React.createElement("div", {
+    className: "space-y-2"
+  }, React.createElement("div", {
+    className: "flex items-center justify-between px-1 text-[11px] font-bold text-slate-400"
+  }, React.createElement("span", null, "\u5DF2\u5132\u5B58 ", list.length, " \u7B46"), list.length > 0 && React.createElement("span", null, "\u9EDE\u925B\u7B46\u7DE8\u8F2F")), React.createElement("div", {
+    className: "max-h-36 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100 bg-white"
+  }, list.length === 0 && React.createElement("div", {
+    className: "text-xs text-slate-400 p-3 text-center"
+  }, "\u5C1A\u7121\u5C0D\u7167\u8868\u3002\u6C92\u6709\u8A2D\u5B9A\u6642\uFF0C\u7CFB\u7D71\u6703\u6CBF\u7528\u76EE\u524D\u7684\u6D77\u5831\u547D\u540D\u898F\u5247\u3002"), list.map((item, idx) => React.createElement("div", {
+    key: item.id || `${item.sourceName}_${idx}`,
+    className: `px-2 py-1.5 flex items-center gap-1.5 text-xs ${editIdx === idx ? 'bg-amber-50' : 'bg-white hover:bg-slate-50'}`
+  }, React.createElement("div", {
+    className: "flex-1 min-w-0 grid gap-1.5 items-center",
+    style: {
+      gridTemplateColumns: 'minmax(0, 1fr) 14px minmax(0, .75fr)'
+    }
+  }, React.createElement("div", {
+    className: "truncate font-semibold text-slate-700",
+    title: item.sourceName
+  }, item.sourceName), React.createElement("div", {
+    className: "text-slate-300 font-bold text-center"
+  }, "\u2192"), React.createElement("div", {
+    className: "truncate font-bold text-emerald-700",
+    title: item.posterName
+  }, item.posterName)), React.createElement("button", {
+    onClick: () => handleEdit(idx),
+    className: "p-1 text-blue-500 hover:bg-blue-50 rounded"
+  }, React.createElement(Icon, {
+    name: "edit-2",
+    size: 13
+  })), React.createElement("button", {
+    onClick: () => handleDelete(idx),
+    className: "p-1 text-red-500 hover:bg-red-50 rounded"
+  }, React.createElement(Icon, {
+    name: "trash-2",
+    size: 13
+  })))))), React.createElement("div", {
+    className: `p-3 rounded-xl border ${editIdx !== null ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`
+  }, React.createElement("div", {
+    className: "grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-2"
+  }, React.createElement("input", {
+    type: "text",
+    list: "poster-name-source-suggestions",
+    className: "p-2 border rounded-lg text-sm",
+    placeholder: "\u5F8C\u53F0\u540D\u7A31\uFF0C\u4F8B\u5982\uFF1A\u9F2F\u5F71\u9F2F\u8E64\uFF0D\u591C\u8A2A\u98DB\u9F20\u5927\u5B89\u5834",
+    value: draft.sourceName,
+    onChange: e => setDraft({
+      ...draft,
+      sourceName: e.target.value
+    })
+  }), React.createElement("input", {
+    type: "text",
+    className: "p-2 border rounded-lg text-sm",
+    placeholder: "\u5716\u4E0A\u986F\u793A\uFF0C\u4F8B\u5982\uFF1A\u5927\u5B89\u9F20",
+    value: draft.posterName,
+    onChange: e => setDraft({
+      ...draft,
+      posterName: e.target.value
+    })
+  }), React.createElement("button", {
+    onClick: handleAddOrUpdate,
+    className: "px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold hover:bg-slate-700"
+  }, editIdx !== null ? '\u66F4\u65B0' : '\u65B0\u589E')), editIdx !== null && React.createElement("button", {
+    onClick: resetDraft,
+    className: "mt-2 text-xs text-slate-500 hover:text-slate-700"
+  }, "\u53D6\u6D88\u7DE8\u8F2F"))), React.createElement("div", {
+    className: "p-3 border-t bg-slate-50 flex justify-end gap-2 flex-shrink-0"
+  }, React.createElement("button", {
+    onClick: onClose,
+    className: "px-4 py-2 text-slate-500 hover:bg-slate-200 rounded-lg text-sm"
+  }, "\u53D6\u6D88"), React.createElement("button", {
+    onClick: () => onSave(normalizePosterNameOverrides(list)),
+    className: "px-5 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-bold"
+  }, "\u5132\u5B58\u5C0D\u7167\u8868"))));
 };
 const PosterActivitySelectionModal = ({
   options,
@@ -9960,6 +10122,8 @@ const MainApp = () => {
   const [showMascotSettings, setShowMascotSettings] = useState(false);
   const [outingPosterConfig, setOutingPosterConfig] = useState(DEFAULT_OUTING_POSTER_CONFIG);
   const [showOutingPosterSettings, setShowOutingPosterSettings] = useState(false);
+  const [posterNameOverrides, setPosterNameOverrides] = useState(DEFAULT_POSTER_NAME_OVERRIDES);
+  const [showPosterNameSettings, setShowPosterNameSettings] = useState(false);
   const [outingDays, setOutingDays] = useState({});
   const [publicTheme, setPublicTheme] = useState(DEFAULT_PUBLIC_THEME);
   const [publicSideDecor, setPublicSideDecor] = useState(DEFAULT_PUBLIC_SIDE_DECOR);
@@ -10268,6 +10432,7 @@ const MainApp = () => {
         if (data.marqueeIconSize) setMarqueeIconSize(data.marqueeIconSize);
         if (data.mascotConfig) setMascotConfig(data.mascotConfig);
         if (Array.isArray(data.outingPosterConfig)) setOutingPosterConfig(data.outingPosterConfig);
+        if (Array.isArray(data.posterNameOverrides)) setPosterNameOverrides(normalizePosterNameOverrides(data.posterNameOverrides));
         if (data.publicTheme) setPublicTheme(normalizePublicTheme(data.publicTheme));
         if (data.publicSideDecor) setPublicSideDecor(normalizePublicSideDecor(data.publicSideDecor));
         if (!isEditingRef.current) {
@@ -10492,7 +10657,8 @@ const MainApp = () => {
       const posterData = buildMonthlySchedulePosterData({
         currentDate,
         events: stats.events,
-        eventConfigs
+        eventConfigs,
+        posterNameOverrides
       });
       if (posterData.entryCount === 0) {
         alert(`目前 ${posterData.year} 年 ${posterData.month + 1} 月沒有可生成的活動資料。`);
@@ -13507,6 +13673,7 @@ const MainApp = () => {
         types: toSafeDisplayText(rawTags.types, ''),
         locations: toSafeDisplayText(rawTags.locations, '')
       };
+      const isPrivateGroupEvent = tags.levels === '包團' || displayName.includes('包團') || e.eventName === '包團';
       const carpoolDisplayMode = resolveCarpoolDisplayMode(cfg.carpoolDisplayMode, e.eventName);
       const carpoolCount = Array.isArray(e.customers) ? e.customers.filter(customer => customer && customer.transport === '共乘').length : 0;
       const remainingCarpoolSeats = Math.max(DEFAULT_CARPOOL_CAPACITY - carpoolCount, 0);
@@ -13528,8 +13695,8 @@ const MainApp = () => {
         }, displayName)), React.createElement("div", {
           className: "flex flex-col items-end gap-1"
         }, React.createElement("span", {
-          className: `text-xs px-2 py-1 rounded-lg font-bold ${statusBadgeClass}`
-        }, toSafeDisplayText(status.label, '報名中')), !status.isEnded && React.createElement("div", {
+          className: `text-xs px-2 py-1 rounded-lg font-bold ${isPrivateGroupEvent ? 'bg-amber-50 text-amber-700 border border-amber-200' : statusBadgeClass}`
+        }, isPrivateGroupEvent ? "\u5305\u5718\u4E0D\u5C0D\u5916\u958B\u653E\u5831\u540D" : toSafeDisplayText(status.label, '報名中')), !status.isEnded && React.createElement("div", {
           className: "flex flex-col items-end gap-1"
         }, React.createElement("span", {
           className: `whitespace-nowrap text-right text-[10px] font-bold leading-4 ${carpoolDisplayMode === 'none' ? 'text-slate-400' : remainingCarpoolSeats > 0 ? 'text-orange-500' : 'text-rose-500'}`
@@ -13890,7 +14057,7 @@ const MainApp = () => {
   }, "\u6D3B\u52D5\u5834\u6B21"), React.createElement("div", {
     className: "text-[11px] text-slate-400 mt-1"
   }, "Build: ", APP_BUILD)), React.createElement("div", {
-    className: "flex gap-3"
+    className: "flex gap-3 flex-wrap justify-end"
   }, React.createElement("button", {
     onClick: handleOpenMonthlyPosterGenerator,
     disabled: posterGenerating,
@@ -13899,6 +14066,12 @@ const MainApp = () => {
     name: "image",
     size: 14
   }), posterGenerating ? '生成中...' : '生成月曆海報（PNG + HTML）'), React.createElement("button", {
+    onClick: () => setShowPosterNameSettings(true),
+    className: "bg-white hover:bg-slate-50 text-slate-700 px-3 py-1.5 text-xs font-bold rounded-lg flex items-center gap-2 shadow-md border border-slate-200"
+  }, React.createElement(Icon, {
+    name: "edit-3",
+    size: 14
+  }), " \u6D77\u5831\u540D\u7A31\u5C0D\u7167"), React.createElement("button", {
     onClick: handleExportCurrentCsvAsTxt,
     className: "bg-white hover:bg-slate-50 text-slate-700 px-3 py-1.5 text-xs font-bold rounded-lg flex items-center gap-2 shadow-md border border-slate-200"
   }, React.createElement(Icon, {
@@ -14124,6 +14297,7 @@ const MainApp = () => {
     const dateStr = day ? `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` : '';
     const dayItems = day ? calendarOccupancy[dateStr] || [] : [];
     const isCompanyRestDay = day ? companyRestDates.includes(dateStr) : false;
+    const isTodayCell = day ? dateStr === getLocalDateStr() : false;
     return React.createElement("div", {
       key: i,
       onClick: () => {
@@ -14131,12 +14305,14 @@ const MainApp = () => {
           openCreateEventModal(dateStr);
         }
       },
-      className: `border-b border-r border-slate-200 p-1 md:p-2 relative group ${day ? isCompanyRestDay ? 'bg-slate-50/70 cursor-not-allowed' : 'hover:bg-blue-50 cursor-pointer' : 'bg-slate-50/50'}`
+      className: `border-b border-r border-slate-200 p-1 md:p-2 relative group ${day ? isCompanyRestDay ? 'bg-slate-50/70 cursor-not-allowed' : 'hover:bg-blue-50 cursor-pointer' : 'bg-slate-50/50'} ${isTodayCell ? 'ring-2 ring-amber-300 ring-inset bg-amber-50/80' : ''}`
     }, day && React.createElement(React.Fragment, null, React.createElement("div", {
       className: "flex justify-between items-start"
     }, React.createElement("div", {
-      className: "text-sm font-medium mb-1 group-hover:text-blue-600 transition-colors"
-    }, day), React.createElement("button", {
+      className: `text-sm font-medium mb-1 group-hover:text-blue-600 transition-colors ${isTodayCell ? 'text-amber-700 font-black' : ''}`
+    }, day, isTodayCell && React.createElement("span", {
+      className: "ml-1 inline-flex items-center rounded-full bg-amber-400/20 border border-amber-300 px-1.5 py-0.5 text-[9px] leading-none font-black text-amber-700 align-middle"
+    }, "\u4ECA\u5929")), React.createElement("button", {
       onClick: e => {
         e.stopPropagation();
         setShowScheduleModal(true);
@@ -15353,6 +15529,20 @@ const MainApp = () => {
         merge: true
       });
       setShowOutingPosterSettings(false);
+    }
+  }), showPosterNameSettings && React.createElement(PosterNameOverrideSettingsModal, {
+    currentList: posterNameOverrides,
+    eventNames: allEventNames,
+    onClose: () => setShowPosterNameSettings(false),
+    onSave: async newList => {
+      const normalizedList = normalizePosterNameOverrides(newList);
+      await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), {
+        posterNameOverrides: normalizedList
+      }, {
+        merge: true
+      });
+      setPosterNameOverrides(normalizedList);
+      setShowPosterNameSettings(false);
     }
   }), showPosterActivitySelection && React.createElement(PosterActivitySelectionModal, {
     options: posterActivityOptions,
