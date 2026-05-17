@@ -989,6 +989,16 @@ const getEventStatus = (count, capacity, config, dateStr, globalRules) => {
       };
     }
   }
+  const matchedRule = getMatchingStatusRule(participantCount, config?.statusRules, globalRules);
+  if (matchedRule) {
+    const colorObj = COLOR_OPTIONS.find(c => c.value === matchedRule.color) || COLOR_OPTIONS.find(c => c.value === 'blue');
+    return {
+      label: formatStatusRuleLabel(matchedRule.label, participantCount),
+      color: matchedRule.color || 'blue',
+      colorObj,
+      isFull: participantCount >= fullThreshold
+    };
+  }
   if (participantCount >= fullThreshold) {
     return {
       label: '已額滿',
@@ -1371,6 +1381,30 @@ const normalizeStatusRulesForDisplay = (rules = DEFAULT_STATUS_RULES) => (Array.
   label: toSafeDisplayText(rule?.label, '報名中'),
   color: toSafeDisplayText(rule?.color, 'blue')
 }));
+const normalizeStatusRuleValue = value => String(value ?? '').trim();
+const getStatusRulesSignature = rules => JSON.stringify(normalizeStatusRulesForDisplay(rules).map(rule => ({
+  min: normalizeStatusRuleValue(rule.min),
+  max: normalizeStatusRuleValue(rule.max),
+  label: normalizeStatusRuleValue(rule.label),
+  color: normalizeStatusRuleValue(rule.color)
+})));
+const DEFAULT_STATUS_RULES_SIGNATURE = getStatusRulesSignature(DEFAULT_STATUS_RULES);
+const hasCustomStatusRules = rules => Array.isArray(rules) && rules.length > 0 && getStatusRulesSignature(rules) !== DEFAULT_STATUS_RULES_SIGNATURE;
+const formatStatusRuleLabel = (label, participantCount) => {
+  const rawLabel = toSafeDisplayText(label, '報名中').trim() || '報名中';
+  if (rawLabel.includes('{count}')) return rawLabel.replace(/\{count\}/g, String(participantCount));
+  if (rawLabel.includes('X')) return rawLabel.replace(/X/g, String(participantCount));
+  if (rawLabel === '即將額滿') return `即將額滿｜目前 ${participantCount} 人`;
+  return rawLabel;
+};
+const getMatchingStatusRule = (participantCount, configRules, globalRules) => {
+  const candidateRules = hasCustomStatusRules(configRules) ? configRules : hasCustomStatusRules(globalRules) ? globalRules : [];
+  return normalizeStatusRulesForDisplay(candidateRules).find(rule => {
+    const min = Number.isFinite(parseInt(rule.min, 10)) ? parseInt(rule.min, 10) : 0;
+    const max = Number.isFinite(parseInt(rule.max, 10)) ? parseInt(rule.max, 10) : Infinity;
+    return participantCount >= min && participantCount <= max;
+  }) || null;
+};
 const sanitizeFirebaseValue = value => {
   if (value === null || value === undefined) return value;
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
@@ -2529,7 +2563,7 @@ const GlobalRulesModal = ({
     className: "text-slate-400"
   }))), React.createElement("p", {
     className: "text-xs text-slate-500 mb-4 bg-yellow-50 p-2 rounded text-yellow-700"
-  }, "\u6CE8\u610F\uFF1A\u9019\u88E1\u7684\u8A2D\u5B9A\u5C07\u5957\u7528\u5230\u300C\u672A\u500B\u5225\u8A2D\u5B9A\u898F\u5247\u300D\u7684\u6240\u6709\u6D3B\u52D5\u3002\u5982\u679C\u60A8\u5728\u500B\u5225\u6D3B\u52D5\u4E2D\u8A2D\u5B9A\u4E86\u898F\u5247\uFF0C\u5C07\u4EE5\u500B\u5225\u6D3B\u52D5\u70BA\u6E96\u3002"), React.createElement("div", {
+  }, "\u6CE8\u610F\uFF1A\u9019\u88E1\u7684\u8A2D\u5B9A\u5C07\u5957\u7528\u5230\u300C\u672A\u500B\u5225\u8A2D\u5B9A\u898F\u5247\u300D\u7684\u6240\u6709\u6D3B\u52D5\u3002\u5982\u679C\u60A8\u5728\u500B\u5225\u6D3B\u52D5\u4E2D\u8A2D\u5B9A\u4E86\u898F\u5247\uFF0C\u5C07\u4EE5\u500B\u5225\u6D3B\u52D5\u70BA\u6E96\u3002\u986F\u793A\u6587\u5B57\u53EF\u7528 X \u6216 {count} \u4EE3\u5165\u76EE\u524D\u4EBA\u6578\u3002"), React.createElement("div", {
     className: "bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4"
   }, React.createElement("div", {
     className: "space-y-2 mb-3 max-h-60 overflow-y-auto"
