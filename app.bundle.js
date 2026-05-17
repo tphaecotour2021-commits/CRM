@@ -1374,6 +1374,32 @@ const normalizeTagDefinitionsForDisplay = (definitions = DEFAULT_TAG_DEFS) => {
     locations: normalizeList(definitions.locations || DEFAULT_TAG_DEFS.locations)
   };
 };
+const buildTagRenameMap = (previousDefs = DEFAULT_TAG_DEFS, nextDefs = DEFAULT_TAG_DEFS) => {
+  const prev = normalizeTagDefinitionsForDisplay(previousDefs);
+  const next = normalizeTagDefinitionsForDisplay(nextDefs);
+  return ['levels', 'types', 'locations'].reduce((map, type) => {
+    map[type] = {};
+    (prev[type] || []).forEach((oldValue, idx) => {
+      const newValue = (next[type] || [])[idx];
+      if (oldValue && newValue && oldValue !== newValue) map[type][oldValue] = newValue;
+    });
+    return map;
+  }, {});
+};
+const applyTagRenamesToTags = (tags = {}, renameMap = {}) => {
+  const nextTags = {
+    ...(tags || {})
+  };
+  ['levels', 'types', 'locations'].forEach(type => {
+    const currentValue = toSafeDisplayText(nextTags[type], '').trim();
+    if (currentValue && renameMap?.[type]?.[currentValue]) nextTags[type] = renameMap[type][currentValue];
+  });
+  return nextTags;
+};
+const applyTagRenamesToConfig = (config = {}, renameMap = {}) => ({
+  ...(config || {}),
+  tags: applyTagRenamesToTags(config?.tags || {}, renameMap)
+});
 const normalizeStatusRulesForDisplay = (rules = DEFAULT_STATUS_RULES) => (Array.isArray(rules) ? rules : DEFAULT_STATUS_RULES).map(rule => ({
   ...rule,
   min: toSafeDisplayText(rule?.min, '0'),
@@ -1394,11 +1420,10 @@ const formatStatusRuleLabel = (label, participantCount) => {
   const rawLabel = toSafeDisplayText(label, '報名中').trim() || '報名中';
   if (rawLabel.includes('{count}')) return rawLabel.replace(/\{count\}/g, String(participantCount));
   if (rawLabel.includes('X')) return rawLabel.replace(/X/g, String(participantCount));
-  if (rawLabel === '即將額滿') return `即將額滿｜目前 ${participantCount} 人`;
   return rawLabel;
 };
 const getMatchingStatusRule = (participantCount, configRules, globalRules) => {
-  const candidateRules = hasCustomStatusRules(configRules) ? configRules : hasCustomStatusRules(globalRules) ? globalRules : [];
+  const candidateRules = Array.isArray(configRules) && configRules.length > 0 ? configRules : Array.isArray(globalRules) && globalRules.length > 0 ? globalRules : [];
   return normalizeStatusRulesForDisplay(candidateRules).find(rule => {
     const min = Number.isFinite(parseInt(rule.min, 10)) ? parseInt(rule.min, 10) : 0;
     const max = Number.isFinite(parseInt(rule.max, 10)) ? parseInt(rule.max, 10) : Infinity;
@@ -2647,7 +2672,8 @@ const TagSettingsModal = ({
   onClose,
   onSave
 }) => {
-  const [defs, setDefs] = useState(currentDefs || DEFAULT_TAG_DEFS);
+  const originalDefs = useMemo(() => normalizeTagDefinitionsForDisplay(currentDefs || DEFAULT_TAG_DEFS), [currentDefs]);
+  const [defs, setDefs] = useState(originalDefs);
   const [newItem, setNewItem] = useState({
     type: 'levels',
     value: ''
@@ -2671,6 +2697,13 @@ const TagSettingsModal = ({
     };
     setDefs(updated);
   };
+  const updateItem = (type, index, value) => {
+    const updated = {
+      ...defs,
+      [type]: defs[type].map((item, i) => i === index ? value : item)
+    };
+    setDefs(updated);
+  };
   const renderSection = (title, type, icon) => React.createElement("div", {
     className: "mb-4"
   }, React.createElement("h4", {
@@ -2679,11 +2712,17 @@ const TagSettingsModal = ({
     name: icon,
     size: 16
   }), " ", title), React.createElement("div", {
-    className: "flex flex-wrap gap-2 mb-2"
+    className: "space-y-2 mb-2"
   }, defs[type].map((item, idx) => React.createElement("div", {
     key: idx,
-    className: "text-xs bg-slate-100 border border-slate-200 px-2 py-1 rounded-full flex items-center gap-1"
-  }, item, React.createElement("button", {
+    className: "text-xs bg-white border border-slate-200 px-2 py-1.5 rounded-lg flex items-center gap-2"
+  }, React.createElement("input", {
+    type: "text",
+    className: "flex-1 min-w-0 bg-transparent outline-none font-bold text-slate-700",
+    value: item,
+    onChange: e => updateItem(type, idx, e.target.value),
+    onBlur: () => setDefs(normalizeTagDefinitionsForDisplay(defs))
+  }), React.createElement("button", {
     onClick: () => removeItem(type, idx),
     className: "text-slate-400 hover:text-red-500"
   }, React.createElement(Icon, {
@@ -2742,7 +2781,10 @@ const TagSettingsModal = ({
     onClick: onClose,
     className: "px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg text-sm"
   }, "\u53D6\u6D88"), React.createElement("button", {
-    onClick: () => onSave(defs),
+    onClick: () => {
+      const normalizedDefs = normalizeTagDefinitionsForDisplay(defs);
+      onSave(normalizedDefs, buildTagRenameMap(originalDefs, normalizedDefs));
+    },
     className: "px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm shadow-md"
   }, "\u5132\u5B58\u8A2D\u5B9A"))));
 };
@@ -3816,6 +3858,12 @@ const EventManagerModal = ({
   const removeStatusRule = idx => {
     setStatusRules(statusRules.filter((_, i) => i !== idx));
   };
+  const updateStatusRule = (idx, key, value) => {
+    setStatusRules(statusRules.map((rule, ruleIdx) => ruleIdx === idx ? {
+      ...rule,
+      [key]: value
+    } : rule));
+  };
   const handleSaveCurrentEventAsTemplate = async () => {
     const cleanInternalName = String(internalName || '').trim();
     if (!cleanInternalName) return alert('請先填寫活動後台名稱，再存成模板。');
@@ -4330,14 +4378,44 @@ const EventManagerModal = ({
     className: "space-y-2 mb-3"
   }, statusRules.map((rule, idx) => React.createElement("div", {
     key: idx,
-    className: "flex items-center gap-2 text-xs"
+    className: "grid grid-cols-4 gap-2 items-end text-xs bg-slate-50 p-2 rounded border border-slate-100"
+  }, React.createElement("div", null, React.createElement("span", {
+    className: "text-[10px] text-slate-400"
+  }, "Min"), React.createElement("input", {
+    type: "number",
+    className: "w-full p-1 text-xs border rounded",
+    value: toSafeDisplayText(rule.min, '0'),
+    onChange: e => updateStatusRule(idx, 'min', e.target.value)
+  })), React.createElement("div", null, React.createElement("span", {
+    className: "text-[10px] text-slate-400"
+  }, "Max"), React.createElement("input", {
+    type: "number",
+    className: "w-full p-1 text-xs border rounded",
+    value: toSafeDisplayText(rule.max, '999'),
+    onChange: e => updateStatusRule(idx, 'max', e.target.value)
+  })), React.createElement("div", {
+    className: "col-span-2"
   }, React.createElement("span", {
-    className: "w-12 text-center bg-slate-100 rounded py-1"
-  }, toSafeDisplayText(rule.min, '0'), "-", toSafeDisplayText(rule.max, '999'), "\u4EBA"), React.createElement("span", {
-    className: `flex-1 px-2 py-1 rounded border text-center ${COLOR_OPTIONS.find(c => c.value === rule.color)?.bg} ${COLOR_OPTIONS.find(c => c.value === rule.color)?.text}`
-  }, toSafeDisplayText(rule.label, '報名中')), React.createElement("button", {
+    className: "text-[10px] text-slate-400"
+  }, "\u986F\u793A\u6587\u5B57"), React.createElement("input", {
+    type: "text",
+    className: "w-full p-1 text-xs border rounded",
+    value: toSafeDisplayText(rule.label, '報名中'),
+    onChange: e => updateStatusRule(idx, 'label', e.target.value)
+  })), React.createElement("div", {
+    className: "col-span-3"
+  }, React.createElement("span", {
+    className: "text-[10px] text-slate-400"
+  }, "\u984F\u8272"), React.createElement("select", {
+    className: "w-full p-1 text-xs border rounded",
+    value: toSafeDisplayText(rule.color, 'blue'),
+    onChange: e => updateStatusRule(idx, 'color', e.target.value)
+  }, COLOR_OPTIONS.map(c => React.createElement("option", {
+    key: c.value,
+    value: c.value
+  }, c.label)))), React.createElement("button", {
     onClick: () => removeStatusRule(idx),
-    className: "text-slate-400 hover:text-red-500"
+    className: "h-7 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded"
   }, React.createElement(Icon, {
     name: "trash-2",
     size: 14
@@ -15534,12 +15612,33 @@ const MainApp = () => {
   }), showTagSettings && React.createElement(TagSettingsModal, {
     currentDefs: tagDefinitions,
     onClose: () => setShowTagSettings(false),
-    onSave: async newDefs => {
+    onSave: async (newDefs, renameMap = {}) => {
+      const normalizedDefs = normalizeTagDefinitionsForDisplay(newDefs);
+      const nextConfigs = Object.fromEntries(Object.entries(eventConfigs || {}).map(([key, cfg]) => [key, applyTagRenamesToConfig(cfg, renameMap)]));
+      const changedConfigEntries = Object.entries(nextConfigs).filter(([key, cfg]) => JSON.stringify((eventConfigs[key] || {}).tags || {}) !== JSON.stringify(cfg.tags || {}));
+      const currentTemplates = Array.isArray(customTemplates) ? customTemplates : [];
+      const nextTemplates = currentTemplates.map(tpl => applyTagRenamesToConfig(tpl, renameMap));
+      const templatesChanged = JSON.stringify(currentTemplates.map(tpl => tpl.tags || {})) !== JSON.stringify(nextTemplates.map(tpl => tpl.tags || {}));
       await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), {
-        tagDefinitions: newDefs
+        tagDefinitions: normalizedDefs
       }, {
         merge: true
       });
+      if (changedConfigEntries.length > 0) {
+        await Promise.all(changedConfigEntries.map(([key, cfg]) => setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', key), cfg, {
+          merge: true
+        })));
+        setEventConfigs(nextConfigs);
+      }
+      if (templatesChanged) {
+        await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'templates'), {
+          list: nextTemplates
+        }, {
+          merge: true
+        });
+        setCustomTemplates(nextTemplates);
+      }
+      setTagDefinitions(normalizedDefs);
       setShowTagSettings(false);
     }
   }), showMascotSettings && React.createElement(MascotSettingsModal, {
