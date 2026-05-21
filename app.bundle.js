@@ -512,6 +512,22 @@ const DEFAULT_TASKS_TEMPLATE = [{
 }];
 const DEFAULT_STATUS_RULES = [{
   min: 0,
+  max: 6,
+  label: '6人以下，體驗舒適',
+  color: 'green'
+}, {
+  min: 7,
+  max: 11,
+  label: '剩餘{remaining}位，即將滿團',
+  color: 'orange'
+}, {
+  min: 12,
+  max: 999,
+  label: '滿團',
+  color: 'slate'
+}];
+const LEGACY_DEFAULT_STATUS_RULES = [{
+  min: 0,
   max: 8,
   label: '舒適體驗｜8人以下',
   color: 'green'
@@ -704,11 +720,17 @@ const normalizeQuickCreateTemplateCategory = (value, fallbackName = '') => {
 const getTemplateEventName = (tpl = {}) => String(tpl?.eventName || tpl?.name || '').trim();
 const getTemplateEventNameKey = (tpl = {}) => getTemplateEventName(tpl).replace(/\s+/g, '');
 const getQuickCreateTemplateStableKey = (tpl = {}) => String(tpl?.id || [tpl?.name, tpl?.eventName, tpl?.time, tpl?.instructor].map(value => String(value || '').trim()).join('::'));
-const normalizeQuickCreateTemplate = (tpl = {}) => ({
-  ...tpl,
-  eventName: getTemplateEventName(tpl),
-  templateCategory: normalizeQuickCreateTemplateCategory(tpl.templateCategory, getTemplateEventName(tpl))
-});
+const normalizeQuickCreateTemplate = (tpl = {}) => {
+  const eventName = getTemplateEventName(tpl);
+  const privateGroupLabel = toSafeDisplayText(tpl.privateGroupLabel, '此為包團活動') || '此為包團活動';
+  return {
+    ...tpl,
+    eventName,
+    templateCategory: normalizeQuickCreateTemplateCategory(tpl.templateCategory, eventName),
+    isPrivateGroupEvent: !!tpl.isPrivateGroupEvent || tpl?.tags?.levels === '包團' || String(tpl?.displayName || eventName || '').includes('包團'),
+    privateGroupLabel
+  };
+};
 const DEFAULT_MASCOT_THEMES = [{
   id: 'default_flying_squirrel',
   name: '飛鼠系列',
@@ -993,7 +1015,7 @@ const getEventStatus = (count, capacity, config, dateStr, globalRules) => {
   if (matchedRule) {
     const colorObj = COLOR_OPTIONS.find(c => c.value === matchedRule.color) || COLOR_OPTIONS.find(c => c.value === 'blue');
     return {
-      label: formatStatusRuleLabel(matchedRule.label, participantCount),
+      label: formatStatusRuleLabel(matchedRule.label, participantCount, fullThreshold),
       color: matchedRule.color || 'blue',
       colorObj,
       isFull: participantCount >= fullThreshold
@@ -1001,22 +1023,22 @@ const getEventStatus = (count, capacity, config, dateStr, globalRules) => {
   }
   if (participantCount >= fullThreshold) {
     return {
-      label: '已額滿',
+      label: '滿團',
       color: 'slate',
       colorObj: COLOR_OPTIONS.find(c => c.value === 'slate'),
       isFull: true
     };
   }
-  if (participantCount >= 9) {
+  if (participantCount >= 7) {
     return {
-      label: `即將額滿｜目前 ${participantCount} 人`,
+      label: `剩餘${Math.max(fullThreshold - participantCount, 0)}位，即將滿團`,
       color: 'orange',
       colorObj: COLOR_OPTIONS.find(c => c.value === 'orange'),
       isFull: false
     };
   }
   return {
-    label: '舒適體驗｜8人以下',
+    label: '6人以下，體驗舒適',
     color: 'green',
     colorObj: COLOR_OPTIONS.find(c => c.value === 'green'),
     isFull: false
@@ -1415,16 +1437,21 @@ const getStatusRulesSignature = rules => JSON.stringify(normalizeStatusRulesForD
   color: normalizeStatusRuleValue(rule.color)
 })));
 const DEFAULT_STATUS_RULES_SIGNATURE = getStatusRulesSignature(DEFAULT_STATUS_RULES);
+const LEGACY_DEFAULT_STATUS_RULES_SIGNATURE = getStatusRulesSignature(LEGACY_DEFAULT_STATUS_RULES);
 const hasCustomStatusRules = rules => Array.isArray(rules) && rules.length > 0 && getStatusRulesSignature(rules) !== DEFAULT_STATUS_RULES_SIGNATURE;
-const formatStatusRuleLabel = (label, participantCount) => {
+const normalizeStoredStatusRules = rules => {
+  const normalized = normalizeStatusRulesForDisplay(rules);
+  return getStatusRulesSignature(normalized) === LEGACY_DEFAULT_STATUS_RULES_SIGNATURE ? DEFAULT_STATUS_RULES : normalized;
+};
+const formatStatusRuleLabel = (label, participantCount, capacity = 12) => {
   const rawLabel = toSafeDisplayText(label, '報名中').trim() || '報名中';
-  if (rawLabel.includes('{count}')) return rawLabel.replace(/\{count\}/g, String(participantCount));
-  if (rawLabel.includes('X')) return rawLabel.replace(/X/g, String(participantCount));
-  return rawLabel;
+  const fullThreshold = Math.max(1, parseInt(capacity, 10) || 12);
+  const remaining = Math.max(fullThreshold - (parseInt(participantCount, 10) || 0), 0);
+  return rawLabel.replace(/\{count\}/g, String(participantCount)).replace(/\{remaining\}/g, String(remaining)).replace(/\[remaining\]/g, String(remaining)).replace(/X/g, String(participantCount));
 };
 const getMatchingStatusRule = (participantCount, configRules, globalRules) => {
   const candidateRules = Array.isArray(configRules) && configRules.length > 0 ? configRules : Array.isArray(globalRules) && globalRules.length > 0 ? globalRules : [];
-  return normalizeStatusRulesForDisplay(candidateRules).find(rule => {
+  return normalizeStoredStatusRules(candidateRules).find(rule => {
     const min = Number.isFinite(parseInt(rule.min, 10)) ? parseInt(rule.min, 10) : 0;
     const max = Number.isFinite(parseInt(rule.max, 10)) ? parseInt(rule.max, 10) : Infinity;
     return participantCount >= min && participantCount <= max;
@@ -1466,12 +1493,14 @@ const normalizeEventConfigForDisplay = (config = {}) => {
     note: toSafeDisplayText(config.note, ''),
     backendColor: toSafeDisplayText(config.backendColor, ''),
     carpoolDisplayMode: toSafeDisplayText(config.carpoolDisplayMode, ''),
+    isPrivateGroupEvent: !!config.isPrivateGroupEvent,
+    privateGroupLabel: toSafeDisplayText(config.privateGroupLabel, '此為包團活動') || '此為包團活動',
     tags: {
       levels: toSafeDisplayText(rawTags.levels, ''),
       types: toSafeDisplayText(rawTags.types, ''),
       locations: toSafeDisplayText(rawTags.locations, '')
     },
-    statusRules: normalizeStatusRulesForDisplay(rawRules)
+    statusRules: normalizeStoredStatusRules(rawRules)
   };
 };
 const resolvePosterEventName = (evt = {}, cfg = {}, posterNameOverrides = []) => {
@@ -2588,7 +2617,7 @@ const GlobalRulesModal = ({
     className: "text-slate-400"
   }))), React.createElement("p", {
     className: "text-xs text-slate-500 mb-4 bg-yellow-50 p-2 rounded text-yellow-700"
-  }, "\u6CE8\u610F\uFF1A\u9019\u88E1\u7684\u8A2D\u5B9A\u5C07\u5957\u7528\u5230\u300C\u672A\u500B\u5225\u8A2D\u5B9A\u898F\u5247\u300D\u7684\u6240\u6709\u6D3B\u52D5\u3002\u5982\u679C\u60A8\u5728\u500B\u5225\u6D3B\u52D5\u4E2D\u8A2D\u5B9A\u4E86\u898F\u5247\uFF0C\u5C07\u4EE5\u500B\u5225\u6D3B\u52D5\u70BA\u6E96\u3002\u986F\u793A\u6587\u5B57\u53EF\u7528 X \u6216 {count} \u4EE3\u5165\u76EE\u524D\u4EBA\u6578\u3002"), React.createElement("div", {
+  }, "\u6CE8\u610F\uFF1A\u9019\u88E1\u7684\u8A2D\u5B9A\u5C07\u5957\u7528\u5230\u300C\u672A\u500B\u5225\u8A2D\u5B9A\u898F\u5247\u300D\u7684\u6240\u6709\u6D3B\u52D5\u3002\u5982\u679C\u60A8\u5728\u500B\u5225\u6D3B\u52D5\u4E2D\u8A2D\u5B9A\u4E86\u898F\u5247\uFF0C\u5C07\u4EE5\u500B\u5225\u6D3B\u52D5\u70BA\u6E96\u3002\u986F\u793A\u6587\u5B57\u53EF\u7528 X \u6216 {count} \u4EE3\u5165\u76EE\u524D\u4EBA\u6578\uFF0C{remaining} \u4EE3\u5165\u5269\u9918\u540D\u984D\u3002"), React.createElement("div", {
     className: "bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4"
   }, React.createElement("div", {
     className: "space-y-2 mb-3 max-h-60 overflow-y-auto"
@@ -3730,12 +3759,15 @@ const EventManagerModal = ({
   const [displayName, setDisplayName] = useState(config?.displayName || '');
   const [activityCategory, setActivityCategory] = useState(config?.activityCategory || '');
   const [carpoolDisplayMode, setCarpoolDisplayMode] = useState(resolveCarpoolDisplayMode(config?.carpoolDisplayMode, event.eventName));
+  const inferredPrivateGroupEvent = !!config?.isPrivateGroupEvent || config?.tags?.levels === '包團' || String(config?.displayName || event.eventName || '').includes('包團');
+  const [isPrivateGroupEvent, setIsPrivateGroupEvent] = useState(inferredPrivateGroupEvent);
+  const [privateGroupLabel, setPrivateGroupLabel] = useState(config?.privateGroupLabel || '此為包團活動');
   const [tasks, setTasks] = useState(config?.tasks || JSON.parse(JSON.stringify(DEFAULT_TASKS_TEMPLATE)));
   const [leadInstructors, setLeadInstructors] = useState(config?.leadInstructors && config.leadInstructors.length > 0 ? config.leadInstructors : event.instructor ? event.instructor.split(/[&,]/).map(s => s.trim()).filter(Boolean) : []);
   const [supportInstructors, setSupportInstructors] = useState(config?.supportInstructors || []);
   const [tempLeadInstructor, setTempLeadInstructor] = useState('');
   const [tempSupportInstructor, setTempSupportInstructor] = useState('');
-  const [statusRules, setStatusRules] = useState(config?.statusRules || globalRules || DEFAULT_STATUS_RULES);
+  const [statusRules, setStatusRules] = useState(config?.statusRules ? normalizeStoredStatusRules(config.statusRules) : globalRules || DEFAULT_STATUS_RULES);
   const [newRule, setNewRule] = useState({
     min: 0,
     max: 10,
@@ -3765,19 +3797,19 @@ const EventManagerModal = ({
     return matches.length > 0 ? matches[matches.length - 1] : null;
   }, [customTemplates, normalizedInternalName]);
   const matchedTemplateKey = matchedTemplate ? `${matchedTemplate.id || matchedTemplate.name || matchedTemplate.eventName}::${normalizedInternalName}` : '';
-  const templateSuggestionNeeded = !!(matchedTemplate && (!eventTime && matchedTemplate.time || !eventLink && matchedTemplate.link || !displayName && matchedTemplate.displayName || !activityCategory && matchedTemplate.activityCategory || !eventNote && matchedTemplate.note || (capacity === 12 || capacity === '' || capacity === null || capacity === undefined) && matchedTemplate.capacity || !tags?.levels && matchedTemplate?.tags?.levels || !tags?.types && matchedTemplate?.tags?.types || !tags?.locations && matchedTemplate?.tags?.locations || !(statusRules || []).length && (matchedTemplate.statusRules || []).length));
+  const templateSuggestionNeeded = !!(matchedTemplate && (!eventTime && matchedTemplate.time || !eventLink && matchedTemplate.link || !displayName && matchedTemplate.displayName || !activityCategory && matchedTemplate.activityCategory || !eventNote && matchedTemplate.note || (capacity === 12 || capacity === '' || capacity === null || capacity === undefined) && matchedTemplate.capacity || !tags?.levels && matchedTemplate?.tags?.levels || !tags?.types && matchedTemplate?.tags?.types || !tags?.locations && matchedTemplate?.tags?.locations || !isPrivateGroupEvent && matchedTemplate.isPrivateGroupEvent || privateGroupLabel === '此為包團活動' && matchedTemplate.privateGroupLabel && matchedTemplate.privateGroupLabel !== '此為包團活動' || !(statusRules || []).length && (matchedTemplate.statusRules || []).length));
   const shouldShowTemplateSuggestion = !!(templateSuggestionNeeded && matchedTemplateKey && matchedTemplateKey !== dismissedTemplateSuggestionKey && matchedTemplateKey !== appliedTemplateSuggestionKey);
   const hasChanges = useMemo(() => {
     const currentInstr = [...leadInstructors, ...supportInstructors].sort().join(' & ');
     const originalInstr = event.instructor || '';
     const originalLeadInstructors = config?.leadInstructors && config.leadInstructors.length > 0 ? config.leadInstructors : event.instructor ? event.instructor.split(/[&,]/).map(s => s.trim()).filter(Boolean) : [];
     const originalSupportInstructors = config?.supportInstructors || [];
-    return internalName !== event.eventName || capacity !== (config?.capacity || 12) || eventNote !== (config?.note || '') || eventTime !== (config?.time || '') || eventLink !== (config?.link || '') || backendColor !== (config?.backendColor || '#eff6ff') || displayName !== (config?.displayName || '') || activityCategory !== (config?.activityCategory || '') || carpoolDisplayMode !== resolveCarpoolDisplayMode(config?.carpoolDisplayMode, event.eventName) || currentInstr !== originalInstr || JSON.stringify(leadInstructors) !== JSON.stringify(originalLeadInstructors) || JSON.stringify(supportInstructors) !== JSON.stringify(originalSupportInstructors) || JSON.stringify(tasks) !== JSON.stringify(config?.tasks || DEFAULT_TASKS_TEMPLATE) || JSON.stringify(tags) !== JSON.stringify(config?.tags || {
+    return internalName !== event.eventName || capacity !== (config?.capacity || 12) || eventNote !== (config?.note || '') || eventTime !== (config?.time || '') || eventLink !== (config?.link || '') || backendColor !== (config?.backendColor || '#eff6ff') || displayName !== (config?.displayName || '') || activityCategory !== (config?.activityCategory || '') || carpoolDisplayMode !== resolveCarpoolDisplayMode(config?.carpoolDisplayMode, event.eventName) || isPrivateGroupEvent !== inferredPrivateGroupEvent || privateGroupLabel !== (config?.privateGroupLabel || '此為包團活動') || currentInstr !== originalInstr || JSON.stringify(leadInstructors) !== JSON.stringify(originalLeadInstructors) || JSON.stringify(supportInstructors) !== JSON.stringify(originalSupportInstructors) || JSON.stringify(tasks) !== JSON.stringify(config?.tasks || DEFAULT_TASKS_TEMPLATE) || JSON.stringify(tags) !== JSON.stringify(config?.tags || {
       levels: '',
       types: '',
       locations: ''
-    }) || JSON.stringify(statusRules) !== JSON.stringify(config?.statusRules || globalRules || DEFAULT_STATUS_RULES) || isCancelled !== !!config?.isCancelled;
-  }, [internalName, capacity, eventNote, eventTime, eventLink, backendColor, displayName, activityCategory, carpoolDisplayMode, leadInstructors, supportInstructors, tasks, tags, statusRules, isCancelled, event, config]);
+    }) || JSON.stringify(statusRules) !== JSON.stringify(config?.statusRules ? normalizeStoredStatusRules(config.statusRules) : globalRules || DEFAULT_STATUS_RULES) || isCancelled !== !!config?.isCancelled;
+  }, [internalName, capacity, eventNote, eventTime, eventLink, backendColor, displayName, activityCategory, carpoolDisplayMode, isPrivateGroupEvent, inferredPrivateGroupEvent, privateGroupLabel, leadInstructors, supportInstructors, tasks, tags, statusRules, isCancelled, event, config]);
   const handleRequestClose = () => {
     if (hasChanges) {
       if (confirm("您有尚未儲存的編輯內容，確定要直接關閉嗎？（變更將會遺失）")) {
@@ -3884,6 +3916,8 @@ const EventManagerModal = ({
       activityCategory: activityCategory || '',
       templateCategory: normalizeQuickCreateTemplateCategory(matchedTemplate?.templateCategory, cleanInternalName),
       carpoolDisplayMode,
+      isPrivateGroupEvent,
+      privateGroupLabel: privateGroupLabel || '此為包團活動',
       isCancelled,
       capacity: parseInt(capacity, 10) || 12,
       price: config?.price ?? matchedTemplate?.price ?? '',
@@ -3913,6 +3947,8 @@ const EventManagerModal = ({
     setDisplayName(tpl.displayName || '');
     setActivityCategory(tpl.activityCategory || '');
     setCarpoolDisplayMode(resolveCarpoolDisplayMode(tpl.carpoolDisplayMode, templateEventName));
+    setIsPrivateGroupEvent(!!tpl.isPrivateGroupEvent);
+    setPrivateGroupLabel(tpl.privateGroupLabel || '此為包團活動');
     setCapacity(tpl.capacity || 12);
     setBackendColor(tpl.backendColor || '#eff6ff');
     setTags(tpl.tags || {
@@ -3920,7 +3956,7 @@ const EventManagerModal = ({
       types: '',
       locations: ''
     });
-    setStatusRules(tpl.statusRules || []);
+    setStatusRules(tpl.statusRules ? normalizeStoredStatusRules(tpl.statusRules) : []);
     setIsCancelled(!!tpl.isCancelled);
     const templateKey = `${tpl.id || tpl.name || tpl.eventName}::${templateEventName.replace(/\s+/g, '')}`;
     setAppliedTemplateSuggestionKey(templateKey);
@@ -3944,6 +3980,8 @@ const EventManagerModal = ({
       displayName,
       activityCategory,
       carpoolDisplayMode,
+      isPrivateGroupEvent,
+      privateGroupLabel: privateGroupLabel || '此為包團活動',
       tags,
       backendColor,
       isCancelled,
@@ -4357,6 +4395,24 @@ const EventManagerModal = ({
       className: "text-[10px] text-slate-400 mt-1"
     }, option.helper));
   }))), React.createElement("div", {
+    className: "bg-amber-50 border border-amber-200 rounded-lg p-3"
+  }, React.createElement("div", {
+    className: "flex items-center justify-between gap-3"
+  }, React.createElement("div", null, React.createElement("label", {
+    className: "text-xs font-bold text-amber-700 block"
+  }, "\u524D\u53F0\u5305\u5718\u986F\u793A"), React.createElement("p", {
+    className: "text-[10px] text-amber-600 mt-0.5"
+  }, "\u958B\u555F\u5F8C\u524D\u53F0\u4EBA\u6578\u72C0\u614B\u6703\u6539\u986F\u793A\u6307\u5B9A\u6587\u5B57")), React.createElement("button", {
+    type: "button",
+    onClick: () => setIsPrivateGroupEvent(!isPrivateGroupEvent),
+    className: `px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${isPrivateGroupEvent ? 'bg-amber-600 text-white border-amber-700' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`
+  }, isPrivateGroupEvent ? "\u5DF2\u8A2D\u70BA\u5305\u5718" : "\u8A2D\u70BA\u5305\u5718")), React.createElement("input", {
+    type: "text",
+    className: "w-full mt-2 px-3 py-2 text-sm border border-amber-200 rounded-lg outline-none focus:ring-2 focus:ring-amber-500 bg-white",
+    placeholder: "\u4F8B\u5982\uFF1A\u6B64\u70BA\u5305\u5718\u6D3B\u52D5",
+    value: privateGroupLabel,
+    onChange: e => setPrivateGroupLabel(e.target.value)
+  })), React.createElement("div", {
     className: "bg-white p-3 rounded-lg border border-slate-200"
   }, React.createElement("label", {
     className: "text-xs font-bold text-slate-500 mb-2 block flex items-center gap-1"
@@ -4870,6 +4926,8 @@ const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, on
     activityCategory: "",
     templateCategory: "",
     carpoolDisplayMode: "",
+    isPrivateGroupEvent: false,
+    privateGroupLabel: "此為包團活動",
     isCancelled: false,
     capacity: 12,
     price: "",
@@ -4891,6 +4949,8 @@ const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, on
     displayName: "",
     activityCategory: "",
     carpoolDisplayMode: "",
+    isPrivateGroupEvent: false,
+    privateGroupLabel: "此為包團活動",
     isCancelled: false,
     capacity: 12,
     price: "",
@@ -4988,12 +5048,14 @@ const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, on
         displayName: tpl.displayName || "",
         activityCategory: tpl.activityCategory || "",
         carpoolDisplayMode: resolveCarpoolDisplayMode(tpl.carpoolDisplayMode, templateEventName),
+        isPrivateGroupEvent: !!tpl.isPrivateGroupEvent,
+        privateGroupLabel: tpl.privateGroupLabel || "此為包團活動",
         isCancelled: !!tpl.isCancelled,
         capacity: tpl.capacity || 12,
         price: tpl.price || "",
         tags: tpl.tags || { levels: "", types: "", locations: "" },
         backendColor: tpl.backendColor || "#eff6ff",
-        statusRules: tpl.statusRules || []
+        statusRules: tpl.statusRules ? normalizeStoredStatusRules(tpl.statusRules) : []
       };
     });
   };
@@ -5028,13 +5090,15 @@ const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, on
       activityCategory: tpl.activityCategory || "",
       templateCategory: normalizeQuickCreateTemplateCategory(tpl.templateCategory, templateEventName || tpl.name),
       carpoolDisplayMode: resolveCarpoolDisplayMode(tpl.carpoolDisplayMode, templateEventName),
+      isPrivateGroupEvent: !!tpl.isPrivateGroupEvent,
+      privateGroupLabel: tpl.privateGroupLabel || "此為包團活動",
       isCancelled: !!tpl.isCancelled,
       capacity: tpl.capacity || 12,
       price: tpl.price || "",
       // 載入價格
       tags: tpl.tags || { levels: "", types: "", locations: "" },
       backendColor: tpl.backendColor || "#eff6ff",
-      statusRules: tpl.statusRules || []
+      statusRules: tpl.statusRules ? normalizeStoredStatusRules(tpl.statusRules) : []
       // 載入規則
     });
     setIsCreatingTemplate(true);
@@ -10530,7 +10594,7 @@ const MainApp = () => {
       if (s && s.exists()) {
         const data = sanitizeFirebaseValue(s.data() || {});
         const d = data.csvData || '';
-        if (data.globalRules) setGlobalRules(normalizeStatusRulesForDisplay(data.globalRules));
+        if (data.globalRules) setGlobalRules(normalizeStoredStatusRules(data.globalRules));
         if (data.tagDefinitions) setTagDefinitions(normalizeTagDefinitionsForDisplay(data.tagDefinitions));
         setPerformanceProductSettings(data.performanceProductSettings || {});
         setMonthlyKpis(data.monthlyKpis || {});
@@ -11683,6 +11747,8 @@ const MainApp = () => {
     displayName,
     activityCategory,
     carpoolDisplayMode,
+    isPrivateGroupEvent,
+    privateGroupLabel,
     isCancelled,
     tags,
     capacity,
@@ -11727,6 +11793,8 @@ const MainApp = () => {
         displayName: displayName || '',
         activityCategory: activityCategory || '',
         carpoolDisplayMode: resolveCarpoolDisplayMode(carpoolDisplayMode, eventName),
+        isPrivateGroupEvent: !!isPrivateGroupEvent,
+        privateGroupLabel: privateGroupLabel || '此為包團活動',
         capacity: parseInt(capacity) || 12,
         price: parseInt(price) || 0,
         tags: tags || {
@@ -13785,7 +13853,8 @@ const MainApp = () => {
         types: toSafeDisplayText(rawTags.types, ''),
         locations: toSafeDisplayText(rawTags.locations, '')
       };
-      const isPrivateGroupEvent = tags.levels === '包團' || displayName.includes('包團') || e.eventName === '包團';
+      const isPrivateGroupEvent = !!cfg.isPrivateGroupEvent || tags.levels === '包團' || displayName.includes('包團') || e.eventName === '包團';
+      const privateGroupLabel = toSafeDisplayText(cfg.privateGroupLabel, '此為包團活動') || '此為包團活動';
       const carpoolDisplayMode = resolveCarpoolDisplayMode(cfg.carpoolDisplayMode, e.eventName);
       const carpoolCount = Array.isArray(e.customers) ? e.customers.filter(customer => customer && customer.transport === '共乘').length : 0;
       const remainingCarpoolSeats = Math.max(DEFAULT_CARPOOL_CAPACITY - carpoolCount, 0);
@@ -13808,7 +13877,7 @@ const MainApp = () => {
           className: "flex flex-col items-end gap-1"
         }, React.createElement("span", {
           className: `text-xs px-2 py-1 rounded-lg font-bold ${isPrivateGroupEvent ? 'bg-amber-50 text-amber-700 border border-amber-200' : statusBadgeClass}`
-        }, isPrivateGroupEvent ? "\u5305\u5718\u4E0D\u5C0D\u5916\u958B\u653E\u5831\u540D" : toSafeDisplayText(status.label, '報名中')), !status.isEnded && React.createElement("div", {
+        }, isPrivateGroupEvent ? privateGroupLabel : toSafeDisplayText(status.label, '報名中')), !status.isEnded && React.createElement("div", {
           className: "flex flex-col items-end gap-1"
         }, React.createElement("span", {
           className: `whitespace-nowrap text-right text-[10px] font-bold leading-4 ${carpoolDisplayMode === 'none' ? 'text-slate-400' : remainingCarpoolSeats > 0 ? 'text-orange-500' : 'text-rose-500'}`
