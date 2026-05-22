@@ -526,6 +526,9 @@ const DEFAULT_STATUS_RULES = [{
   label: '滿團',
   color: 'slate'
 }];
+const cloneDefaultStatusRules = () => DEFAULT_STATUS_RULES.map(rule => ({
+  ...rule
+}));
 const LEGACY_DEFAULT_STATUS_RULES = [{
   min: 0,
   max: 8,
@@ -998,6 +1001,30 @@ const getPromiseStatus = (date, time) => {
 const getEventStatus = (count, capacity, config, dateStr, globalRules) => {
   const participantCount = Math.max(0, parseInt(count, 10) || 0);
   const fullThreshold = Math.max(1, parseInt(capacity, 10) || 12);
+  const getDefaultStatus = () => {
+    if (participantCount >= fullThreshold) {
+      return {
+        label: '滿團',
+        color: 'slate',
+        colorObj: COLOR_OPTIONS.find(c => c.value === 'slate'),
+        isFull: true
+      };
+    }
+    if (participantCount >= 7) {
+      return {
+        label: `剩餘${Math.max(fullThreshold - participantCount, 0)}位，即將滿團`,
+        color: 'orange',
+        colorObj: COLOR_OPTIONS.find(c => c.value === 'orange'),
+        isFull: false
+      };
+    }
+    return {
+      label: '6人以下，體驗舒適',
+      color: 'green',
+      colorObj: COLOR_OPTIONS.find(c => c.value === 'green'),
+      isFull: false
+    };
+  };
   if (dateStr) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -1014,6 +1041,10 @@ const getEventStatus = (count, capacity, config, dateStr, globalRules) => {
   }
   const matchedRule = getMatchingStatusRule(participantCount, config?.statusRules, globalRules);
   if (matchedRule) {
+    const matchedLabel = normalizeStatusRuleValue(matchedRule.label);
+    if (isLegacyLowStatusLabel(matchedLabel) || isLegacyMidStatusLabel(matchedLabel) || isLegacyHighStatusLabel(matchedLabel)) {
+      return getDefaultStatus();
+    }
     const colorObj = COLOR_OPTIONS.find(c => c.value === matchedRule.color) || COLOR_OPTIONS.find(c => c.value === 'blue');
     return {
       label: formatStatusRuleLabel(matchedRule.label, participantCount, fullThreshold),
@@ -1022,28 +1053,7 @@ const getEventStatus = (count, capacity, config, dateStr, globalRules) => {
       isFull: participantCount >= fullThreshold
     };
   }
-  if (participantCount >= fullThreshold) {
-    return {
-      label: '滿團',
-      color: 'slate',
-      colorObj: COLOR_OPTIONS.find(c => c.value === 'slate'),
-      isFull: true
-    };
-  }
-  if (participantCount >= 7) {
-    return {
-      label: `剩餘${Math.max(fullThreshold - participantCount, 0)}位，即將滿團`,
-      color: 'orange',
-      colorObj: COLOR_OPTIONS.find(c => c.value === 'orange'),
-      isFull: false
-    };
-  }
-  return {
-    label: '6人以下，體驗舒適',
-    color: 'green',
-    colorObj: COLOR_OPTIONS.find(c => c.value === 'green'),
-    isFull: false
-  };
+  return getDefaultStatus();
 };
 const downloadCSV = (csvContent, filename = 'export.csv') => {
   const blob = new Blob(["\uFEFF" + csvContent], {
@@ -1443,6 +1453,9 @@ const hasCustomStatusRules = rules => Array.isArray(rules) && rules.length > 0 &
 const LEGACY_LOW_STATUS_LABELS = ['報名中', '開放報名中', '舒適體驗｜8人以下'];
 const LEGACY_MID_STATUS_LABELS = ['即將額滿', '即將額滿｜目前 X 人'];
 const LEGACY_HIGH_STATUS_LABELS = ['已額滿', '額滿'];
+const isLegacyLowStatusLabel = label => LEGACY_LOW_STATUS_LABELS.includes(label) || label.includes('報名');
+const isLegacyMidStatusLabel = label => LEGACY_MID_STATUS_LABELS.includes(label) || label.includes('即將滿員') || label.includes('即將額滿');
+const isLegacyHighStatusLabel = label => LEGACY_HIGH_STATUS_LABELS.includes(label) || label.includes('滿員') || label.includes('額滿');
 const shouldRemoveStoredStatusRules = rules => {
   const normalized = normalizeStatusRulesForDisplay(rules);
   if (normalized.length === 1) {
@@ -1451,26 +1464,33 @@ const shouldRemoveStoredStatusRules = rules => {
     const min = parseInt(only.min, 10);
     const max = parseInt(only.max, 10);
     const coversLowRange = (!Number.isFinite(min) || min <= 0) && (!Number.isFinite(max) || max >= 5);
-    return coversLowRange && LEGACY_LOW_STATUS_LABELS.includes(label);
+    return coversLowRange && isLegacyLowStatusLabel(label);
   }
   const low = normalized.find(rule => {
     const min = parseInt(rule.min, 10);
     const max = parseInt(rule.max, 10);
-    return (!Number.isFinite(min) || min <= 0) && Number.isFinite(max) && max >= 5 && LEGACY_LOW_STATUS_LABELS.includes(normalizeStatusRuleValue(rule.label));
+    return (!Number.isFinite(min) || min <= 0) && Number.isFinite(max) && max >= 8 && isLegacyLowStatusLabel(normalizeStatusRuleValue(rule.label));
   });
   const mid = normalized.find(rule => {
     const min = parseInt(rule.min, 10);
     const max = parseInt(rule.max, 10);
-    return Number.isFinite(min) && min >= 7 && min <= 9 && Number.isFinite(max) && max >= 10 && max <= 11 && LEGACY_MID_STATUS_LABELS.includes(normalizeStatusRuleValue(rule.label));
+    return Number.isFinite(min) && min >= 8 && min <= 9 && Number.isFinite(max) && max >= 10 && max <= 11 && isLegacyMidStatusLabel(normalizeStatusRuleValue(rule.label));
   });
   const high = normalized.find(rule => {
     const min = parseInt(rule.min, 10);
     const max = parseInt(rule.max, 10);
-    return Number.isFinite(min) && min >= 12 && (!Number.isFinite(max) || max >= 12) && LEGACY_HIGH_STATUS_LABELS.includes(normalizeStatusRuleValue(rule.label));
+    return Number.isFinite(min) && min >= 12 && (!Number.isFinite(max) || max >= 12) && isLegacyHighStatusLabel(normalizeStatusRuleValue(rule.label));
   });
-  const legacyLabels = new Set([...LEGACY_LOW_STATUS_LABELS, ...LEGACY_MID_STATUS_LABELS, ...LEGACY_HIGH_STATUS_LABELS]);
-  const allLabelsAreLegacy = normalized.every(rule => legacyLabels.has(normalizeStatusRuleValue(rule.label)));
-  return !!low && allLabelsAreLegacy && (normalized.length <= 2 || !!mid || !!high);
+  const allRulesLookLegacy = normalized.every(rule => {
+    const label = normalizeStatusRuleValue(rule.label);
+    const min = parseInt(rule.min, 10);
+    const max = parseInt(rule.max, 10);
+    if ((!Number.isFinite(min) || min <= 0) && Number.isFinite(max) && max >= 8) return isLegacyLowStatusLabel(label);
+    if (Number.isFinite(min) && min >= 8 && min <= 9 && Number.isFinite(max) && max >= 10 && max <= 11) return isLegacyMidStatusLabel(label);
+    if (Number.isFinite(min) && min >= 12 && (!Number.isFinite(max) || max >= 12)) return isLegacyHighStatusLabel(label);
+    return false;
+  });
+  return !!low && allRulesLookLegacy && (normalized.length <= 2 || !!mid || !!high);
 };
 const normalizeStoredStatusRules = rules => {
   const normalized = normalizeStatusRulesForDisplay(rules);
@@ -4966,7 +4986,7 @@ const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, on
     price: "",
     tags: { levels: "", types: "", locations: "" },
     backendColor: "#eff6ff",
-    statusRules: []
+    statusRules: cloneDefaultStatusRules()
   });
   const getTemplateSelectionKey = getQuickCreateTemplateStableKey;
   const [formData, setFormData] = useState({
@@ -5051,6 +5071,12 @@ const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, on
     const currentRules = newTemplateData.statusRules || [];
     setNewTemplateData({ ...newTemplateData, statusRules: currentRules.filter((_, i) => i !== idx) });
   };
+  const applyDefaultTemplateRules = () => {
+    setNewTemplateData({
+      ...newTemplateData,
+      statusRules: cloneDefaultStatusRules()
+    });
+  };
   const addFormRule = () => {
     if (!newRule.label) return alert("\u8ACB\u8F38\u5165\u986F\u793A\u6587\u5B57");
     const currentRules = formData.statusRules || [];
@@ -5108,6 +5134,7 @@ const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, on
   const handleEditTemplate = (e, tpl) => {
     e.stopPropagation();
     const templateEventName = getTemplateEventName(tpl);
+    const templateStatusRules = tpl.statusRules ? normalizeStoredStatusRules(tpl.statusRules) : [];
     setNewTemplateData({
       id: tpl.id,
       name: tpl.name,
@@ -5131,7 +5158,7 @@ const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, on
       // 載入價格
       tags: tpl.tags || { levels: "", types: "", locations: "" },
       backendColor: tpl.backendColor || "#eff6ff",
-      statusRules: tpl.statusRules ? normalizeStoredStatusRules(tpl.statusRules) : []
+      statusRules: templateStatusRules.length > 0 ? templateStatusRules : cloneDefaultStatusRules()
       // 載入規則
     });
     setIsCreatingTemplate(true);
@@ -5232,10 +5259,10 @@ const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, on
     const evt = item.evt || {};
     const cfg = item.cfg || {};
     return /* @__PURE__ */ React.createElement("div", { key: `${dateKey}_${evt.key || evt.eventName || idx}_${item.type || "main"}_${idx}`, className: "flex items-start justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "text-sm font-bold text-slate-700" }, toSafeDisplayText(evt.eventName, "\u672A\u547D\u540D\u6D3B\u52D5"), cfg.isCancelled && /* @__PURE__ */ React.createElement("span", { className: "ml-2 text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200" }, "\u6D41\u5718")), /* @__PURE__ */ React.createElement("div", { className: "text-[11px] text-slate-500 mt-1" }, toSafeDisplayText(item.displayTime, "--:--"), " \xB7 @", toSafeDisplayText(evt.instructor, "\u672A\u5B9A"))), /* @__PURE__ */ React.createElement("span", { className: `shrink-0 text-[10px] font-bold px-2 py-1 rounded-full border ${meta.tone}` }, toSafeDisplayText(meta.label, "")));
-  })) : /* @__PURE__ */ React.createElement("div", { className: "text-xs text-slate-400" }, "\u672C\u65E5\u5C1A\u7121\u5DF2\u6392\u6D3B\u52D5\u3002"))) : /* @__PURE__ */ React.createElement("div", { className: "text-xs text-slate-400" }, "\u5148\u9078\u65E5\u671F\u5F8C\uFF0C\u9019\u88E1\u6703\u5217\u51FA\u540C\u4E00\u5929\u5DF2\u6392\u7684\u6D3B\u52D5\u3002")))) : /* @__PURE__ */ React.createElement("div", { className: "bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3" }, /* @__PURE__ */ React.createElement("div", { className: "flex justify-between" }, /* @__PURE__ */ React.createElement("h4", { className: "font-bold" }, newTemplateData.id ? "\u7DE8\u8F2F\u6A21\u677F" : "\u5EFA\u7ACB\u65B0\u6A21\u677F"), /* @__PURE__ */ React.createElement("button", { onClick: () => {
+  })) : /* @__PURE__ */ React.createElement("div", { className: "text-xs text-slate-400" }, "\u672C\u65E5\u5C1A\u7121\u5DF2\u6392\u6D3B\u52D5\u3002"))) : /* @__PURE__ */ React.createElement("div", { className: "text-xs text-slate-400" }, "\u5148\u9078\u65E5\u671F\u5F8C\uFF0C\u9019\u88E1\u6703\u5217\u51FA\u540C\u4E00\u5929\u5DF2\u6392\u7684\u6D3B\u52D5\u3002")))) : /* @__PURE__ */ React.createElement("div", { className: "bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3" }, /* @__PURE__ */ React.createElement("div", { className: "flex justify-between items-start gap-2" }, /* @__PURE__ */ React.createElement("h4", { className: "font-bold" }, newTemplateData.id ? "\u7DE8\u8F2F\u6A21\u677F" : "\u5EFA\u7ACB\u65B0\u6A21\u677F"), /* @__PURE__ */ React.createElement("div", { className: "flex gap-2" }, /* @__PURE__ */ React.createElement("button", { type: "button", onClick: applyDefaultTemplateRules, className: "rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 hover:bg-emerald-100" }, "\u5957\u7528\u76EE\u524D\u9810\u8A2D"), /* @__PURE__ */ React.createElement("button", { onClick: () => {
     setIsCreatingTemplate(false);
     setNewTemplateData(createEmptyTemplateData());
-  }, className: "text-sm text-slate-500" }, "\u53D6\u6D88")), /* @__PURE__ */ React.createElement("input", { type: "text", className: "w-full px-3 py-2 text-sm border rounded-lg", placeholder: "\u6A21\u677F\u540D\u7A31 (\u5982: \u8C6A\u83EF\u5718)", value: newTemplateData.name, onChange: (e) => setNewTemplateData({ ...newTemplateData, name: e.target.value }) }), /* @__PURE__ */ React.createElement("div", { className: "bg-white border border-slate-200 rounded-xl p-3" }, /* @__PURE__ */ React.createElement("label", { className: "block text-xs font-bold text-slate-500 mb-2" }, "\u6A21\u677F\u5206\u985E"), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-3 gap-2" }, QUICK_CREATE_TEMPLATE_CATEGORY_OPTIONS.map((option) => {
+  }, className: "text-sm text-slate-500" }, "\u53D6\u6D88"))), /* @__PURE__ */ React.createElement("input", { type: "text", className: "w-full px-3 py-2 text-sm border rounded-lg", placeholder: "\u6A21\u677F\u540D\u7A31 (\u5982: \u8C6A\u83EF\u5718)", value: newTemplateData.name, onChange: (e) => setNewTemplateData({ ...newTemplateData, name: e.target.value }) }), /* @__PURE__ */ React.createElement("div", { className: "bg-white border border-slate-200 rounded-xl p-3" }, /* @__PURE__ */ React.createElement("label", { className: "block text-xs font-bold text-slate-500 mb-2" }, "\u6A21\u677F\u5206\u985E"), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-3 gap-2" }, QUICK_CREATE_TEMPLATE_CATEGORY_OPTIONS.map((option) => {
     const isActive = normalizeQuickCreateTemplateCategory(newTemplateData.templateCategory, newTemplateData.eventName || newTemplateData.name) === option.value;
     return /* @__PURE__ */ React.createElement(
       "button",
