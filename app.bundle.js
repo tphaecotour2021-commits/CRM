@@ -728,7 +728,8 @@ const normalizeQuickCreateTemplate = (tpl = {}) => {
     eventName,
     templateCategory: normalizeQuickCreateTemplateCategory(tpl.templateCategory, eventName),
     isPrivateGroupEvent: !!tpl.isPrivateGroupEvent || tpl?.tags?.levels === '包團' || String(tpl?.displayName || eventName || '').includes('包團'),
-    privateGroupLabel
+    privateGroupLabel,
+    statusRules: normalizeStoredStatusRules(tpl.statusRules || [])
   };
 };
 const DEFAULT_MASCOT_THEMES = [{
@@ -1439,9 +1440,41 @@ const getStatusRulesSignature = rules => JSON.stringify(normalizeStatusRulesForD
 const DEFAULT_STATUS_RULES_SIGNATURE = getStatusRulesSignature(DEFAULT_STATUS_RULES);
 const LEGACY_DEFAULT_STATUS_RULES_SIGNATURE = getStatusRulesSignature(LEGACY_DEFAULT_STATUS_RULES);
 const hasCustomStatusRules = rules => Array.isArray(rules) && rules.length > 0 && getStatusRulesSignature(rules) !== DEFAULT_STATUS_RULES_SIGNATURE;
+const LEGACY_LOW_STATUS_LABELS = ['報名中', '開放報名中', '舒適體驗｜8人以下'];
+const LEGACY_MID_STATUS_LABELS = ['即將額滿', '即將額滿｜目前 X 人'];
+const LEGACY_HIGH_STATUS_LABELS = ['已額滿', '額滿'];
+const shouldRemoveStoredStatusRules = rules => {
+  const normalized = normalizeStatusRulesForDisplay(rules);
+  if (normalized.length === 1) {
+    const only = normalized[0];
+    const label = normalizeStatusRuleValue(only.label);
+    const min = parseInt(only.min, 10);
+    const max = parseInt(only.max, 10);
+    const coversLowRange = (!Number.isFinite(min) || min <= 0) && (!Number.isFinite(max) || max >= 5);
+    return coversLowRange && LEGACY_LOW_STATUS_LABELS.includes(label);
+  }
+  const low = normalized.find(rule => {
+    const min = parseInt(rule.min, 10);
+    const max = parseInt(rule.max, 10);
+    return (!Number.isFinite(min) || min <= 0) && Number.isFinite(max) && max >= 5 && LEGACY_LOW_STATUS_LABELS.includes(normalizeStatusRuleValue(rule.label));
+  });
+  const mid = normalized.find(rule => {
+    const min = parseInt(rule.min, 10);
+    const max = parseInt(rule.max, 10);
+    return Number.isFinite(min) && min >= 7 && min <= 9 && Number.isFinite(max) && max >= 10 && max <= 11 && LEGACY_MID_STATUS_LABELS.includes(normalizeStatusRuleValue(rule.label));
+  });
+  const high = normalized.find(rule => {
+    const min = parseInt(rule.min, 10);
+    const max = parseInt(rule.max, 10);
+    return Number.isFinite(min) && min >= 12 && (!Number.isFinite(max) || max >= 12) && LEGACY_HIGH_STATUS_LABELS.includes(normalizeStatusRuleValue(rule.label));
+  });
+  const legacyLabels = new Set([...LEGACY_LOW_STATUS_LABELS, ...LEGACY_MID_STATUS_LABELS, ...LEGACY_HIGH_STATUS_LABELS]);
+  const allLabelsAreLegacy = normalized.every(rule => legacyLabels.has(normalizeStatusRuleValue(rule.label)));
+  return !!low && allLabelsAreLegacy && (normalized.length <= 2 || !!mid || !!high);
+};
 const normalizeStoredStatusRules = rules => {
   const normalized = normalizeStatusRulesForDisplay(rules);
-  return getStatusRulesSignature(normalized) === LEGACY_DEFAULT_STATUS_RULES_SIGNATURE ? DEFAULT_STATUS_RULES : normalized;
+  return getStatusRulesSignature(normalized) === LEGACY_DEFAULT_STATUS_RULES_SIGNATURE || shouldRemoveStoredStatusRules(normalized) ? [] : normalized;
 };
 const formatStatusRuleLabel = (label, participantCount, capacity = 12) => {
   const rawLabel = toSafeDisplayText(label, '報名中').trim() || '報名中';
@@ -3927,7 +3960,7 @@ const EventManagerModal = ({
         locations: ''
       },
       backendColor: backendColor || '#eff6ff',
-      statusRules: statusRules || []
+      statusRules: normalizeStoredStatusRules(statusRules || [])
     });
     try {
       await Promise.resolve(onSaveTemplate?.(templatePayload));
@@ -10594,7 +10627,10 @@ const MainApp = () => {
       if (s && s.exists()) {
         const data = sanitizeFirebaseValue(s.data() || {});
         const d = data.csvData || '';
-        if (data.globalRules) setGlobalRules(normalizeStoredStatusRules(data.globalRules));
+        if (Array.isArray(data.globalRules)) {
+          const cleanedGlobalRules = normalizeStoredStatusRules(data.globalRules);
+          setGlobalRules(cleanedGlobalRules);
+        }
         if (data.tagDefinitions) setTagDefinitions(normalizeTagDefinitionsForDisplay(data.tagDefinitions));
         setPerformanceProductSettings(data.performanceProductSettings || {});
         setMonthlyKpis(data.monthlyKpis || {});
@@ -10629,7 +10665,8 @@ const MainApp = () => {
     const unsubConfigs = onSnapshot(configsRef, s => {
       const cfgs = {};
       if (s) s.forEach(d => {
-        cfgs[d.id] = normalizeEventConfigForDisplay(sanitizeFirebaseValue(d.data() || {}));
+        const rawConfig = sanitizeFirebaseValue(d.data() || {});
+        cfgs[d.id] = normalizeEventConfigForDisplay(rawConfig);
       });
       setEventConfigs(cfgs);
     });
@@ -10681,7 +10718,11 @@ const MainApp = () => {
     const templatesRef = doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'templates');
     return onSnapshot(templatesRef, s => {
       if (s && s.exists()) {
-        setCustomTemplates(sanitizeFirebaseValue(s.data() || {})?.list || []);
+        const rawTemplates = sanitizeFirebaseValue(s.data() || {})?.list || [];
+        const cleanedTemplates = (Array.isArray(rawTemplates) ? rawTemplates : []).map(tpl => {
+          return normalizeQuickCreateTemplate(tpl);
+        });
+        setCustomTemplates(cleanedTemplates);
       } else {
         setCustomTemplates([]);
       }
@@ -11803,7 +11844,7 @@ const MainApp = () => {
           locations: ''
         },
         backendColor: backendColor || '#eff6ff',
-        statusRules: statusRules || [],
+        statusRules: normalizeStoredStatusRules(statusRules || []),
         leadInstructors: instructors || [],
         supportInstructors: [],
         isCancelled: !!isCancelled
@@ -11871,6 +11912,7 @@ const MainApp = () => {
       ...(eventConfigs[oldEventKey] || {}),
       ...(newConfig || {})
     };
+    mergedConfig.statusRules = normalizeStoredStatusRules(mergedConfig.statusRules || []);
     if (newKey !== oldEventKey) delete nextConfigs[oldEventKey];
     nextConfigs[newKey] = mergedConfig;
     pushEventVersionStatus('checking', `正在更新 ${editingEvent.date} 的活動設定...`);
@@ -15672,7 +15714,7 @@ const MainApp = () => {
     onClose: () => setShowGlobalRules(false),
     onSave: async newRules => {
       await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'main'), {
-        globalRules: newRules
+        globalRules: normalizeStoredStatusRules(newRules || [])
       }, {
         merge: true
       });
