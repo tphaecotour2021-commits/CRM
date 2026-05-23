@@ -398,6 +398,15 @@ const getLocalDateStr = () => {
   const localISOTime = new Date(d - offset).toISOString().slice(0, 10);
   return localISOTime;
 };
+const formatLocalDateKey = date => {
+  if (!(date instanceof Date) || isNaN(date.getTime())) return getLocalDateStr();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
+const parseLocalDateKey = dateKey => {
+  const [year, month, day] = String(dateKey || '').split('-').map(value => parseInt(value, 10));
+  if (!year || !month || !day) return new Date();
+  return new Date(year, month - 1, day);
+};
 const Logo = ({
   className
 }) => {
@@ -814,7 +823,7 @@ const COLOR_OPTIONS = [{
 const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
 const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
 const getDayOfYear = dateStr => {
-  const date = new Date(dateStr);
+  const date = parseLocalDateKey(dateStr);
   if (isNaN(date.getTime())) return 0;
   const start = new Date(date.getFullYear(), 0, 0);
   const diff = date - start;
@@ -827,7 +836,7 @@ const createProjectConsoleTemplate = name => ({
   pm: "未設定",
   department: "未設定",
   totalBudget: 0,
-  deadline: new Date().toISOString().split('T')[0],
+  deadline: getLocalDateStr(),
   status: "active",
   workPackages: [],
   issues: [],
@@ -838,13 +847,13 @@ const normalizeConsoleTask = (task, idx, wpId) => ({
   name: task?.name || task?.title || "新任務",
   owner: task?.owner || task?.assignee || "未指派",
   plan: {
-    start: task?.plan?.start || task?.dueDate || new Date().toISOString().split('T')[0],
-    end: task?.plan?.end || task?.dueDate || new Date().toISOString().split('T')[0],
+    start: task?.plan?.start || task?.dueDate || getLocalDateStr(),
+    end: task?.plan?.end || task?.dueDate || getLocalDateStr(),
     cost: Number(task?.plan?.cost || task?.kpi?.target || 0)
   },
   actual: {
-    start: task?.actual?.start || task?.dueDate || new Date().toISOString().split('T')[0],
-    end: task?.actual?.end || task?.dueDate || new Date().toISOString().split('T')[0],
+    start: task?.actual?.start || task?.dueDate || getLocalDateStr(),
+    end: task?.actual?.end || task?.dueDate || getLocalDateStr(),
     cost: Number(task?.actual?.cost || task?.kpi?.current || 0)
   },
   progress: Number(task?.progress ?? (task?.completed ? 100 : 0))
@@ -878,7 +887,7 @@ const normalizeConsoleProject = (project, fallbackId) => {
     pm: project?.pm || project?.owner || "未設定",
     department: project?.department || "未設定",
     totalBudget: Number(project?.totalBudget || 0),
-    deadline: project?.deadline || new Date().toISOString().split('T')[0],
+    deadline: project?.deadline || getLocalDateStr(),
     status: workspaceStatus,
     workspaceStatus,
     workPackages,
@@ -1028,7 +1037,7 @@ const getEventStatus = (count, capacity, config, dateStr, globalRules) => {
   if (dateStr) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const evtDate = new Date(dateStr);
+    const evtDate = parseLocalDateKey(dateStr);
     if (evtDate < today) {
       return {
         label: '🔚 已結束',
@@ -2266,7 +2275,7 @@ const AddPromiseModal = ({
   const [form, setForm] = useState({
     content: '',
     who: '',
-    date: new Date().toISOString().split('T')[0],
+    date: getLocalDateStr(),
     time: '12:00'
   });
   return React.createElement("div", {
@@ -3589,7 +3598,7 @@ const AddEventCustomerModal = ({
     birthday: '',
     source: '',
     notes: '',
-    orderDate: new Date().toISOString().split('T')[0]
+    orderDate: getLocalDateStr()
   });
   const [matchFound, setMatchFound] = useState(false);
   const uniqueCustomers = useMemo(() => {
@@ -6249,7 +6258,8 @@ const PlanningBoard = ({
   onBulkApplyActivityMetric,
   onChangeProfitSplit,
   onAssignPlacement,
-  onRemovePlacement
+  onRemovePlacement,
+  onClearPlacements
 }) => {
   const [selectedActivity, setSelectedActivity] = useState('');
   const [selectedActivityTemplate, setSelectedActivityTemplate] = useState('theme');
@@ -6453,36 +6463,46 @@ const PlanningBoard = ({
     icon: 'trending-up'
   }];
   const planningExcelSheets = useMemo(() => {
-    const assumptionRows = [['活動名稱', '活動數', '平均人數', '每人營收', '每人成本', '每人毛利', '總毛利'], ...planning.activityRows.map(row => [row.name, Number(row.activityCount) || 0, Number(row.avgPax) || 0, Number(row.revenuePerPax) || 0, Number(row.costPerPax) || 0, Number(row.grossProfitPerPax) || 0, Number(row.projectedGrossProfit) || 0]), [], ['總人數', Number(planning.summary.plannedPax) || 0], ['毛利總和', Number(planning.summary.plannedGrossProfit) || 0], ['公司毛利', Number(planning.summary.companyGrossProfit) || 0], ['業績獎金', Number(planning.summary.bonusGrossProfit) || 0], ['公司比例(%)', Number(planning.profitSplit.companyPct) || 0], ['獎金比例(%)', Number(planning.profitSplit.bonusPct) || 0]];
-    const placementRows = [['日期', '講師', '活動名稱']];
+    const placementMap = new Map();
     calendarRows.forEach(row => {
       (planning.matrixDates || []).forEach(dateKey => {
         const cell = row.cellMap[dateKey];
         const simulatedPlacements = Array.isArray(cell?.simulatedPlacements) ? cell.simulatedPlacements : cell?.simulatedPlacement ? [cell.simulatedPlacement] : [];
         simulatedPlacements.forEach(placement => {
           if (!placement?.eventName) return;
-          placementRows.push([dateKey, row.name, placement.eventName]);
+          const cleanDate = String(dateKey || '').trim();
+          const cleanEventName = String(placement.eventName || '').trim();
+          const cleanInstructorName = String(placement.instructorName || row.name || '').trim();
+          if (!cleanDate || !cleanEventName || !cleanInstructorName) return;
+          const key = `${cleanDate}__${cleanEventName}`;
+          if (!placementMap.has(key)) {
+            placementMap.set(key, {
+              dateKey: cleanDate,
+              eventName: cleanEventName,
+              instructors: new Set()
+            });
+          }
+          placementMap.get(key).instructors.add(cleanInstructorName);
         });
       });
     });
-    const calendarMatrixRows = [['講師', ...(planning.matrixDates || [])], ...calendarRows.map(row => [row.name, ...(planning.matrixDates || []).map(dateKey => {
-      const cell = row.cellMap[dateKey];
-      const simulatedPlacements = Array.isArray(cell?.simulatedPlacements) ? cell.simulatedPlacements : cell?.simulatedPlacement ? [cell.simulatedPlacement] : [];
-      return simulatedPlacements.map(placement => placement?.eventName).filter(Boolean).join('／');
-    })])];
+    const placementRows = [['講師', '活動日期', '', '', '', '活動名稱'], ...Array.from(placementMap.values()).sort((a, b) => a.dateKey.localeCompare(b.dateKey) || a.eventName.localeCompare(b.eventName, 'zh-Hant')).map(item => {
+      const instructorNames = Array.from(item.instructors).sort((a, b) => a.localeCompare(b, 'zh-Hant')).join(' & ');
+      return [instructorNames, item.dateKey.replace(/-/g, '/'), '', '', '', item.eventName];
+    })];
     return [{
-      name: `${monthLabel}模擬月曆`,
-      rows: calendarMatrixRows
-    }, {
-      name: `${monthLabel}排班明細`,
+      name: `${monthLabel}排班清單`,
       rows: placementRows
-    }, {
-      name: `${monthLabel}活動假設`,
-      rows: assumptionRows
     }];
   }, [monthLabel, planning, calendarRows]);
   const handleExportPlanningExcel = () => {
     downloadExcelWorkbook(planningExcelSheets, `${sanitizeFilename(monthLabel, '活動模擬')}_活動模擬.xls`);
+  };
+  const handleClearPlanningPlacements = () => {
+    if ((planning?.placementCount || 0) <= 0) return alert("本月目前沒有模擬排班可清除。");
+    if (!confirm(`確定要清除 ${monthLabel} 目前 ${planning.placementCount} 筆模擬排班嗎？\n這只會清除本月月曆上的模擬安排，活動假設與毛利設定會保留。`)) return;
+    captureScrollSnapshot();
+    onClearPlacements();
   };
   const bulkMetricConfigs = [{
     field: 'avgPax',
@@ -6654,6 +6674,13 @@ const PlanningBoard = ({
     name: "download",
     size: 16
   }), " \u532F\u51FA Excel"), React.createElement("button", {
+    onClick: handleClearPlanningPlacements,
+    disabled: (planning?.placementCount || 0) <= 0,
+    className: `px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 border shadow-sm transition ${planning?.placementCount > 0 ? 'bg-white hover:bg-rose-50 text-rose-600 border-rose-200' : 'bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed'}`
+  }, React.createElement(Icon, {
+    name: "trash-2",
+    size: 16
+  }), " \u6E05\u9664\u672C\u6708\u6A21\u64EC"), React.createElement("button", {
     onClick: onSave,
     className: "bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-sm"
   }, React.createElement(Icon, {
@@ -8094,7 +8121,7 @@ const EnrollmentMonitor = ({
   });
   const [sortBy, setSortBy] = useState('date');
   const processedEvents = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateStr();
     const customerVisitDateMap = {};
     Object.values(stats.events || {}).forEach(eventItem => {
       const eventDate = String(eventItem?.date || '').trim();
@@ -9412,7 +9439,7 @@ const AnalyticsDashboard = ({
       const d = new Date(s.startTime);
       let key = '';
       if (trendMode === 'daily') {
-        key = s.date || d.toISOString().split('T')[0];
+        key = s.date || formatLocalDateKey(d);
       } else if (trendMode === 'weekly') {
         const startOfYear = new Date(d.getFullYear(), 0, 1);
         const days = Math.floor((d - startOfYear) / (24 * 60 * 60 * 1000));
@@ -9740,7 +9767,7 @@ const ProjectConsoleTab = ({
   };
   const addTask = wpId => {
     if (!currentProject) return;
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateStr();
     const next = currentProject.workPackages.map(wp => {
       if (wp.id !== wpId) return wp;
       return {
@@ -10248,7 +10275,8 @@ const MainApp = () => {
   const [publicSearchTerm, setPublicSearchTerm] = useState('');
   const [globalRules, setGlobalRules] = useState(null);
   const [showGlobalRules, setShowGlobalRules] = useState(false);
-  const [selectedPublicDate, setSelectedPublicDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedPublicDate, setSelectedPublicDate] = useState(getLocalDateStr);
+  const lastLocalTodayRef = useRef(getLocalDateStr());
   const [editingProject, setEditingProject] = useState(null);
   const [tagDefinitions, setTagDefinitions] = useState(DEFAULT_TAG_DEFS);
   const [showTagSettings, setShowTagSettings] = useState(false);
@@ -10326,12 +10354,25 @@ const MainApp = () => {
   const [authReady, setAuthReady] = useState(() => !!auth);
   const [adminPassword, setAdminPassword] = useState('8888');
   const [selectedCustomer, setSelectedCustomer] = useState('');
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentDate, setCurrentDate] = useState(() => parseLocalDateKey(getLocalDateStr()));
+  useEffect(() => {
+    const syncLocalToday = () => {
+      const nextToday = getLocalDateStr();
+      const previousToday = lastLocalTodayRef.current;
+      if (nextToday === previousToday) return;
+      lastLocalTodayRef.current = nextToday;
+      setSelectedPublicDate(dateKey => dateKey === previousToday ? nextToday : dateKey);
+      setCurrentDate(date => formatLocalDateKey(date) === previousToday ? parseLocalDateKey(nextToday) : date);
+    };
+    syncLocalToday();
+    const timer = setInterval(syncLocalToday, 60 * 1000);
+    return () => clearInterval(timer);
+  }, []);
   const [crmSearchTerm, setCrmSearchTerm] = useState('');
   const [crmRankMode, setCrmRankMode] = useState('ltv');
   const [showCrmDropdown, setShowCrmDropdown] = useState(false);
   const [newReg, setNewReg] = useState({
-    date: new Date().toISOString().split('T')[0],
+    date: getLocalDateStr(),
     eventName: '',
     instructor: '',
     customerName: '',
@@ -10341,7 +10382,7 @@ const MainApp = () => {
     birthday: '',
     email: '',
     source: '',
-    orderDate: new Date().toISOString().split('T')[0],
+    orderDate: getLocalDateStr(),
     phone: ''
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -11758,7 +11799,7 @@ const MainApp = () => {
       source: r.source || '',
       socialName: r.socialName || '',
       notes: r.notes || '',
-      orderDate: new Date().toISOString().split('T')[0],
+      orderDate: getLocalDateStr(),
       phone: r.phone || ''
     }));
     const finalData = [...currentRows, ...formattedNewRows];
@@ -11787,7 +11828,7 @@ const MainApp = () => {
       birthday: '',
       email: '',
       source: '',
-      orderDate: new Date().toISOString().split('T')[0],
+      orderDate: getLocalDateStr(),
       phone: ''
     });
     setAddRegStatus('success');
@@ -12064,7 +12105,7 @@ const MainApp = () => {
       name,
       owner: 'Team',
       status: 'To Do',
-      deadline: new Date().toISOString().split('T')[0],
+      deadline: getLocalDateStr(),
       subTasks: [],
       cloudLink: ''
     });
@@ -13267,11 +13308,17 @@ const MainApp = () => {
       calendarPlacements: (Array.isArray(current.calendarPlacements) ? current.calendarPlacements : []).filter(placement => String(placement?.id || '').trim() !== String(targetPlacement?.id || '').trim())
     }));
   };
+  const handleClearCurrentMonthPlanPlacements = () => {
+    updateCurrentMonthPlan(current => ({
+      ...current,
+      calendarPlacements: []
+    }));
+  };
   const calendarOccupancy = useMemo(() => {
     const map = {};
     Object.values(stats.events).forEach(evt => {
       if (!evt.date) return;
-      const mainDate = new Date(evt.date);
+      const mainDate = parseLocalDateKey(evt.date);
       if (isNaN(mainDate.getTime())) return;
       const cfg = eventConfigs[evt.key] || {};
       const duration = parseInt(cfg.duration) || 1;
@@ -13281,7 +13328,7 @@ const MainApp = () => {
       for (let i = prepDays; i > 0; i--) {
         const d = new Date(mainDate);
         d.setDate(d.getDate() - i);
-        const dateStr = d.toISOString().split('T')[0];
+        const dateStr = formatLocalDateKey(d);
         if (!map[dateStr]) map[dateStr] = [];
         map[dateStr].push({
           type: 'prep',
@@ -13294,7 +13341,7 @@ const MainApp = () => {
       for (let i = 0; i < duration; i++) {
         const d = new Date(mainDate);
         d.setDate(d.getDate() + i);
-        const dateStr = d.toISOString().split('T')[0];
+        const dateStr = formatLocalDateKey(d);
         if (!map[dateStr]) map[dateStr] = [];
         if (i === 0) {
           map[dateStr].push({
@@ -14233,7 +14280,8 @@ const MainApp = () => {
     onBulkApplyActivityMetric: handleBulkCurrentMonthPlanActivityMetricChange,
     onChangeProfitSplit: handleCurrentMonthPlanProfitSplitChange,
     onAssignPlacement: handleAssignCurrentMonthPlanPlacement,
-    onRemovePlacement: handleRemoveCurrentMonthPlanPlacement
+    onRemovePlacement: handleRemoveCurrentMonthPlanPlacement,
+    onClearPlacements: handleClearCurrentMonthPlanPlacements
   }), activeTab === 'promises' && React.createElement("div", {
     className: "max-w-6xl mx-auto fade-in pb-20"
   }, React.createElement("header", {
