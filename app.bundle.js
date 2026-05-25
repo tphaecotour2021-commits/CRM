@@ -10777,14 +10777,31 @@ const MainApp = () => {
     });
   }, [canLoadAdminData, db, dbSource, shouldLoadAuthSettings]);
   useEffect(() => {
-    if (!canLoadAdminData || !shouldLoadTemplates) return undefined;
+    if (!shouldLoadTemplates) {
+      setTemplatesLoadState(current => current === 'loading' ? 'idle' : current);
+      return undefined;
+    }
+    if (!canLoadAdminData) {
+      const authWaitTimer = setTimeout(() => {
+        setTemplatesLoadState(current => current === 'loading' ? 'error' : current);
+      }, 10000);
+      return () => clearTimeout(authWaitTimer);
+    }
     if (!db) {
       setTemplatesLoadState('error');
       return undefined;
     }
     setTemplatesLoadState('loading');
     const templatesRef = doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'templates');
-    return onSnapshot(templatesRef, s => {
+    let didReceiveSnapshot = false;
+    const timeoutTimer = setTimeout(() => {
+      if (didReceiveSnapshot) return;
+      console.warn('Template subscription timed out');
+      setTemplatesLoadState('error');
+    }, 12000);
+    const unsubscribeTemplates = onSnapshot(templatesRef, s => {
+      didReceiveSnapshot = true;
+      clearTimeout(timeoutTimer);
       if (s && s.exists()) {
         const rawTemplates = sanitizeFirebaseValue(s.data() || {})?.list || [];
         const cleanedTemplates = (Array.isArray(rawTemplates) ? rawTemplates : []).map(tpl => {
@@ -10796,9 +10813,15 @@ const MainApp = () => {
       }
       setTemplatesLoadState('success');
     }, error => {
+      didReceiveSnapshot = true;
+      clearTimeout(timeoutTimer);
       console.error('Template subscription failed', error);
       setTemplatesLoadState('error');
     });
+    return () => {
+      clearTimeout(timeoutTimer);
+      if (typeof unsubscribeTemplates === 'function') unsubscribeTemplates();
+    };
   }, [canLoadAdminData, db, dbSource, shouldLoadTemplates, templatesReloadSeed]);
   useEffect(() => {
     if (!canLoadAdminData || !shouldLoadMonthlyPlans || !db) return undefined;
