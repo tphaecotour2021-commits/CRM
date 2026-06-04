@@ -270,6 +270,45 @@ const restDeleteDoc = async docPath => {
   }
   return null;
 };
+const fromFirestoreRestValue = fieldNode => {
+  if (!fieldNode) return null;
+  if (Object.prototype.hasOwnProperty.call(fieldNode, 'stringValue')) return fieldNode.stringValue;
+  if (Object.prototype.hasOwnProperty.call(fieldNode, 'integerValue')) return Number(fieldNode.integerValue);
+  if (Object.prototype.hasOwnProperty.call(fieldNode, 'doubleValue')) return Number(fieldNode.doubleValue);
+  if (Object.prototype.hasOwnProperty.call(fieldNode, 'booleanValue')) return !!fieldNode.booleanValue;
+  if (Object.prototype.hasOwnProperty.call(fieldNode, 'timestampValue')) return fieldNode.timestampValue;
+  if (Object.prototype.hasOwnProperty.call(fieldNode, 'nullValue')) return null;
+  if (Object.prototype.hasOwnProperty.call(fieldNode, 'arrayValue')) {
+    const values = fieldNode.arrayValue?.values || [];
+    return values.map(item => fromFirestoreRestValue(item));
+  }
+  if (Object.prototype.hasOwnProperty.call(fieldNode, 'mapValue')) {
+    const fields = fieldNode.mapValue?.fields || {};
+    return Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, fromFirestoreRestValue(value)]));
+  }
+  return null;
+};
+const restGetDoc = async docPath => {
+  const token = await getAuthTokenForRest();
+  const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/${encodeDocPathForRest(docPath)}`;
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw {
+      code: `http-${res.status}`,
+      message: `REST GET 失敗: ${text.slice(0, 220) || res.statusText}`
+    };
+  }
+  const json = await res.json();
+  const fields = json?.fields || {};
+  return Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, fromFirestoreRestValue(value)]));
+};
 const setDoc = async (docRef, data, options) => {
   if (!docRef) return;
   try {
@@ -8120,8 +8159,16 @@ const EnrollmentMonitor = ({
     location: ''
   });
   const [sortBy, setSortBy] = useState('date');
+  const getDefaultRangeEndDate = () => {
+    const endDate = parseLocalDateKey(getLocalDateStr());
+    endDate.setDate(endDate.getDate() + 30);
+    return formatLocalDateKey(endDate);
+  };
+  const [rangeStartDate, setRangeStartDate] = useState(getLocalDateStr);
+  const [rangeEndDate, setRangeEndDate] = useState(getDefaultRangeEndDate);
   const processedEvents = useMemo(() => {
-    const today = getLocalDateStr();
+    const startDate = String(rangeStartDate || '').trim();
+    const endDate = String(rangeEndDate || '').trim();
     const customerVisitDateMap = {};
     Object.values(stats.events || {}).forEach(eventItem => {
       const eventDate = String(eventItem?.date || '').trim();
@@ -8132,8 +8179,8 @@ const EnrollmentMonitor = ({
         customerVisitDateMap[customerName].add(eventDate);
       });
     });
-    return Object.values(stats.events).map(e => {
-      const cfg = eventConfigs[e.key] || {};
+    return Object.values(stats.events || {}).map(e => {
+      const cfg = (eventConfigs || {})[e.key] || {};
       const capacity = parseInt(cfg.capacity) || 12;
       const rate = Math.min(e.count / capacity * 100, 100);
       const tags = cfg.tags || {
@@ -8167,7 +8214,8 @@ const EnrollmentMonitor = ({
         returningCustomerRate
       };
     }).filter(e => {
-      if (e.date < today) return false;
+      if (startDate && e.date < startDate) return false;
+      if (endDate && e.date > endDate) return false;
       if (filters.level && e.tags.levels !== filters.level) return false;
       if (filters.type && e.tags.types !== filters.type) return false;
       if (filters.location && e.tags.locations !== filters.location) return false;
@@ -8176,12 +8224,34 @@ const EnrollmentMonitor = ({
       if (sortBy === 'rate') return b.rate - a.rate;
       return new Date(a.date) - new Date(b.date);
     });
-  }, [stats, eventConfigs, filters, sortBy]);
+  }, [stats, eventConfigs, filters, sortBy, rangeStartDate, rangeEndDate]);
   const getProgressColor = (rate, isFull) => {
     if (isFull || rate >= 100) return 'bg-red-500';
     if (rate >= 80) return 'bg-orange-500';
     if (rate >= 50) return 'bg-blue-500';
     return 'bg-emerald-500';
+  };
+  const exportEnrollmentRange = () => {
+    const startLabel = rangeStartDate || '不限開始';
+    const endLabel = rangeEndDate || '不限結束';
+    const headers = ['日期', '活動名稱', '講師', '活動等級', '活動種類', '活動地點', '報名人數', '人數上限', '報名率', '狀態', '新客人數', '舊客人數', '新客比例', '舊客比例', '共乘人數', '自行前往人數', '未定交通', '報名者摘要'];
+    const rows = processedEvents.map(eventItem => {
+      const bookedCustomers = (Array.isArray(eventItem.customers) ? eventItem.customers : []).filter(customer => {
+        const customerName = String(customer?.customerName || '').trim();
+        return customerName && customerName !== '開放報名中';
+      });
+      const carpoolCount = bookedCustomers.filter(customer => String(customer?.transport || '').trim() === '共乘').length;
+      const selfTransportCount = bookedCustomers.filter(customer => String(customer?.transport || '').trim() === '自行前往').length;
+      const unsetTransportCount = Math.max(bookedCustomers.length - carpoolCount - selfTransportCount, 0);
+      const customerSummary = bookedCustomers.map(customer => {
+        const name = toSafeDisplayText(customer.customerName, '未命名');
+        const transport = toSafeDisplayText(customer.transport, '未定');
+        return `${name}(${transport})`;
+      }).join('、');
+      return [toSafeDisplayText(eventItem.date, ''), toSafeDisplayText(eventItem.cfg?.displayName, toSafeDisplayText(eventItem.eventName, '未命名活動')), toSafeDisplayText(eventItem.instructor, '未定'), toSafeDisplayText(eventItem.tags?.levels, ''), toSafeDisplayText(eventItem.tags?.types, ''), toSafeDisplayText(eventItem.tags?.locations, ''), eventItem.count || 0, eventItem.capacity || 0, `${Math.round(eventItem.rate || 0)}%`, eventItem.isFull ? '額滿' : '可報名', eventItem.newCustomerCount || 0, eventItem.returningCustomerCount || 0, `${eventItem.newCustomerRate || 0}%`, `${eventItem.returningCustomerRate || 0}%`, carpoolCount, selfTransportCount, unsetTransportCount, customerSummary];
+    });
+    const csvContent = [headers, ...rows].map(row => row.map(value => toCSVField(value === 0 ? '0' : value ?? '')).join(',')).join('\n');
+    downloadCSV(csvContent, `報名監控_${sanitizeFilename(startLabel)}_${sanitizeFilename(endLabel)}.csv`);
   };
   return React.createElement("div", {
     className: "fade-in max-w-6xl mx-auto space-y-6 pb-20"
@@ -8273,6 +8343,49 @@ const EnrollmentMonitor = ({
       value: safeTag
     }, safeTag) : null;
   }))))), React.createElement("div", {
+    className: "bg-white p-4 rounded-2xl shadow-sm border border-slate-200"
+  }, React.createElement("div", {
+    className: "flex flex-col lg:flex-row lg:items-end gap-4"
+  }, React.createElement("div", {
+    className: "flex-1"
+  }, React.createElement("div", {
+    className: "flex items-center gap-2 mb-3"
+  }, React.createElement(Icon, {
+    name: "download",
+    size: 18,
+    className: "text-emerald-600"
+  }), React.createElement("span", {
+    className: "font-bold text-slate-700"
+  }, "\u7BC4\u570D\u532F\u51FA"), React.createElement("span", {
+    className: "text-xs text-slate-400"
+  }, "\u76EE\u524D\u7BC4\u570D ", processedEvents.length, " \u5834")), React.createElement("div", {
+    className: "grid grid-cols-1 sm:grid-cols-2 gap-3"
+  }, React.createElement("label", {
+    className: "block"
+  }, React.createElement("span", {
+    className: "text-xs font-bold text-slate-400 mb-1 block"
+  }, "\u958B\u59CB\u65E5\u671F"), React.createElement("input", {
+    type: "date",
+    value: rangeStartDate,
+    onChange: event => setRangeStartDate(event.target.value),
+    className: "w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-emerald-500"
+  })), React.createElement("label", {
+    className: "block"
+  }, React.createElement("span", {
+    className: "text-xs font-bold text-slate-400 mb-1 block"
+  }, "\u7D50\u675F\u65E5\u671F"), React.createElement("input", {
+    type: "date",
+    value: rangeEndDate,
+    onChange: event => setRangeEndDate(event.target.value),
+    className: "w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-emerald-500"
+  })))), React.createElement("button", {
+    onClick: exportEnrollmentRange,
+    disabled: processedEvents.length === 0,
+    className: `px-5 py-2.5 rounded-xl font-bold shadow-sm flex items-center justify-center gap-2 transition-all ${processedEvents.length === 0 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow'}`
+  }, React.createElement(Icon, {
+    name: "download",
+    size: 18
+  }), "\u532F\u51FA\u5831\u540D\u72C0\u6CC1"))), React.createElement("div", {
     className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
   }, processedEvents.map((e, idx) => {
     const safeEventDate = toSafeDisplayText(e.date, '');
@@ -8340,7 +8453,7 @@ const EnrollmentMonitor = ({
     className: "text-4xl mb-2"
   }, "\uD83D\uDD0D"), React.createElement("p", {
     className: "text-slate-500"
-  }, "\u6C92\u6709\u7B26\u5408\u7BE9\u9078\u689D\u4EF6\u7684\u672A\u4F86\u6D3B\u52D5")));
+  }, "\u6C92\u6709\u7B26\u5408\u7BE9\u9078\u689D\u4EF6\u6216\u65E5\u671F\u7BC4\u570D\u7684\u6D3B\u52D5")));
 };
 const EditRowModal = ({
   rowData,
@@ -10793,32 +10906,72 @@ const MainApp = () => {
     }
     setTemplatesLoadState('loading');
     const templatesRef = doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'templates');
-    let didReceiveSnapshot = false;
-    const timeoutTimer = setTimeout(() => {
-      if (didReceiveSnapshot) return;
-      console.warn('Template subscription timed out');
-      setTemplatesLoadState('error');
-    }, 12000);
-    const unsubscribeTemplates = onSnapshot(templatesRef, s => {
-      didReceiveSnapshot = true;
-      clearTimeout(timeoutTimer);
-      if (s && s.exists()) {
-        const rawTemplates = sanitizeFirebaseValue(s.data() || {})?.list || [];
-        const cleanedTemplates = (Array.isArray(rawTemplates) ? rawTemplates : []).map(tpl => {
-          return normalizeQuickCreateTemplate(tpl);
-        });
-        setCustomTemplates(cleanedTemplates);
-      } else {
-        setCustomTemplates([]);
-      }
+    const cacheKey = `crm_templates_cache_${dbSource}`;
+    const applyTemplatesData = rawData => {
+      const rawTemplates = sanitizeFirebaseValue(rawData || {})?.list || [];
+      const cleanedTemplates = (Array.isArray(rawTemplates) ? rawTemplates : []).map(tpl => {
+        return normalizeQuickCreateTemplate(tpl);
+      });
+      setCustomTemplates(cleanedTemplates);
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify(cleanedTemplates));
+      } catch (_) {}
       setTemplatesLoadState('success');
-    }, error => {
-      didReceiveSnapshot = true;
-      clearTimeout(timeoutTimer);
-      console.error('Template subscription failed', error);
+    };
+    try {
+      const cachedTemplates = JSON.parse(localStorage.getItem(cacheKey) || '[]');
+      if (Array.isArray(cachedTemplates) && cachedTemplates.length > 0) {
+        setCustomTemplates(cachedTemplates.map(tpl => normalizeQuickCreateTemplate(tpl)));
+      }
+    } catch (_) {}
+    let cancelled = false;
+    let didResolveInitialLoad = false;
+    const timeoutTimer = setTimeout(() => {
+      if (didResolveInitialLoad) return;
+      console.warn('Template initial load timed out');
       setTemplatesLoadState('error');
+    }, 15000);
+    const resolveInitialLoad = rawData => {
+      if (cancelled) return;
+      didResolveInitialLoad = true;
+      clearTimeout(timeoutTimer);
+      applyTemplatesData(rawData || {});
+    };
+    const readTemplatesOnce = async () => {
+      try {
+        const snap = await withTimeout(templatesRef.get({
+          source: 'server'
+        }), 7000, '讀取模板');
+        if (didResolveInitialLoad || cancelled) return;
+        resolveInitialLoad(snap && snap.exists ? snap.data() || {} : {});
+      } catch (sdkError) {
+        console.warn('Template one-time SDK read failed, trying REST:', sdkError);
+        try {
+          const restDoc = await withTimeout(restGetDoc(templatesRef.path), 10000, 'REST 讀取模板');
+          if (didResolveInitialLoad || cancelled) return;
+          resolveInitialLoad(restDoc || {});
+        } catch (restError) {
+          console.error('Template one-time read failed:', restError);
+          if (!didResolveInitialLoad && !cancelled) {
+            clearTimeout(timeoutTimer);
+            setTemplatesLoadState('error');
+          }
+        }
+      }
+    };
+    readTemplatesOnce();
+    const unsubscribeTemplates = onSnapshot(templatesRef, s => {
+      if (s && s.exists()) {
+        resolveInitialLoad(s.data() || {});
+      } else {
+        resolveInitialLoad({});
+      }
+    }, error => {
+      console.error('Template subscription failed', error);
+      if (!didResolveInitialLoad) setTemplatesLoadState('error');
     });
     return () => {
+      cancelled = true;
       clearTimeout(timeoutTimer);
       if (typeof unsubscribeTemplates === 'function') unsubscribeTemplates();
     };
@@ -13391,8 +13544,17 @@ const MainApp = () => {
   }, [stats.events, eventConfigs]);
   const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
   const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
-  const nextPublicWeekWindow = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() + 7));
-  const prevPublicWeekWindow = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() - 7));
+  const shiftPublicWeekWindow = weekOffset => setCurrentDate(date => new Date(date.getFullYear(), date.getMonth(), date.getDate() + weekOffset * 7));
+  const shiftPublicMonthWindow = monthOffset => setCurrentDate(date => {
+    const targetYear = date.getFullYear();
+    const targetMonth = date.getMonth() + monthOffset;
+    const safeDay = Math.min(date.getDate(), getDaysInMonth(targetYear, targetMonth));
+    return new Date(targetYear, targetMonth, safeDay);
+  });
+  const nextPublicWeekWindow = () => shiftPublicWeekWindow(1);
+  const prevPublicWeekWindow = () => shiftPublicWeekWindow(-1);
+  const nextPublicMonthWindow = () => shiftPublicMonthWindow(1);
+  const prevPublicMonthWindow = () => shiftPublicMonthWindow(-1);
   const checkEventMatchesFilters = (eventKey, filters = publicFilters) => {
     if (filters.level.length === 0 && filters.type.length === 0 && filters.location.length === 0) return true;
     const cfg = eventConfigs[eventKey] || {};
@@ -13816,27 +13978,39 @@ const MainApp = () => {
         backgroundColor: `${appliedTheme.surfaceBg}cc`
       }
     }, React.createElement("div", {
-      className: "flex items-center gap-4 w-full justify-between px-2"
+      className: "flex items-center gap-2 sm:gap-4 w-full justify-between px-2"
+    }, React.createElement("div", {
+      className: "flex items-center gap-1 sm:gap-2"
     }, React.createElement("button", {
+      onClick: prevPublicMonthWindow,
+      className: "px-2 sm:px-3 py-1.5 rounded-full text-[11px] sm:text-xs font-bold border border-slate-200 text-slate-500 hover:bg-white hover:shadow-sm transition-all whitespace-nowrap"
+    }, "\u4E0A\u6708"), React.createElement("button", {
       onClick: prevPublicWeekWindow,
+      title: "\u4E0A\u4E00\u9031",
       className: "p-2 hover:bg-white hover:shadow-sm rounded-full transition-all text-slate-500"
     }, React.createElement(Icon, {
       name: "chevron-left"
-    })), React.createElement("div", {
+    }))), React.createElement("div", {
       className: "text-center min-w-0"
     }, React.createElement("h2", {
-      className: "text-lg font-bold text-slate-800"
+      className: "text-base sm:text-lg font-bold text-slate-800"
     }, publicRangeLabel), React.createElement("div", {
       className: "mt-1 flex flex-wrap justify-center gap-1"
     }, publicVisibleMonthBadges.map(badge => React.createElement("span", {
       key: badge.key,
       className: `text-[10px] px-2 py-0.5 rounded-full font-bold ${badge.relation === '當月' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-500'}`
-    }, badge.relation, " \u00B7 ", badge.label)))), React.createElement("button", {
+    }, badge.relation, " \u00B7 ", badge.label)))), React.createElement("div", {
+      className: "flex items-center gap-1 sm:gap-2"
+    }, React.createElement("button", {
       onClick: nextPublicWeekWindow,
+      title: "\u4E0B\u4E00\u9031",
       className: "p-2 hover:bg-white hover:shadow-sm rounded-full transition-all text-slate-500"
     }, React.createElement(Icon, {
       name: "chevron-right"
-    })))), React.createElement("div", {
+    })), React.createElement("button", {
+      onClick: nextPublicMonthWindow,
+      className: "px-2 sm:px-3 py-1.5 rounded-full text-[11px] sm:text-xs font-bold border border-slate-200 text-slate-500 hover:bg-white hover:shadow-sm transition-all whitespace-nowrap"
+    }, "\u4E0B\u6708")))), React.createElement("div", {
       className: "grid grid-cols-7 text-center py-3 text-xs font-bold text-slate-400 bg-white border-b border-slate-100"
     }, ['日', '一', '二', '三', '四', '五', '六'].map(d => React.createElement("div", {
       key: d
