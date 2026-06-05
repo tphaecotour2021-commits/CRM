@@ -2154,14 +2154,18 @@ const buildExcelWorkbookXml = (worksheets = []) => {
     const rowsXml = rows.map(row => {
       const cells = Array.isArray(row) ? row : [];
       const cellsXml = cells.map(cell => {
-        const isNumber = typeof cell === 'number' && Number.isFinite(cell);
+        const isCellObject = cell && typeof cell === 'object' && !Array.isArray(cell);
+        const rawValue = isCellObject ? cell.value : cell;
+        const isNumber = typeof rawValue === 'number' && Number.isFinite(rawValue);
         const type = isNumber ? 'Number' : 'String';
-        const value = isNumber ? String(cell) : escapeSpreadsheetXml(cell);
-        return `<Cell><Data ss:Type="${type}">${value}</Data></Cell>`;
+        const value = isNumber ? String(rawValue) : escapeSpreadsheetXml(rawValue);
+        const styleAttr = isCellObject && cell.style ? ` ss:StyleID="${escapeSpreadsheetXml(cell.style)}"` : '';
+        return `<Cell${styleAttr}><Data ss:Type="${type}">${value}</Data></Cell>`;
       }).join('');
       return `<Row>${cellsXml}</Row>`;
     }).join('');
-    return `<Worksheet ss:Name="${escapeSpreadsheetXml(normalizeWorksheetName(sheet?.name, `Sheet${sheetIndex + 1}`))}"><Table>${rowsXml}</Table></Worksheet>`;
+    const columnsXml = Array.isArray(sheet?.columns) ? sheet.columns.map(column => `<Column ss:Width="${Number(column?.width) || 90}"/>`).join('') : '';
+    return `<Worksheet ss:Name="${escapeSpreadsheetXml(normalizeWorksheetName(sheet?.name, `Sheet${sheetIndex + 1}`))}"><Table>${columnsXml}${rowsXml}</Table></Worksheet>`;
   }).join('');
   return `<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?>
 <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
@@ -2171,6 +2175,13 @@ const buildExcelWorkbookXml = (worksheets = []) => {
  xmlns:html="http://www.w3.org/TR/REC-html40">
 <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office"><Author>Codex</Author></DocumentProperties>
 <ExcelWorkbook xmlns="urn:schemas-microsoft-com:office:excel"><ProtectStructure>False</ProtectStructure><ProtectWindows>False</ProtectWindows></ExcelWorkbook>
+<Styles>
+  <Style ss:ID="header"><Font ss:Bold="1"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Interior ss:Color="#F3F4F6" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>
+  <Style ss:ID="date"><Font ss:Bold="1"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/></Style>
+  <Style ss:ID="rest"><Font ss:Bold="1" ss:Color="#9A3412"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Interior ss:Color="#FCE4D6" ss:Pattern="Solid"/></Style>
+  <Style ss:ID="follow"><Font ss:Bold="1" ss:Color="#4D7C0F"/><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/><Interior ss:Color="#E2F0D9" ss:Pattern="Solid"/></Style>
+  <Style ss:ID="event"><Font ss:Bold="1"/><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/></Style>
+</Styles>
 ${worksheetXml}
 </Workbook>`;
 };
@@ -4714,6 +4725,10 @@ const EventManagerModal = ({
 const CalendarExportModal = ({
   events,
   eventConfigs,
+  instructorSchedule = {},
+  companyRestDates = [],
+  availableInstructors = [],
+  posterNameOverrides = [],
   onClose
 }) => {
   const getTodayDateStr = () => {
@@ -4753,6 +4768,12 @@ const CalendarExportModal = ({
     if (!normalized) return value || '';
     const [y, m, d] = normalized.split('-');
     return `${y}/${m}/${d}`;
+  };
+  const formatMatrixDate = value => {
+    const normalized = normalizeDateString(value);
+    if (!normalized) return value || '';
+    const [, m, d] = normalized.split('-');
+    return `${m}/${d}`;
   };
   const defaultEndDate = useMemo(() => {
     try {
@@ -4840,6 +4861,121 @@ const CalendarExportModal = ({
       instructorRows
     };
   }, [events, eventConfigs, selectedMonth]);
+  const buildDateRangeKeys = (start, end) => {
+    const startKey = normalizeDateString(start);
+    const endKey = normalizeDateString(end);
+    if (!startKey || !endKey) return [];
+    const startDateObj = parseLocalDateKey(startKey);
+    const endDateObj = parseLocalDateKey(endKey);
+    if (startDateObj > endDateObj) return [];
+    const keys = [];
+    const cursor = new Date(startDateObj);
+    while (cursor <= endDateObj) {
+      keys.push(formatLocalDateKey(cursor));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return keys;
+  };
+  const parseInstructorNamesForExport = (eventItem, cfg = {}) => {
+    const leadNames = Array.isArray(cfg.leadInstructors) ? cfg.leadInstructors : [];
+    const supportNames = Array.isArray(cfg.supportInstructors) ? cfg.supportInstructors : [];
+    const configuredNames = [...leadNames, ...supportNames].map(name => String(name || '').trim()).filter(Boolean);
+    const fallbackNames = String(eventItem?.instructor || '').split(/[&,、，]/).map(name => String(name || '').trim()).filter(Boolean);
+    const rawNames = configuredNames.length > 0 ? configuredNames : fallbackNames;
+    return Array.from(new Set(rawNames)).filter(name => name && name !== '未定');
+  };
+  const getScheduleExportEventName = (eventItem, cfg = {}) => {
+    return toSafeDisplayText(resolvePosterEventName(eventItem, cfg, posterNameOverrides), toSafeDisplayText(eventItem?.eventName, '未命名活動')).trim() || '未命名活動';
+  };
+  const buildInstructorScheduleMatrixSheet = () => {
+    const dateKeys = buildDateRangeKeys(startDate, endDate);
+    if (dateKeys.length === 0) {
+      alert("請確認開始日期與結束日期是否正確。");
+      return null;
+    }
+    const dateSet = new Set(dateKeys);
+    const instructorSet = new Set();
+    const eventCellMap = {};
+    const filteredEvents = Object.values(events).filter(eventItem => {
+      const normalized = normalizeDateString(eventItem.date);
+      if (!normalized || !dateSet.has(normalized)) return false;
+      const inType = selectedTypes.length === 0 || selectedTypes.includes(eventItem.eventName);
+      return inType;
+    }).sort((a, b) => {
+      const da = normalizeDateString(a.date);
+      const db = normalizeDateString(b.date);
+      return da.localeCompare(db);
+    });
+    filteredEvents.forEach(eventItem => {
+      const normalized = normalizeDateString(eventItem.date);
+      const cfg = eventConfigs[eventItem.key] || {};
+      const names = parseInstructorNamesForExport(eventItem, cfg);
+      const finalNames = names.length > 0 ? names : ['未定'];
+      const eventName = `${cfg.isCancelled ? '[取消] ' : ''}${getScheduleExportEventName(eventItem, cfg)}`;
+      finalNames.forEach((name, index) => {
+        instructorSet.add(name);
+        eventCellMap[normalized] = eventCellMap[normalized] || {};
+        eventCellMap[normalized][name] = eventCellMap[normalized][name] || [];
+        eventCellMap[normalized][name].push({
+          label: index === 0 ? eventName : `（跟${eventName}）`,
+          style: index === 0 ? 'event' : 'follow'
+        });
+      });
+    });
+    dateKeys.forEach(dateKey => {
+      (Array.isArray(instructorSchedule?.[dateKey]) ? instructorSchedule[dateKey] : []).forEach(name => {
+        const cleanName = String(name || '').trim();
+        if (cleanName) instructorSet.add(cleanName);
+      });
+    });
+    const instructorNames = Array.from(instructorSet).filter(name => name && name !== '未定').sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    const fallbackInstructors = (Array.isArray(availableInstructors) ? availableInstructors : []).map(name => String(name || '').trim()).filter(Boolean).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    const finalInstructorNames = instructorNames.length > 0 ? instructorNames : fallbackInstructors;
+    if (finalInstructorNames.length === 0) {
+      alert("目前沒有可輸出的講師欄位。");
+      return null;
+    }
+    const companyRestSet = new Set((companyRestDates || []).map(date => normalizeDateString(date)).filter(Boolean));
+    const rows = [[{
+      value: '日期',
+      style: 'header'
+    }, ...finalInstructorNames.map(name => ({
+      value: name,
+      style: 'header'
+    }))]];
+    dateKeys.forEach(dateKey => {
+      const restSet = new Set((Array.isArray(instructorSchedule?.[dateKey]) ? instructorSchedule[dateKey] : []).map(name => String(name || '').trim()).filter(Boolean));
+      rows.push([{
+        value: formatMatrixDate(dateKey),
+        style: 'date'
+      }, ...finalInstructorNames.map(name => {
+        const eventItems = eventCellMap?.[dateKey]?.[name] || [];
+        if (eventItems.length > 0) {
+          const hasPrimary = eventItems.some(item => item.style === 'event');
+          return {
+            value: eventItems.map(item => item.label).join('\n'),
+            style: hasPrimary ? 'event' : 'follow'
+          };
+        }
+        if (companyRestSet.has(dateKey) || restSet.has(name)) {
+          return {
+            value: '休',
+            style: 'rest'
+          };
+        }
+        return '';
+      })]);
+    });
+    return {
+      name: `${startDate}_${endDate}講師排班`,
+      columns: [{
+        width: 60
+      }, ...finalInstructorNames.map(() => ({
+        width: 120
+      }))],
+      rows
+    };
+  };
   const handleExport = () => {
     if (exportMode === 'monthly') {
       if (!selectedMonth) return alert("請先選擇月份");
@@ -4851,6 +4987,13 @@ const CalendarExportModal = ({
         csvContent += `${toCSVField(name)},${count}\n`;
       });
       downloadCSV(csvContent, `出團統計_${selectedMonth}.csv`);
+      onClose();
+      return;
+    }
+    if (exportMode === 'matrix') {
+      const matrixSheet = buildInstructorScheduleMatrixSheet();
+      if (!matrixSheet) return;
+      downloadExcelWorkbook([matrixSheet], `講師排班表_${startDate}_${endDate}.xls`);
       onClose();
       return;
     }
@@ -4904,14 +5047,17 @@ const CalendarExportModal = ({
   }))), React.createElement("div", {
     className: "space-y-4"
   }, React.createElement("div", {
-    className: "bg-slate-50 border border-slate-200 rounded-lg p-1 grid grid-cols-2 gap-1"
+    className: "bg-slate-50 border border-slate-200 rounded-lg p-1 grid grid-cols-3 gap-1"
   }, React.createElement("button", {
     onClick: () => setExportMode('calendar'),
     className: `py-2 rounded-md text-xs font-bold ${exportMode === 'calendar' ? 'bg-white text-blue-600 shadow' : 'text-slate-500'}`
-  }, "\u6708\u66C6\u660E\u7D30\u532F\u51FA"), React.createElement("button", {
+  }, "\u6708\u66C6\u660E\u7D30"), React.createElement("button", {
+    onClick: () => setExportMode('matrix'),
+    className: `py-2 rounded-md text-xs font-bold ${exportMode === 'matrix' ? 'bg-white text-blue-600 shadow' : 'text-slate-500'}`
+  }, "\u8B1B\u5E2B\u6392\u73ED\u8868"), React.createElement("button", {
     onClick: () => setExportMode('monthly'),
     className: `py-2 rounded-md text-xs font-bold ${exportMode === 'monthly' ? 'bg-white text-blue-600 shadow' : 'text-slate-500'}`
-  }, "\u6BCF\u6708\u51FA\u5718\u7D71\u8A08")), exportMode === 'calendar' && React.createElement(React.Fragment, null, React.createElement("div", {
+  }, "\u6BCF\u6708\u51FA\u5718")), (exportMode === 'calendar' || exportMode === 'matrix') && React.createElement(React.Fragment, null, React.createElement("div", {
     className: "grid grid-cols-2 gap-4"
   }, React.createElement("div", null, React.createElement("label", {
     className: "text-xs font-bold text-slate-500 mb-1 block"
@@ -4927,14 +5073,16 @@ const CalendarExportModal = ({
     className: "w-full p-2 border rounded-lg font-bold text-blue-600 bg-blue-50",
     value: endDate,
     onChange: e => setEndDate(e.target.value)
-  }))), React.createElement("div", null, React.createElement("label", {
+  }))), exportMode === 'calendar' && React.createElement("div", null, React.createElement("label", {
     className: "text-xs font-bold text-slate-500 mb-1 block"
   }, "Q\u6B04: \u4E0A\u67B6\u6642\u9593 (\u986F\u793A\u65BC\u5831\u8868)"), React.createElement("input", {
     type: "date",
     className: "w-full p-2 border rounded-lg bg-slate-50 border-slate-200",
     value: listingDate,
     onChange: e => setListingDate(e.target.value)
-  })), React.createElement("div", {
+  })), exportMode === 'matrix' && React.createElement("div", {
+    className: "text-xs text-slate-500 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"
+  }, "\u8B1B\u5E2B\u6392\u73ED\u8868\u6703\u8F38\u51FA\u300C\u65E5\u671F x \u8B1B\u5E2B\u300D\u77E9\u9663\uFF1A\u4F11\u5047\u986F\u793A\u300C\u4F11\u300D\u3001\u6C92\u4E8B\u7559\u7A7A\u767D\u3001\u540C\u5834\u975E\u7B2C\u4E00\u4F4D\u8B1B\u5E2B\u6703\u6A19\u300C\uFF08\u8DDF\u6D3B\u52D5\u540D\uFF09\u300D\u3002"), React.createElement("div", {
     className: "border-t pt-4"
   }, React.createElement("div", {
     className: "flex justify-between items-center mb-2"
@@ -5003,7 +5151,7 @@ const CalendarExportModal = ({
   }, React.createElement(Icon, {
     name: "file-text",
     size: 16
-  }), " ", exportMode === 'monthly' ? '匯出月統計 (CSV)' : '匯出 Excel (CSV)'))));
+  }), " ", exportMode === 'monthly' ? '匯出月統計 (CSV)' : exportMode === 'matrix' ? '匯出講師排班表 (XLS)' : '匯出 Excel (CSV)'))));
 };
 const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, onDeleteTemplate, onReorderTemplates, availableInstructors, instructorSchedule, tagDefinitions, onAddTag, initialDate, initialInstructors = [], companyRestDates = [], existingScheduleByDate = {}, templatesLoadState = 'idle', onRetryTemplatesLoad }) => {
   const normalizedInitialInstructors = Array.isArray(initialInstructors) ? initialInstructors.map((name) => String(name || "").trim()).filter(Boolean) : [];
@@ -16082,6 +16230,10 @@ const MainApp = () => {
   }), showExportModal && React.createElement(CalendarExportModal, {
     events: stats.events,
     eventConfigs: eventConfigs,
+    instructorSchedule: instructorSchedule,
+    companyRestDates: companyRestDates,
+    availableInstructors: Object.keys(stats.instrs).sort(),
+    posterNameOverrides: posterNameOverrides,
     onClose: () => setShowExportModal(false)
   }), showLoginModal && React.createElement(LoginModal, {
     onClose: () => setShowLoginModal(false),
