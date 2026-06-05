@@ -4886,6 +4886,13 @@ const CalendarExportModal = ({
     }
     return keys;
   };
+  const shiftDateKey = (dateKey, offset) => {
+    const normalized = normalizeDateString(dateKey);
+    if (!normalized) return '';
+    const dateObj = parseLocalDateKey(normalized);
+    dateObj.setDate(dateObj.getDate() + offset);
+    return formatLocalDateKey(dateObj);
+  };
   const parseInstructorNamesForExport = (eventItem, cfg = {}) => {
     const leadNames = Array.isArray(cfg.leadInstructors) ? cfg.leadInstructors : [];
     const supportNames = Array.isArray(cfg.supportInstructors) ? cfg.supportInstructors : [];
@@ -4908,7 +4915,13 @@ const CalendarExportModal = ({
     const eventCellMap = {};
     const filteredEvents = Object.values(events).filter(eventItem => {
       const normalized = normalizeDateString(eventItem.date);
-      if (!normalized || !dateSet.has(normalized)) return false;
+      if (!normalized) return false;
+      const cfg = eventConfigs[eventItem.key] || {};
+      const duration = Math.max(1, parseInt(cfg.duration, 10) || 1);
+      const hasDateInRange = Array.from({
+        length: duration
+      }, (_, offset) => shiftDateKey(normalized, offset)).some(dateKey => dateSet.has(dateKey));
+      if (!hasDateInRange) return false;
       const inType = selectedTypes.length === 0 || selectedTypes.includes(eventItem.eventName);
       return inType;
     }).sort((a, b) => {
@@ -4922,15 +4935,20 @@ const CalendarExportModal = ({
       const names = parseInstructorNamesForExport(eventItem, cfg);
       const finalNames = names.length > 0 ? names : ['未定'];
       const eventName = getScheduleExportEventName(eventItem, cfg);
-      finalNames.forEach((name, index) => {
-        instructorSet.add(name);
-        eventCellMap[normalized] = eventCellMap[normalized] || {};
-        eventCellMap[normalized][name] = eventCellMap[normalized][name] || [];
-        eventCellMap[normalized][name].push({
-          label: index === 0 ? eventName : `（跟${eventName}）`,
-          style: cfg.isCancelled ? 'cancelled' : index === 0 ? 'event' : 'follow'
+      const duration = Math.max(1, parseInt(cfg.duration, 10) || 1);
+      for (let offset = 0; offset < duration; offset += 1) {
+        const occurrenceDate = shiftDateKey(normalized, offset);
+        if (!dateSet.has(occurrenceDate)) continue;
+        finalNames.forEach((name, index) => {
+          instructorSet.add(name);
+          eventCellMap[occurrenceDate] = eventCellMap[occurrenceDate] || {};
+          eventCellMap[occurrenceDate][name] = eventCellMap[occurrenceDate][name] || [];
+          eventCellMap[occurrenceDate][name].push({
+            label: index === 0 ? eventName : `（跟${eventName}）`,
+            style: cfg.isCancelled ? 'cancelled' : index === 0 ? 'event' : 'follow'
+          });
         });
-      });
+      }
     });
     dateKeys.forEach(dateKey => {
       (Array.isArray(instructorSchedule?.[dateKey]) ? instructorSchedule[dateKey] : []).forEach(name => {
