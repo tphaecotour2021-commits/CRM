@@ -2181,6 +2181,9 @@ const buildExcelWorkbookXml = (worksheets = []) => {
   <Style ss:ID="rest"><Font ss:Bold="1" ss:Color="#9A3412"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Interior ss:Color="#FCE4D6" ss:Pattern="Solid"/></Style>
   <Style ss:ID="follow"><Font ss:Bold="1" ss:Color="#4D7C0F"/><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/><Interior ss:Color="#E2F0D9" ss:Pattern="Solid"/></Style>
   <Style ss:ID="event"><Font ss:Bold="1"/><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/></Style>
+  <Style ss:ID="cancelled"><Font ss:Bold="1" ss:Color="#666666"/><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/><Interior ss:Color="#D9D9D9" ss:Pattern="Solid"/></Style>
+  <Style ss:ID="markerO"><Font ss:Bold="1" ss:Color="#3F6212"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Interior ss:Color="#E2F0D9" ss:Pattern="Solid"/></Style>
+  <Style ss:ID="markerV"><Font ss:Bold="1" ss:Color="#A16207"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Interior ss:Color="#FFF2CC" ss:Pattern="Solid"/></Style>
 </Styles>
 ${worksheetXml}
 </Workbook>`;
@@ -4775,6 +4778,13 @@ const CalendarExportModal = ({
     const [, m, d] = normalized.split('-');
     return `${m}/${d}`;
   };
+  const formatMatrixWeekday = value => {
+    const normalized = normalizeDateString(value);
+    if (!normalized) return '';
+    const weekdayLabels = ['日', '一', '二', '三', '四', '五', '六'];
+    const dt = parseLocalDateKey(normalized);
+    return `（${weekdayLabels[dt.getDay()] || ''}）`;
+  };
   const defaultEndDate = useMemo(() => {
     try {
       const list = Object.values(events);
@@ -4911,14 +4921,14 @@ const CalendarExportModal = ({
       const cfg = eventConfigs[eventItem.key] || {};
       const names = parseInstructorNamesForExport(eventItem, cfg);
       const finalNames = names.length > 0 ? names : ['未定'];
-      const eventName = `${cfg.isCancelled ? '[取消] ' : ''}${getScheduleExportEventName(eventItem, cfg)}`;
+      const eventName = getScheduleExportEventName(eventItem, cfg);
       finalNames.forEach((name, index) => {
         instructorSet.add(name);
         eventCellMap[normalized] = eventCellMap[normalized] || {};
         eventCellMap[normalized][name] = eventCellMap[normalized][name] || [];
         eventCellMap[normalized][name].push({
           label: index === 0 ? eventName : `（跟${eventName}）`,
-          style: index === 0 ? 'event' : 'follow'
+          style: cfg.isCancelled ? 'cancelled' : index === 0 ? 'event' : 'follow'
         });
       });
     });
@@ -4937,7 +4947,13 @@ const CalendarExportModal = ({
     }
     const companyRestSet = new Set((companyRestDates || []).map(date => normalizeDateString(date)).filter(Boolean));
     const rows = [[{
+      value: '',
+      style: 'header'
+    }, {
       value: '日期',
+      style: 'header'
+    }, {
+      value: '星期',
       style: 'header'
     }, ...finalInstructorNames.map(name => ({
       value: name,
@@ -4945,16 +4961,14 @@ const CalendarExportModal = ({
     }))]];
     dateKeys.forEach(dateKey => {
       const restSet = new Set((Array.isArray(instructorSchedule?.[dateKey]) ? instructorSchedule[dateKey] : []).map(name => String(name || '').trim()).filter(Boolean));
-      rows.push([{
-        value: formatMatrixDate(dateKey),
-        style: 'date'
-      }, ...finalInstructorNames.map(name => {
+      const instructorCells = finalInstructorNames.map(name => {
         const eventItems = eventCellMap?.[dateKey]?.[name] || [];
         if (eventItems.length > 0) {
+          const hasCancelled = eventItems.some(item => item.style === 'cancelled');
           const hasPrimary = eventItems.some(item => item.style === 'event');
           return {
             value: eventItems.map(item => item.label).join('\n'),
-            style: hasPrimary ? 'event' : 'follow'
+            style: hasCancelled ? 'cancelled' : hasPrimary ? 'event' : 'follow'
           };
         }
         if (companyRestSet.has(dateKey) || restSet.has(name)) {
@@ -4964,12 +4978,28 @@ const CalendarExportModal = ({
           };
         }
         return '';
-      })]);
+      });
+      const emptyCellCount = instructorCells.filter(cell => cell === '').length;
+      const markerValue = emptyCellCount >= 2 ? 'O' : emptyCellCount === 1 ? 'V' : '';
+      rows.push([{
+        value: markerValue,
+        style: markerValue === 'O' ? 'markerO' : markerValue === 'V' ? 'markerV' : 'date'
+      }, {
+        value: formatMatrixDate(dateKey),
+        style: 'date'
+      }, {
+        value: formatMatrixWeekday(dateKey),
+        style: 'date'
+      }, ...instructorCells]);
     });
     return {
       name: `${startDate}_${endDate}講師排班`,
       columns: [{
+        width: 32
+      }, {
         width: 60
+      }, {
+        width: 48
       }, ...finalInstructorNames.map(() => ({
         width: 120
       }))],
