@@ -2182,6 +2182,8 @@ const buildExcelWorkbookXml = (worksheets = []) => {
   <Style ss:ID="follow"><Font ss:Bold="1" ss:Color="#4D7C0F"/><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/><Interior ss:Color="#E2F0D9" ss:Pattern="Solid"/></Style>
   <Style ss:ID="event"><Font ss:Bold="1"/><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/></Style>
   <Style ss:ID="cancelled"><Font ss:Bold="1" ss:Color="#666666"/><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/><Interior ss:Color="#D9D9D9" ss:Pattern="Solid"/></Style>
+  <Style ss:ID="outing"><Font ss:Bold="1" ss:Color="#92400E"/><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/><Interior ss:Color="#FEF3C7" ss:Pattern="Solid"/></Style>
+  <Style ss:ID="blank"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Interior ss:Color="#EDE9FE" ss:Pattern="Solid"/></Style>
   <Style ss:ID="markerO"><Font ss:Bold="1" ss:Color="#3F6212"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Interior ss:Color="#E2F0D9" ss:Pattern="Solid"/></Style>
   <Style ss:ID="markerV"><Font ss:Bold="1" ss:Color="#A16207"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Interior ss:Color="#FFF2CC" ss:Pattern="Solid"/></Style>
 </Styles>
@@ -4730,6 +4732,7 @@ const CalendarExportModal = ({
   eventConfigs,
   instructorSchedule = {},
   companyRestDates = [],
+  outingDays = {},
   availableInstructors = [],
   posterNameOverrides = [],
   onClose
@@ -4950,6 +4953,20 @@ const CalendarExportModal = ({
         });
       }
     });
+    Object.entries(outingDays || {}).forEach(([dateKey, info]) => {
+      const normalized = normalizeDateString(dateKey);
+      if (!normalized || !dateSet.has(normalized) || !info?.enabled) return;
+      const outingPeople = (Array.isArray(info.people) ? info.people : []).map(name => String(name || '').trim()).filter(name => name && name !== '未定');
+      outingPeople.forEach(name => {
+        instructorSet.add(name);
+        eventCellMap[normalized] = eventCellMap[normalized] || {};
+        eventCellMap[normalized][name] = eventCellMap[normalized][name] || [];
+        eventCellMap[normalized][name].push({
+          label: '場勘 / 取材',
+          style: 'outing'
+        });
+      });
+    });
     dateKeys.forEach(dateKey => {
       (Array.isArray(instructorSchedule?.[dateKey]) ? instructorSchedule[dateKey] : []).forEach(name => {
         const cleanName = String(name || '').trim();
@@ -4984,9 +5001,10 @@ const CalendarExportModal = ({
         if (eventItems.length > 0) {
           const hasCancelled = eventItems.some(item => item.style === 'cancelled');
           const hasPrimary = eventItems.some(item => item.style === 'event');
+          const hasOuting = eventItems.some(item => item.style === 'outing');
           return {
             value: eventItems.map(item => item.label).join('\n'),
-            style: hasCancelled ? 'cancelled' : hasPrimary ? 'event' : 'follow'
+            style: hasCancelled ? 'cancelled' : hasPrimary ? 'event' : hasOuting ? 'outing' : 'follow'
           };
         }
         if (companyRestSet.has(dateKey) || restSet.has(name)) {
@@ -4995,9 +5013,13 @@ const CalendarExportModal = ({
             style: 'rest'
           };
         }
-        return '';
+        return {
+          value: '',
+          style: 'blank',
+          isBlank: true
+        };
       });
-      const emptyCellCount = instructorCells.filter(cell => cell === '').length;
+      const emptyCellCount = instructorCells.filter(cell => cell === '' || cell?.isBlank).length;
       const markerValue = emptyCellCount >= 2 ? 'O' : emptyCellCount === 1 ? 'V' : '';
       rows.push([{
         value: markerValue,
@@ -5013,13 +5035,13 @@ const CalendarExportModal = ({
     return {
       name: `${startDate}_${endDate}講師排班`,
       columns: [{
-        width: 32
+        width: 28
       }, {
-        width: 60
+        width: 54
       }, {
-        width: 48
+        width: 42
       }, ...finalInstructorNames.map(() => ({
-        width: 120
+        width: 96
       }))],
       rows
     };
@@ -16280,6 +16302,7 @@ const MainApp = () => {
     eventConfigs: eventConfigs,
     instructorSchedule: instructorSchedule,
     companyRestDates: companyRestDates,
+    outingDays: outingDays,
     availableInstructors: Object.keys(stats.instrs).sort(),
     posterNameOverrides: posterNameOverrides,
     onClose: () => setShowExportModal(false)
