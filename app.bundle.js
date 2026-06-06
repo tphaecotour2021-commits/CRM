@@ -2152,7 +2152,9 @@ const buildExcelWorkbookXml = (worksheets = []) => {
   const worksheetXml = worksheets.map((sheet, sheetIndex) => {
     const rows = Array.isArray(sheet?.rows) ? sheet.rows : [];
     const rowsXml = rows.map(row => {
-      const cells = Array.isArray(row) ? row : [];
+      const isRowObject = row && typeof row === 'object' && !Array.isArray(row);
+      const cells = Array.isArray(row) ? row : Array.isArray(row?.cells) ? row.cells : [];
+      const heightAttr = isRowObject && row.height ? ` ss:Height="${Number(row.height) || 18}"` : '';
       const cellsXml = cells.map(cell => {
         const isCellObject = cell && typeof cell === 'object' && !Array.isArray(cell);
         const rawValue = isCellObject ? cell.value : cell;
@@ -2162,7 +2164,7 @@ const buildExcelWorkbookXml = (worksheets = []) => {
         const styleAttr = isCellObject && cell.style ? ` ss:StyleID="${escapeSpreadsheetXml(cell.style)}"` : '';
         return `<Cell${styleAttr}><Data ss:Type="${type}">${value}</Data></Cell>`;
       }).join('');
-      return `<Row>${cellsXml}</Row>`;
+      return `<Row${heightAttr}>${cellsXml}</Row>`;
     }).join('');
     const columnsXml = Array.isArray(sheet?.columns) ? sheet.columns.map(column => `<Column ss:Width="${Number(column?.width) || 90}"/>`).join('') : '';
     return `<Worksheet ss:Name="${escapeSpreadsheetXml(normalizeWorksheetName(sheet?.name, `Sheet${sheetIndex + 1}`))}"><Table>${columnsXml}${rowsXml}</Table></Worksheet>`;
@@ -5037,16 +5039,21 @@ const CalendarExportModal = ({
       });
       const emptyCellCount = instructorCells.filter(cell => cell === '' || cell?.isBlank).length;
       const markerValue = emptyCellCount >= 2 ? 'O' : emptyCellCount === 1 ? 'V' : '';
-      rows.push([{
-        value: markerValue,
-        style: markerValue === 'O' ? 'markerO' : markerValue === 'V' ? 'markerV' : 'date'
-      }, {
-        value: formatMatrixDate(dateKey),
-        style: 'date'
-      }, {
-        value: formatMatrixWeekday(dateKey),
-        style: 'date'
-      }, ...instructorCells]);
+      const maxLineCount = Math.max(1, ...instructorCells.map(cell => String(cell?.value ?? cell ?? '').split('\n').length));
+      const rowHeight = Math.min(110, 24 + (maxLineCount - 1) * 24);
+      rows.push({
+        height: rowHeight,
+        cells: [{
+          value: markerValue,
+          style: markerValue === 'O' ? 'markerO' : markerValue === 'V' ? 'markerV' : 'date'
+        }, {
+          value: formatMatrixDate(dateKey),
+          style: 'date'
+        }, {
+          value: formatMatrixWeekday(dateKey),
+          style: 'date'
+        }, ...instructorCells]
+      });
     });
     return {
       name: `${startDate}_${endDate}講師排班`,
