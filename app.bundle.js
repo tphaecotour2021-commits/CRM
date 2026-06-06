@@ -2179,7 +2179,7 @@ const buildExcelWorkbookXml = (worksheets = []) => {
   <Style ss:ID="header"><Font ss:Bold="1"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Interior ss:Color="#F3F4F6" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>
   <Style ss:ID="date"><Font ss:Bold="1"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/></Style>
   <Style ss:ID="rest"><Font ss:Bold="1" ss:Color="#9A3412"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Interior ss:Color="#FCE4D6" ss:Pattern="Solid"/></Style>
-  <Style ss:ID="follow"><Font ss:Bold="1" ss:Color="#4D7C0F"/><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/><Interior ss:Color="#E2F0D9" ss:Pattern="Solid"/></Style>
+  <Style ss:ID="follow"><Font ss:Bold="1" ss:Color="#15803D"/><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/></Style>
   <Style ss:ID="event"><Font ss:Bold="1"/><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/></Style>
   <Style ss:ID="cancelled"><Font ss:Bold="1" ss:Color="#666666"/><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/><Interior ss:Color="#D9D9D9" ss:Pattern="Solid"/></Style>
   <Style ss:ID="outing"><Font ss:Bold="1" ss:Color="#92400E"/><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/><Interior ss:Color="#FEF3C7" ss:Pattern="Solid"/></Style>
@@ -4246,10 +4246,10 @@ const EventManagerModal = ({
     className: "flex flex-wrap gap-2 mb-2"
   }, supportInstructors.map(ins => React.createElement("div", {
     key: `support_${ins}`,
-    className: "flex items-center bg-white text-emerald-700 px-2 py-1 rounded-md text-sm border border-emerald-100 shadow-sm"
+    className: "flex items-center bg-white text-emerald-700 px-2 py-1 rounded-md text-sm border border-slate-200 shadow-sm"
   }, React.createElement("span", {
     className: "mr-1"
-  }, ins), React.createElement("button", {
+  }, `(跟) ${ins}`), React.createElement("button", {
     onClick: () => removeSupportInstructor(ins)
   }, React.createElement(Icon, {
     name: "x",
@@ -4282,8 +4282,8 @@ const EventManagerModal = ({
     className: "text-xs px-2 py-1 bg-white border rounded-full hover:bg-blue-50 text-slate-600"
   }, "+\u5E36 ", i), React.createElement("button", {
     onClick: () => addSupportInstructor(i),
-    className: "text-xs px-2 py-1 bg-white border rounded-full hover:bg-emerald-50 text-slate-600"
-  }, "+\u8DDF ", i)))))), React.createElement("section", null, React.createElement("div", {
+    className: "text-xs px-2 py-1 bg-white border rounded-full hover:bg-slate-50 text-emerald-700"
+  }, "(\u8DDF) ", i)))))), React.createElement("section", null, React.createElement("div", {
     className: "flex justify-between items-center mb-3"
   }, React.createElement("h4", {
     className: "font-bold text-slate-700 flex items-center"
@@ -4896,13 +4896,24 @@ const CalendarExportModal = ({
     dateObj.setDate(dateObj.getDate() + offset);
     return formatLocalDateKey(dateObj);
   };
-  const parseInstructorNamesForExport = (eventItem, cfg = {}) => {
-    const leadNames = Array.isArray(cfg.leadInstructors) ? cfg.leadInstructors : [];
-    const supportNames = Array.isArray(cfg.supportInstructors) ? cfg.supportInstructors : [];
-    const configuredNames = [...leadNames, ...supportNames].map(name => String(name || '').trim()).filter(Boolean);
-    const fallbackNames = String(eventItem?.instructor || '').split(/[&,、，]/).map(name => String(name || '').trim()).filter(Boolean);
-    const rawNames = configuredNames.length > 0 ? configuredNames : fallbackNames;
-    return Array.from(new Set(rawNames)).filter(name => name && name !== '未定');
+  const parseInstructorAssignmentsForExport = (eventItem, cfg = {}) => {
+    const cleanNames = names => Array.from(new Set((Array.isArray(names) ? names : []).map(name => String(name || '').trim()).filter(name => name && name !== '未定')));
+    const leadNames = cleanNames(cfg.leadInstructors);
+    const supportNames = cleanNames(cfg.supportInstructors).filter(name => !leadNames.includes(name));
+    if (leadNames.length > 0 || supportNames.length > 0) {
+      return [...leadNames.map(name => ({
+        name,
+        role: 'lead'
+      })), ...supportNames.map(name => ({
+        name,
+        role: 'support'
+      }))];
+    }
+    const fallbackNames = String(eventItem?.instructor || '').split(/[&,、，]/).map(name => String(name || '').trim()).filter(name => name && name !== '未定');
+    return Array.from(new Set(fallbackNames)).map(name => ({
+      name,
+      role: 'lead'
+    }));
   };
   const getScheduleExportEventName = (eventItem, cfg = {}) => {
     return toSafeDisplayText(resolvePosterEventName(eventItem, cfg, posterNameOverrides), toSafeDisplayText(eventItem?.eventName, '未命名活動')).trim() || '未命名活動';
@@ -4935,20 +4946,25 @@ const CalendarExportModal = ({
     filteredEvents.forEach(eventItem => {
       const normalized = normalizeDateString(eventItem.date);
       const cfg = eventConfigs[eventItem.key] || {};
-      const names = parseInstructorNamesForExport(eventItem, cfg);
-      const finalNames = names.length > 0 ? names : ['未定'];
+      const assignments = parseInstructorAssignmentsForExport(eventItem, cfg);
+      const finalAssignments = assignments.length > 0 ? assignments : [{
+        name: '未定',
+        role: 'lead'
+      }];
       const eventName = getScheduleExportEventName(eventItem, cfg);
       const duration = Math.max(1, parseInt(cfg.duration, 10) || 1);
       for (let offset = 0; offset < duration; offset += 1) {
         const occurrenceDate = shiftDateKey(normalized, offset);
         if (!dateSet.has(occurrenceDate)) continue;
-        finalNames.forEach((name, index) => {
+        finalAssignments.forEach(assignment => {
+          const name = assignment.name;
+          const isSupport = assignment.role === 'support';
           instructorSet.add(name);
           eventCellMap[occurrenceDate] = eventCellMap[occurrenceDate] || {};
           eventCellMap[occurrenceDate][name] = eventCellMap[occurrenceDate][name] || [];
           eventCellMap[occurrenceDate][name].push({
-            label: index === 0 ? eventName : `（跟${eventName}）`,
-            style: cfg.isCancelled ? 'cancelled' : index === 0 ? 'event' : 'follow'
+            label: isSupport ? `(跟) ${eventName}` : eventName,
+            style: cfg.isCancelled ? 'cancelled' : isSupport ? 'follow' : 'event'
           });
         });
       }
