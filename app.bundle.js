@@ -1604,6 +1604,29 @@ const normalizeEventConfigForDisplay = (config = {}) => {
     statusRules: normalizeStoredStatusRules(rawRules)
   };
 };
+const buildPublicEventConfigCacheEntry = (config = {}) => {
+  const normalized = normalizeEventConfigForDisplay(sanitizeFirebaseValue(config || {}));
+  return {
+    displayName: normalized.displayName || '',
+    activityCategory: normalized.activityCategory || '',
+    time: normalized.time || '',
+    link: normalized.link || '',
+    capacity: normalized.capacity ?? '',
+    duration: normalized.duration ?? '',
+    prepDays: normalized.prepDays ?? '',
+    prepTime: normalized.prepTime || '',
+    tags: normalized.tags || {
+      levels: '',
+      types: '',
+      locations: ''
+    },
+    statusRules: normalizeStoredStatusRules(normalized.statusRules || []),
+    isCancelled: !!normalized.isCancelled,
+    carpoolDisplayMode: normalized.carpoolDisplayMode || '',
+    isPrivateGroupEvent: !!normalized.isPrivateGroupEvent,
+    privateGroupLabel: normalized.privateGroupLabel || '此為包團活動'
+  };
+};
 const resolvePosterEventName = (evt = {}, cfg = {}, posterNameOverrides = []) => {
   const rawInternalName = String(evt?.eventName || cfg?.eventName || '').trim();
   const rawDisplayName = String(cfg?.displayName || '').trim();
@@ -2596,6 +2619,8 @@ const InstructorScheduleModal = ({
   onToggle,
   isCompanyRest,
   onToggleCompanyRest,
+  isInternalDay,
+  onToggleInternalDay,
   isOutingDay,
   outingPosterFilename,
   outingPosterOptions,
@@ -2634,6 +2659,21 @@ const InstructorScheduleModal = ({
     name: "check-circle",
     size: 12
   }), " \u6B63\u5E38\u71DF\u904B"))), React.createElement("div", {
+    className: "mb-4 p-3 bg-indigo-50 rounded-xl flex justify-between items-center border border-indigo-200"
+  }, React.createElement("div", null, React.createElement("span", {
+    className: "font-bold text-indigo-700 text-sm block"
+  }, "\u5167\u90E8\u6D3B\u52D5"), React.createElement("span", {
+    className: "text-[11px] text-indigo-400"
+  }, "\u50C5\u5F8C\u53F0\u6A19\u8A18\uFF0C\u4E0D\u986F\u793A\u5728\u524D\u53F0")), React.createElement("button", {
+    onClick: () => onToggleInternalDay(date),
+    className: `px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1 ${isInternalDay ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-700 border border-indigo-200'}`
+  }, isInternalDay ? React.createElement(React.Fragment, null, React.createElement(Icon, {
+    name: "check-circle",
+    size: 12
+  }), " \u5DF2\u6A19\u8A18") : React.createElement(React.Fragment, null, React.createElement(Icon, {
+    name: "plus-circle",
+    size: 12
+  }), " \u6A19\u8A18"))), React.createElement("div", {
     className: "mb-4 p-3 bg-amber-50 rounded-xl border border-amber-200 space-y-3"
   }, React.createElement("div", {
     className: "flex justify-between items-center"
@@ -10741,6 +10781,7 @@ const MainApp = () => {
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const planningDirtyMonthsRef = useRef(new Set());
+  const publicConfigSyncHashRef = useRef('');
   const [latestNews, setLatestNews] = useState('');
   const [marqueeIconHistory, setMarqueeIconHistory] = useState([]);
   const [marqueeBgColor, setMarqueeBgColor] = useState('#0f172a');
@@ -10756,6 +10797,7 @@ const MainApp = () => {
   const [posterNameOverrides, setPosterNameOverrides] = useState(DEFAULT_POSTER_NAME_OVERRIDES);
   const [showPosterNameSettings, setShowPosterNameSettings] = useState(false);
   const [outingDays, setOutingDays] = useState({});
+  const [internalDays, setInternalDays] = useState({});
   const [publicTheme, setPublicTheme] = useState(DEFAULT_PUBLIC_THEME);
   const [publicSideDecor, setPublicSideDecor] = useState(DEFAULT_PUBLIC_SIDE_DECOR);
   const [selectedOutingPosterRandom, setSelectedOutingPosterRandom] = useState(null);
@@ -11044,7 +11086,25 @@ const MainApp = () => {
     };
     const mainRef = doc(db, basePath, 'settings', 'main');
     const configsRef = collection(db, basePath, 'event_configs');
+    const publicConfigsRef = doc(db, basePath, 'settings', 'public_event_configs');
     const scheduleRef = doc(db, basePath, 'settings', 'schedule');
+    const applyConfigSnapshot = s => {
+      const cfgs = {};
+      if (s) s.forEach(d => {
+        const rawConfig = sanitizeFirebaseValue(d.data() || {});
+        cfgs[d.id] = normalizeEventConfigForDisplay(rawConfig);
+      });
+      setEventConfigs(cfgs);
+    };
+    const applyPublicConfigData = rawData => {
+      const rawConfigs = sanitizeFirebaseValue(rawData || {})?.configs || {};
+      const cfgs = {};
+      Object.entries(rawConfigs || {}).forEach(([key, rawConfig]) => {
+        cfgs[key] = normalizeEventConfigForDisplay(rawConfig || {});
+      });
+      setEventConfigs(cfgs);
+      return Object.keys(cfgs).length;
+    };
     const unsubMain = onSnapshot(mainRef, s => {
       if (s && s.exists()) {
         const data = sanitizeFirebaseValue(s.data() || {});
@@ -11084,32 +11144,81 @@ const MainApp = () => {
       }
       setLoading(false);
     });
-    const unsubConfigs = onSnapshot(configsRef, s => {
-      const cfgs = {};
-      if (s) s.forEach(d => {
-        const rawConfig = sanitizeFirebaseValue(d.data() || {});
-        cfgs[d.id] = normalizeEventConfigForDisplay(rawConfig);
-      });
-      setEventConfigs(cfgs);
-    });
+    let unsubConfigFallback = null;
+    const unsubConfigs = viewMode === 'public' ? onSnapshot(publicConfigsRef, s => {
+      const publicConfigCount = s && s.exists() ? applyPublicConfigData(s.data() || {}) : 0;
+      if (publicConfigCount > 0) {
+        if (unsubConfigFallback) {
+          unsubConfigFallback();
+          unsubConfigFallback = null;
+        }
+        return;
+      }
+      if (!unsubConfigFallback) {
+        unsubConfigFallback = onSnapshot(configsRef, applyConfigSnapshot);
+      }
+    }, error => {
+      console.warn('Public event config cache failed, fallback to full configs:', error);
+      if (!unsubConfigFallback) {
+        unsubConfigFallback = onSnapshot(configsRef, applyConfigSnapshot);
+      }
+    }) : onSnapshot(configsRef, applyConfigSnapshot);
+    const cleanupConfigs = () => {
+      if (typeof unsubConfigs === 'function') unsubConfigs();
+      if (typeof unsubConfigFallback === 'function') unsubConfigFallback();
+    };
     const unsubSchedule = onSnapshot(scheduleRef, s => {
       if (s && s.exists()) {
         const scheduleData = sanitizeFirebaseValue(s.data() || {});
         setInstructorSchedule(scheduleData.resting || {});
         setCompanyRestDates(scheduleData.companyRest || []);
         setOutingDays(scheduleData.outingDays || {});
+        setInternalDays(scheduleData.internalDays || {});
       } else {
         setInstructorSchedule({});
         setCompanyRestDates([]);
         setOutingDays({});
+        setInternalDays({});
       }
     });
     return () => {
       if (unsubMain) unsubMain();
-      if (unsubConfigs) unsubConfigs();
+      cleanupConfigs();
       if (unsubSchedule) unsubSchedule();
     };
-  }, [user, db, dbSource]);
+  }, [user, db, dbSource, viewMode]);
+  useEffect(() => {
+    if (!db || !user || viewMode !== 'admin' || !canLoadAdminData) return undefined;
+    const normalizedConfigs = {};
+    Object.entries(eventConfigs || {}).forEach(([key, cfg]) => {
+      normalizedConfigs[key] = buildPublicEventConfigCacheEntry(cfg || {});
+    });
+    const configKeys = Object.keys(normalizedConfigs);
+    if (configKeys.length === 0) return undefined;
+    const syncHash = JSON.stringify(normalizedConfigs);
+    const storageKey = `crm_public_event_configs_hash_${dbSource}`;
+    let storedHash = '';
+    try {
+      storedHash = localStorage.getItem(storageKey) || '';
+    } catch (_) {}
+    if (syncHash === storedHash || syncHash === publicConfigSyncHashRef.current) return undefined;
+    const timer = setTimeout(async () => {
+      try {
+        await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'public_event_configs'), {
+          configs: normalizedConfigs,
+          updatedAt: new Date().toISOString(),
+          count: configKeys.length
+        });
+        publicConfigSyncHashRef.current = syncHash;
+        try {
+          localStorage.setItem(storageKey, syncHash);
+        } catch (_) {}
+      } catch (e) {
+        console.warn('Public event config cache sync failed:', e);
+      }
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [db, user, dbSource, viewMode, canLoadAdminData, eventConfigs]);
   useEffect(() => {
     if (!canLoadAdminData || !shouldLoadAuthSettings) return undefined;
     if (!db) {
@@ -11201,20 +11310,9 @@ const MainApp = () => {
       }
     };
     readTemplatesOnce();
-    const unsubscribeTemplates = onSnapshot(templatesRef, s => {
-      if (s && s.exists()) {
-        resolveInitialLoad(s.data() || {});
-      } else {
-        resolveInitialLoad({});
-      }
-    }, error => {
-      console.error('Template subscription failed', error);
-      if (!didResolveInitialLoad) setTemplatesLoadState('error');
-    });
     return () => {
       cancelled = true;
       clearTimeout(timeoutTimer);
-      if (typeof unsubscribeTemplates === 'function') unsubscribeTemplates();
     };
   }, [canLoadAdminData, db, dbSource, shouldLoadTemplates, templatesReloadSeed]);
   useEffect(() => {
@@ -11489,6 +11587,27 @@ const MainApp = () => {
     setOutingDays(next);
     await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'schedule'), {
       outingDays: next
+    }, {
+      merge: true
+    });
+  };
+  const handleToggleInternalDay = async date => {
+    if (!user || !db) return;
+    const current = internalDays[date];
+    const next = {
+      ...internalDays
+    };
+    if (current && current.enabled) {
+      delete next[date];
+    } else {
+      next[date] = {
+        enabled: true,
+        label: current?.label || '內部活動'
+      };
+    }
+    setInternalDays(next);
+    await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'schedule'), {
+      internalDays: next
     }, {
       merge: true
     });
@@ -12918,13 +13037,17 @@ const MainApp = () => {
     return Array(firstDay).fill(null).concat([...Array(daysInMonth).keys()].map(i => i + 1));
   }, [currentDate]);
   const publicRollingCalendarDays = useMemo(() => {
-    const anchorDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
-    const thisWeekStart = new Date(anchorDate);
-    thisWeekStart.setDate(anchorDate.getDate() - anchorDate.getDay());
-    const visibleStart = new Date(thisWeekStart);
-    visibleStart.setDate(thisWeekStart.getDate() - 7);
+    const anchorYear = currentDate.getFullYear();
+    const anchorMonth = currentDate.getMonth();
+    const firstMonthStart = new Date(anchorYear, anchorMonth, 1);
+    const secondMonthEnd = new Date(anchorYear, anchorMonth + 2, 0);
+    const visibleStart = new Date(firstMonthStart);
+    visibleStart.setDate(firstMonthStart.getDate() - firstMonthStart.getDay());
+    const visibleEnd = new Date(secondMonthEnd);
+    visibleEnd.setDate(secondMonthEnd.getDate() + (6 - secondMonthEnd.getDay()));
+    const dayCount = Math.round((visibleEnd - visibleStart) / 86400000) + 1;
     return Array.from({
-      length: 35
+      length: dayCount
     }, (_, index) => {
       const dateObj = new Date(visibleStart);
       dateObj.setDate(visibleStart.getDate() + index);
@@ -13065,7 +13188,8 @@ const MainApp = () => {
     }
     const basePath = `artifacts/${dbSource}/public/data`;
     const versionsRef = collection(db, basePath, 'event_schedule_versions');
-    return onSnapshot(versionsRef, snapshot => {
+    const versionsQuery = versionsRef && typeof versionsRef.orderBy === 'function' ? versionsRef.orderBy('savedAtMs', 'desc').limit(30) : versionsRef;
+    return onSnapshot(versionsQuery, snapshot => {
       const nextVersions = [];
       if (snapshot) snapshot.forEach(d => nextVersions.push({
         id: d.id,
@@ -13785,15 +13909,12 @@ const MainApp = () => {
   }, [stats.events, eventConfigs]);
   const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
   const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
-  const shiftPublicWeekWindow = weekOffset => setCurrentDate(date => new Date(date.getFullYear(), date.getMonth(), date.getDate() + weekOffset * 7));
   const shiftPublicMonthWindow = monthOffset => setCurrentDate(date => {
     const targetYear = date.getFullYear();
     const targetMonth = date.getMonth() + monthOffset;
     const safeDay = Math.min(date.getDate(), getDaysInMonth(targetYear, targetMonth));
     return new Date(targetYear, targetMonth, safeDay);
   });
-  const nextPublicWeekWindow = () => shiftPublicWeekWindow(1);
-  const prevPublicWeekWindow = () => shiftPublicWeekWindow(-1);
   const nextPublicMonthWindow = () => shiftPublicMonthWindow(1);
   const prevPublicMonthWindow = () => shiftPublicMonthWindow(-1);
   const checkEventMatchesFilters = (eventKey, filters = publicFilters) => {
@@ -13914,14 +14035,13 @@ const MainApp = () => {
     } : selectedOutingPosterRandom : null;
     const todayDateKey = getLocalDateStr();
     const currentMonthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
-    const publicRangeStart = publicRollingCalendarDays[0];
-    const publicRangeEnd = publicRollingCalendarDays[publicRollingCalendarDays.length - 1];
-    const publicRangeLabel = publicRangeStart && publicRangeEnd ? `${publicRangeStart.year}/${publicRangeStart.month + 1}/${publicRangeStart.day} - ${publicRangeEnd.year}/${publicRangeEnd.month + 1}/${publicRangeEnd.day}` : '';
+    const nextPublicMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
+    const publicRangeLabel = `${currentDate.getFullYear()}年${currentDate.getMonth() + 1}月 - ${nextPublicMonth.getFullYear()}年${nextPublicMonth.getMonth() + 1}月`;
     const anchorMonthIndex = currentDate.getFullYear() * 12 + currentDate.getMonth();
     const publicVisibleMonthBadges = Array.from(publicRollingCalendarDays.reduce((map, dayInfo) => {
       if (!dayInfo || map.has(dayInfo.monthKey)) return map;
       const monthIndex = dayInfo.year * 12 + dayInfo.month;
-      const relation = monthIndex < anchorMonthIndex ? '前月' : monthIndex > anchorMonthIndex ? '下月' : '當月';
+      const relation = monthIndex < anchorMonthIndex ? '前月' : monthIndex === anchorMonthIndex ? '當月' : monthIndex === anchorMonthIndex + 1 ? '下月' : '補齊';
       map.set(dayInfo.monthKey, {
         key: dayInfo.monthKey,
         relation,
@@ -14225,13 +14345,7 @@ const MainApp = () => {
     }, React.createElement("button", {
       onClick: prevPublicMonthWindow,
       className: "px-2 sm:px-3 py-1.5 rounded-full text-[11px] sm:text-xs font-bold border border-slate-200 text-slate-500 hover:bg-white hover:shadow-sm transition-all whitespace-nowrap"
-    }, "\u4E0A\u6708"), React.createElement("button", {
-      onClick: prevPublicWeekWindow,
-      title: "\u4E0A\u4E00\u9031",
-      className: "p-2 hover:bg-white hover:shadow-sm rounded-full transition-all text-slate-500"
-    }, React.createElement(Icon, {
-      name: "chevron-left"
-    }))), React.createElement("div", {
+    }, "\u4E0A\u6708")), React.createElement("div", {
       className: "text-center min-w-0"
     }, React.createElement("h2", {
       className: "text-base sm:text-lg font-bold text-slate-800"
@@ -14243,12 +14357,6 @@ const MainApp = () => {
     }, badge.relation, " \u00B7 ", badge.label)))), React.createElement("div", {
       className: "flex items-center gap-1 sm:gap-2"
     }, React.createElement("button", {
-      onClick: nextPublicWeekWindow,
-      title: "\u4E0B\u4E00\u9031",
-      className: "p-2 hover:bg-white hover:shadow-sm rounded-full transition-all text-slate-500"
-    }, React.createElement(Icon, {
-      name: "chevron-right"
-    })), React.createElement("button", {
       onClick: nextPublicMonthWindow,
       className: "px-2 sm:px-3 py-1.5 rounded-full text-[11px] sm:text-xs font-bold border border-slate-200 text-slate-500 hover:bg-white hover:shadow-sm transition-all whitespace-nowrap"
     }, "\u4E0B\u6708")))), React.createElement("div", {
@@ -14956,6 +15064,7 @@ const MainApp = () => {
     const cap = cfg.capacity || 12;
     const isFull = e.count >= cap;
     const carpool = e.customers ? e.customers.filter(c => c.transport === '共乘').length : 0;
+    const totalPeople = Number.isFinite(Number(e.count)) ? Number(e.count) : Array.isArray(e.customers) ? e.customers.length : 0;
     const isCancelled = !!cfg.isCancelled;
     const safeDate = toSafeDisplayText(e.date, '');
     const safeEventName = toSafeDisplayText(e.eventName, '未命名活動');
@@ -14979,22 +15088,22 @@ const MainApp = () => {
       className: "flex items-center gap-2"
     }, React.createElement("span", {
       className: `font-bold ${isFull ? 'text-red-500' : 'text-slate-700'}`
-    }, e.count), React.createElement("span", {
+    }, carpool), React.createElement("span", {
       className: "text-xs text-slate-400"
-    }, "/ ", cap), React.createElement("div", {
+    }, " / ", totalPeople, " \u4EBA"), React.createElement("div", {
       className: "w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden"
     }, React.createElement("div", {
       className: `h-full ${isFull ? 'bg-red-500' : 'bg-green-500'}`,
       style: {
         width: `${Math.min(e.count / cap * 100, 100)}%`
       }
-    }))), carpool > 0 && React.createElement("div", {
-      className: "text-[10px] text-orange-500 mt-1 flex items-center"
+    }))), React.createElement("div", {
+      className: "text-[10px] text-slate-400 mt-1 flex items-center gap-1"
     }, React.createElement(Icon, {
       name: "car",
       size: 10,
       className: "mr-1"
-    }), " \u5171\u4E58 ", carpool, " \u4EBA")), React.createElement("td", {
+    }), "\u5171\u4E58 / \u7E3D\u4EBA\u6578\uFF08\u4E0A\u9650 ", cap, "\uFF09")), React.createElement("td", {
       className: "px-6 py-4"
     }, React.createElement("button", {
       onClick: () => setEditingEvent(e),
@@ -15034,6 +15143,7 @@ const MainApp = () => {
     const dayItems = day ? calendarOccupancy[dateStr] || [] : [];
     const isCompanyRestDay = day ? companyRestDates.includes(dateStr) : false;
     const isTodayCell = day ? dateStr === getLocalDateStr() : false;
+    const isInternalDay = day ? !!(internalDays[dateStr] && internalDays[dateStr].enabled) : false;
     return React.createElement("div", {
       key: i,
       onClick: () => {
@@ -15077,6 +15187,8 @@ const MainApp = () => {
       const safeInstructor = toSafeDisplayText(evt?.instructor, '?');
       const safeLabel = toSafeDisplayText(label, '');
       const safeDisplayTime = toSafeDisplayText(displayTime, '');
+      const carpoolCount = Array.isArray(evt?.customers) ? evt.customers.filter(customer => customer && customer.transport === '共乘').length : 0;
+      const totalPeople = Number.isFinite(Number(evt?.count)) ? Number(evt.count) : Array.isArray(evt?.customers) ? evt.customers.length : 0;
       let cardClass = 'mb-1 p-1 px-1.5 rounded-md border cursor-pointer transition-all group hover:shadow-md text-[10px] relative overflow-hidden ';
       let cardStyle = {};
       const baseColor = cfg.backendColor || '#3b82f6';
@@ -15124,7 +15236,7 @@ const MainApp = () => {
         className: "flex justify-between items-center opacity-70 text-[8px] mb-0.5 font-mono"
       }, React.createElement("span", null, safeDisplayTime), React.createElement("span", {
         className: "font-bold"
-      }, evt.count, "\u4EBA")), React.createElement("div", {
+      }, carpoolCount, " / ", totalPeople, "\u4EBA")), React.createElement("div", {
         className: "truncate font-bold text-[10px] mb-0.5"
       }, safeEventName), React.createElement("div", {
         className: "truncate opacity-60 font-normal text-[9px]"
@@ -15156,7 +15268,9 @@ const MainApp = () => {
       className: "font-bold"
     }, "\u5834\u52D8"), Array.isArray(outingDays[dateStr]?.people) && outingDays[dateStr].people.length > 0 && React.createElement("span", {
       className: "ml-1"
-    }, ": ", outingDays[dateStr].people.map(person => toSafeDisplayText(person, '').trim()).filter(Boolean).join('、')))));
+    }, ": ", outingDays[dateStr].people.map(person => toSafeDisplayText(person, '').trim()).filter(Boolean).join('、'))), isInternalDay && !companyRestDates.includes(dateStr) && React.createElement("div", {
+      className: "absolute bottom-1 left-1 max-w-[80%] text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-200 rounded px-1.5 py-0.5 leading-tight shadow-sm pointer-events-none"
+    }, "\u5167\u90E8")));
   }))))), activeTab === 'projects' && React.createElement(ProjectConsoleTab, {
     user: user,
     db: db,
@@ -16192,6 +16306,8 @@ const MainApp = () => {
     onToggle: handleToggleInstructorRest,
     isCompanyRest: companyRestDates.includes(scheduleDate),
     onToggleCompanyRest: handleToggleCompanyRest,
+    isInternalDay: !!(internalDays[scheduleDate] && internalDays[scheduleDate].enabled),
+    onToggleInternalDay: handleToggleInternalDay,
     isOutingDay: !!(outingDays[scheduleDate] && outingDays[scheduleDate].enabled),
     outingPosterFilename: outingDays[scheduleDate]?.posterFilename || '',
     outingPosterOptions: outingPosterConfig,
