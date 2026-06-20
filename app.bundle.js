@@ -2620,7 +2620,9 @@ const InstructorScheduleModal = ({
   isCompanyRest,
   onToggleCompanyRest,
   isInternalDay,
+  internalLabel,
   onToggleInternalDay,
+  onSetInternalLabel,
   isOutingDay,
   outingPosterFilename,
   outingPosterOptions,
@@ -2659,7 +2661,9 @@ const InstructorScheduleModal = ({
     name: "check-circle",
     size: 12
   }), " \u6B63\u5E38\u71DF\u904B"))), React.createElement("div", {
-    className: "mb-4 p-3 bg-indigo-50 rounded-xl flex justify-between items-center border border-indigo-200"
+    className: "mb-4 p-3 bg-indigo-50 rounded-xl border border-indigo-200 space-y-3"
+  }, React.createElement("div", {
+    className: "flex justify-between items-center gap-3"
   }, React.createElement("div", null, React.createElement("span", {
     className: "font-bold text-indigo-700 text-sm block"
   }, "\u5167\u90E8\u6D3B\u52D5"), React.createElement("span", {
@@ -2673,7 +2677,20 @@ const InstructorScheduleModal = ({
   }), " \u5DF2\u6A19\u8A18") : React.createElement(React.Fragment, null, React.createElement(Icon, {
     name: "plus-circle",
     size: 12
-  }), " \u6A19\u8A18"))), React.createElement("div", {
+  }), " \u6A19\u8A18"))), isInternalDay && React.createElement("div", {
+    className: "mt-3"
+  }, React.createElement("label", {
+    className: "block text-[11px] font-bold text-indigo-700 mb-1"
+  }, "\u5167\u90E8\u6D3B\u52D5\u5099\u8A3B"), React.createElement("input", {
+    type: "text",
+    className: "w-full p-2 border border-indigo-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200",
+    placeholder: "\u4F8B\uFF1A\u5167\u90E8\u6703\u8B70\u3001\u5668\u6750\u6574\u7406\u3001\u8A13\u7DF4...",
+    defaultValue: internalLabel || '',
+    onBlur: e => onSetInternalLabel(date, e.target.value),
+    onKeyDown: e => {
+      if (e.key === 'Enter') e.currentTarget.blur();
+    }
+  }))), React.createElement("div", {
     className: "mb-4 p-3 bg-amber-50 rounded-xl border border-amber-200 space-y-3"
   }, React.createElement("div", {
     className: "flex justify-between items-center"
@@ -11612,6 +11629,22 @@ const MainApp = () => {
       merge: true
     });
   };
+  const handleSetInternalLabel = async (date, label) => {
+    if (!user || !db) return;
+    const next = {
+      ...internalDays,
+      [date]: {
+        enabled: true,
+        label: String(label || '').trim()
+      }
+    };
+    setInternalDays(next);
+    await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'schedule'), {
+      internalDays: next
+    }, {
+      merge: true
+    });
+  };
   const handleSetOutingPoster = async (date, posterFilename) => {
     if (!user || !db) return;
     const next = {
@@ -15144,6 +15177,7 @@ const MainApp = () => {
     const isCompanyRestDay = day ? companyRestDates.includes(dateStr) : false;
     const isTodayCell = day ? dateStr === getLocalDateStr() : false;
     const isInternalDay = day ? !!(internalDays[dateStr] && internalDays[dateStr].enabled) : false;
+    const internalLabel = day ? toSafeDisplayText(internalDays[dateStr]?.label, '').trim() : '';
     return React.createElement("div", {
       key: i,
       onClick: () => {
@@ -15270,7 +15304,7 @@ const MainApp = () => {
       className: "ml-1"
     }, ": ", outingDays[dateStr].people.map(person => toSafeDisplayText(person, '').trim()).filter(Boolean).join('、'))), isInternalDay && !companyRestDates.includes(dateStr) && React.createElement("div", {
       className: "absolute bottom-1 left-1 max-w-[80%] text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-200 rounded px-1.5 py-0.5 leading-tight shadow-sm pointer-events-none"
-    }, "\u5167\u90E8")));
+    }, "\u5167\u90E8", internalLabel ? `：${internalLabel}` : '')));
   }))))), activeTab === 'projects' && React.createElement(ProjectConsoleTab, {
     user: user,
     db: db,
@@ -16307,7 +16341,9 @@ const MainApp = () => {
     isCompanyRest: companyRestDates.includes(scheduleDate),
     onToggleCompanyRest: handleToggleCompanyRest,
     isInternalDay: !!(internalDays[scheduleDate] && internalDays[scheduleDate].enabled),
+    internalLabel: internalDays[scheduleDate]?.label || '',
     onToggleInternalDay: handleToggleInternalDay,
+    onSetInternalLabel: handleSetInternalLabel,
     isOutingDay: !!(outingDays[scheduleDate] && outingDays[scheduleDate].enabled),
     outingPosterFilename: outingDays[scheduleDate]?.posterFilename || '',
     outingPosterOptions: outingPosterConfig,
