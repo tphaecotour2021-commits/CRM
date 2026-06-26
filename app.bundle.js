@@ -377,8 +377,6 @@ const readFlag = (key, defaultValue = false) => {
     return defaultValue;
   }
 };
-const ANALYTICS_WRITE_ENABLED = readFlag('crm_enable_analytics_write', true);
-const MASCOT_WRITE_ENABLED = readFlag('crm_enable_mascot_write', true);
 const CSV_HEADER = "日期,活動名稱,講師,客戶姓名,金額,交通方式,身分證字號,生日,Email,報名管道,社群暱稱,備註,訂購日,手機,報到狀態";
 const parseCsvLine = line => {
   const cells = [];
@@ -753,6 +751,123 @@ const QUICK_CREATE_TEMPLATE_CATEGORY_LABELS = QUICK_CREATE_TEMPLATE_CATEGORY_OPT
   acc[item.value] = item.label;
   return acc;
 }, {});
+const SCHEDULE_TIME_SLOT_OPTIONS = [{
+  value: 'morning',
+  label: '上午',
+  helper: '中午以前'
+}, {
+  value: 'afternoon',
+  label: '下午',
+  helper: '12:00-17:59'
+}, {
+  value: 'evening',
+  label: '晚上',
+  helper: '18:00 以後'
+}];
+const SCHEDULE_REST_SLOT_OPTIONS = [{
+  value: 'all',
+  label: '整天'
+}, ...SCHEDULE_TIME_SLOT_OPTIONS.map(item => ({
+  value: item.value,
+  label: item.label
+}))];
+const SCHEDULE_TIME_SLOT_LABELS = SCHEDULE_REST_SLOT_OPTIONS.reduce((acc, item) => {
+  acc[item.value] = item.label;
+  return acc;
+}, {});
+const normalizeScheduleTimeSlot = (value, fallback = 'evening') => SCHEDULE_TIME_SLOT_OPTIONS.some(item => item.value === value) ? value : fallback;
+const normalizeScheduleRestSlot = (value, fallback = 'all') => SCHEDULE_REST_SLOT_OPTIONS.some(item => item.value === value) ? value : fallback;
+const inferScheduleTimeSlot = time => {
+  const match = String(time || '').match(/^(\d{1,2})/);
+  if (!match) return 'evening';
+  const hour = parseInt(match[1], 10);
+  if (!Number.isFinite(hour)) return 'evening';
+  if (hour < 12) return 'morning';
+  if (hour < 18) return 'afternoon';
+  return 'evening';
+};
+const getScheduleSlotLabel = slot => SCHEDULE_TIME_SLOT_LABELS[slot] || SCHEDULE_TIME_SLOT_LABELS[normalizeScheduleTimeSlot(slot)];
+const normalizeScheduleRestEntry = entry => {
+  const empty = {
+    all: [],
+    morning: [],
+    afternoon: [],
+    evening: []
+  };
+  const cleanList = list => Array.from(new Set((Array.isArray(list) ? list : []).map(name => String(name || '').trim()).filter(Boolean)));
+  if (Array.isArray(entry)) return {
+    ...empty,
+    all: cleanList(entry)
+  };
+  if (entry && typeof entry === 'object') {
+    return {
+      all: cleanList(entry.all || entry.fullDay || entry.names),
+      morning: cleanList(entry.morning),
+      afternoon: cleanList(entry.afternoon),
+      evening: cleanList(entry.evening)
+    };
+  }
+  return empty;
+};
+const getAllScheduleRestNames = entry => {
+  const normalized = normalizeScheduleRestEntry(entry);
+  return Array.from(new Set(['all', 'morning', 'afternoon', 'evening'].flatMap(slot => normalized[slot] || [])));
+};
+const getScheduleRestNamesForSlot = (entry, slot = 'all') => {
+  const normalized = normalizeScheduleRestEntry(entry);
+  const normalizedSlot = normalizeScheduleRestSlot(slot, 'all');
+  if (normalizedSlot === 'all') return normalized.all || [];
+  return Array.from(new Set([...(normalized.all || []), ...(normalized[normalizedSlot] || [])]));
+};
+const isInstructorRestingForSlot = (schedule = {}, dateKey = '', name = '', slot = 'all') => {
+  const cleanName = String(name || '').trim();
+  if (!cleanName) return false;
+  return getScheduleRestNamesForSlot(schedule?.[dateKey], slot).includes(cleanName);
+};
+const getScheduleRestDisplayItems = entry => {
+  const normalized = normalizeScheduleRestEntry(entry);
+  const items = [];
+  SCHEDULE_REST_SLOT_OPTIONS.forEach(option => {
+    (normalized[option.value] || []).forEach(name => {
+      const cleanName = String(name || '').trim();
+      if (cleanName) items.push({
+        name: cleanName,
+        slot: option.value,
+        label: option.label
+      });
+    });
+  });
+  return items;
+};
+const toggleScheduleRestEntry = (entry, name, slot = 'all') => {
+  const cleanName = String(name || '').trim();
+  if (!cleanName) return normalizeScheduleRestEntry(entry);
+  const normalized = normalizeScheduleRestEntry(entry);
+  const normalizedSlot = normalizeScheduleRestSlot(slot, 'all');
+  const hasName = list => (list || []).includes(cleanName);
+  const addName = list => hasName(list) ? list : [...(list || []), cleanName];
+  const removeName = list => (list || []).filter(item => item !== cleanName);
+  if (normalizedSlot === 'all') {
+    if (hasName(normalized.all)) {
+      normalized.all = removeName(normalized.all);
+    } else {
+      normalized.all = addName(normalized.all);
+      SCHEDULE_TIME_SLOT_OPTIONS.forEach(option => {
+        normalized[option.value] = removeName(normalized[option.value]);
+      });
+    }
+  } else if (hasName(normalized.all) && !hasName(normalized[normalizedSlot])) {
+    normalized.all = removeName(normalized.all);
+    SCHEDULE_TIME_SLOT_OPTIONS.forEach(option => {
+      normalized[option.value] = option.value === normalizedSlot ? removeName(normalized[option.value]) : addName(normalized[option.value]);
+    });
+  } else if (hasName(normalized[normalizedSlot])) {
+    normalized[normalizedSlot] = removeName(normalized[normalizedSlot]);
+  } else {
+    normalized[normalizedSlot] = addName(normalized[normalizedSlot]);
+  }
+  return normalized;
+};
 const QUICK_CREATE_SPECIAL_ACTIVITY_NAMES = new Set(['北橫蛇']);
 const QUICK_CREATE_THEME_ANIMAL_SUFFIXES = ['貓頭鷹', '蝙蝠', '飛鼠', '松鼠', '蜥蜴', '蟾蜍', '穿山甲', '水鹿', '梅花鹿', '山羌', '夜鷺', '老鷹', '螢火蟲', '鼠', '兔', '蛇', '龜', '蛙', '蜥', '蟾', '狐', '鹿', '猴', '鳥', '蟬', '螢'];
 const normalizeQuickCreateTemplateCategory = (value, fallbackName = '') => {
@@ -778,6 +893,7 @@ const normalizeQuickCreateTemplate = (tpl = {}) => {
     ...tpl,
     eventName,
     templateCategory: normalizeQuickCreateTemplateCategory(tpl.templateCategory, eventName),
+    timeSlot: normalizeScheduleTimeSlot(tpl.timeSlot, inferScheduleTimeSlot(tpl.time)),
     isPrivateGroupEvent: !!tpl.isPrivateGroupEvent || tpl?.tags?.levels === '包團' || String(tpl?.displayName || eventName || '').includes('包團'),
     privateGroupLabel,
     statusRules: normalizeStoredStatusRules(tpl.statusRules || [])
@@ -1590,6 +1706,7 @@ const normalizeEventConfigForDisplay = (config = {}) => {
     displayName: toSafeDisplayText(config.displayName, ''),
     activityCategory: toSafeDisplayText(config.activityCategory, ''),
     time: toSafeDisplayText(config.time, ''),
+    timeSlot: normalizeScheduleTimeSlot(config.timeSlot, inferScheduleTimeSlot(config.time)),
     link: toSafeDisplayText(config.link, ''),
     note: toSafeDisplayText(config.note, ''),
     backendColor: toSafeDisplayText(config.backendColor, ''),
@@ -1610,6 +1727,7 @@ const buildPublicEventConfigCacheEntry = (config = {}) => {
     displayName: normalized.displayName || '',
     activityCategory: normalized.activityCategory || '',
     time: normalized.time || '',
+    timeSlot: normalized.timeSlot || inferScheduleTimeSlot(normalized.time),
     link: normalized.link || '',
     capacity: normalized.capacity ?? '',
     duration: normalized.duration ?? '',
@@ -2627,14 +2745,17 @@ const InstructorScheduleModal = ({
   outingPosterFilename,
   outingPosterOptions,
   outingPeople,
-  onToggleOutingDay,
-  onSetOutingPoster,
-  onToggleOutingPerson
-}) => {
-  return React.createElement("div", {
-    className: "fixed inset-0 bg-black/50 z-[90] flex items-center justify-center p-4 fade-in backdrop-blur-sm"
-  }, React.createElement("div", {
-    className: "bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl"
+	  onToggleOutingDay,
+	  onSetOutingPoster,
+	  onToggleOutingPerson
+	}) => {
+	  const [activeRestSlot, setActiveRestSlot] = useState('all');
+	  const activeRestNames = getScheduleRestNamesForSlot(restingList, activeRestSlot);
+	  const restDisplayItems = getScheduleRestDisplayItems(restingList);
+	  return React.createElement("div", {
+	    className: "fixed inset-0 bg-black/50 z-[90] flex items-center justify-center p-4 fade-in backdrop-blur-sm"
+	  }, React.createElement("div", {
+	    className: "bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar"
   }, React.createElement("div", {
     className: "flex justify-between items-center mb-4"
   }, React.createElement("h3", {
@@ -2730,21 +2851,36 @@ const InstructorScheduleModal = ({
     }, name);
   }), availableInstructors.length === 0 && React.createElement("span", {
     className: "text-[11px] text-amber-500"
-  }, "\u5C1A\u7121\u8B1B\u5E2B\u53EF\u9078")))), React.createElement("p", {
-    className: "text-xs text-slate-500 mb-4"
-  }, "\u9EDE\u64CA\u5207\u63DB\u500B\u5225\u8B1B\u5E2B\u4E0A\u5DE5\u72C0\u614B (\uD83D\uDD34 \u4F11\u5047 / \uD83D\uDFE2 \u53EF\u4E0A\u5DE5)"), React.createElement("div", {
-    className: "space-y-2 max-h-60 overflow-y-auto"
-  }, availableInstructors.map(name => {
-    const isResting = restingList.includes(name);
-    return React.createElement("div", {
-      key: name,
-      onClick: () => onToggle(date, name),
-      className: `flex justify-between items-center p-3 rounded-xl border cursor-pointer transition-all ${isResting ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`
-    }, React.createElement("span", {
-      className: `font-bold ${isResting ? 'text-red-700' : 'text-green-700'}`
-    }, name), React.createElement("span", {
-      className: `text-xs px-2 py-1 rounded-full font-bold ${isResting ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`
-    }, isResting ? '休假' : '可上工'));
+	  }, "\u5C1A\u7121\u8B1B\u5E2B\u53EF\u9078")))), React.createElement("div", {
+	    className: "mb-3 rounded-xl border border-slate-200 bg-slate-50 p-3"
+	  }, React.createElement("div", {
+	    className: "text-xs font-bold text-slate-600 mb-2"
+	  }, "\u4F11\u5047\u6642\u6BB5"), React.createElement("div", {
+	    className: "grid grid-cols-4 gap-1.5"
+	  }, SCHEDULE_REST_SLOT_OPTIONS.map(option => React.createElement("button", {
+	    key: option.value,
+	    type: "button",
+	    onClick: () => setActiveRestSlot(option.value),
+	    className: `px-2 py-1.5 rounded-lg text-xs font-bold border transition-all ${activeRestSlot === option.value ? 'bg-slate-800 text-white border-slate-900 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100'}`
+	  }, option.label)))), React.createElement("p", {
+	    className: "text-xs text-slate-500 mb-4"
+	  }, "\u9EDE\u64CA\u5207\u63DB\u500B\u5225\u8B1B\u5E2B\u5728\u9078\u5B9A\u6642\u6BB5\u7684\u4E0A\u5DE5\u72C0\u614B (\uD83D\uDD34 \u4F11\u5047 / \uD83D\uDFE2 \u53EF\u4E0A\u5DE5)"), React.createElement("div", {
+	    className: "space-y-2 max-h-60 overflow-y-auto"
+	  }, availableInstructors.map(name => {
+	    const isAllDayResting = getScheduleRestNamesForSlot(restingList, 'all').includes(name);
+	    const isResting = activeRestNames.includes(name);
+	    const isPartialResting = !isAllDayResting && restDisplayItems.some(item => item.name === name);
+	    const hasRestTone = activeRestSlot === 'all' ? isAllDayResting || isPartialResting : isResting;
+	    const statusLabel = activeRestSlot === 'all' ? isAllDayResting ? '整天休' : isPartialResting ? '部分休' : '可上工' : isResting ? `${getScheduleSlotLabel(activeRestSlot)}休` : '可上工';
+	    return React.createElement("div", {
+	      key: name,
+	      onClick: () => onToggle(date, name, activeRestSlot),
+	      className: `flex justify-between items-center p-3 rounded-xl border cursor-pointer transition-all ${hasRestTone ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`
+	    }, React.createElement("span", {
+	      className: `font-bold ${hasRestTone ? 'text-red-700' : 'text-green-700'}`
+	    }, name), React.createElement("span", {
+	      className: `text-xs px-2 py-1 rounded-full font-bold ${hasRestTone ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`
+	    }, statusLabel));
   }), availableInstructors.length === 0 && React.createElement("div", {
     className: "text-center text-slate-400 py-4"
   }, "\u66AB\u7121\u8B1B\u5E2B\u8CC7\u6599\uFF0C\u8ACB\u5148\u5EFA\u7ACB\u6D3B\u52D5\u6216\u624B\u52D5\u8F38\u5165\u3002")), React.createElement("div", {
@@ -3626,11 +3762,9 @@ const EventMascot = ({
   eventName,
   db,
   dbSource,
-  dailyStats,
   config
 }) => {
   const themes = Array.isArray(config) && config.length > 0 ? config : DEFAULT_MASCOT_THEMES;
-  const countedMascotKeyRef = useRef('');
   const matchedTheme = useMemo(() => {
     if (!eventName) return null;
     return themes.find(theme => {
@@ -3655,36 +3789,12 @@ const EventMascot = ({
   }, [matchedThemeSignature]);
   const gifSrc = selectedItem?.filename || '';
   const actionName = selectedItem?.action || '';
-  const mascotCounterKey = useMemo(() => {
-    if (!matchedTheme) return '';
-    const rawKey = String(matchedTheme.id || matchedTheme.name || matchedTheme.keywords || gifSrc || 'mascot');
-    return rawKey.replace(/[.\s/\\#?%]+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '').toLowerCase();
-  }, [matchedTheme, gifSrc]);
-  useEffect(() => {
-    if (!MASCOT_WRITE_ENABLED || !db || !dbSource || !gifSrc || !mascotCounterKey) return;
-    if (countedMascotKeyRef.current === mascotCounterKey) return;
-    countedMascotKeyRef.current = mascotCounterKey;
-    const todayStr = getLocalDateStr();
-    const docRef = doc(db, `artifacts/${dbSource}/analytics`, 'stats', 'daily', todayStr);
-    if (firebase && firebase.firestore && firebase.firestore.FieldValue) {
-      setDoc(docRef, {
-        mascots: {
-          [mascotCounterKey]: firebase.firestore.FieldValue.increment(1)
-        }
-      }, {
-        merge: true
-      }).catch(console.error);
-    }
-  }, [db, dbSource, gifSrc, mascotCounterKey]);
   if (!gifSrc) return null;
-  const luckyNumber = dailyStats && dailyStats.mascots && dailyStats.mascots[mascotCounterKey] ? dailyStats.mascots[mascotCounterKey] : 1;
   return React.createElement("div", {
     className: "absolute bottom-0 right-0 z-10 pointer-events-none flex flex-col items-end md:flex-row md:items-end"
   }, React.createElement("div", {
     className: "mb-2 mr-2 bg-white/95 border border-slate-200 shadow-lg rounded-2xl rounded-br-none px-3 py-2 text-[10px] leading-tight text-slate-600 animate-in fade-in slide-in-from-bottom-2 duration-700 relative z-20 max-w-[140px] md:mb-12 md:mr-[-10px]"
-  }, "\u4F60\u662F\u4ECA\u5929\u7B2C ", React.createElement("span", {
-    className: "text-orange-500 font-bold text-sm"
-  }, luckyNumber), " \u4F4D", React.createElement("br", null), "\u770B\u5230", React.createElement("span", {
+  }, "\u4F60\u9047\u5230\u4E86", React.createElement("span", {
     className: "text-slate-800 font-bold"
   }, matchedTheme.name?.replace('系列', '') || '吉祥物'), " ", React.createElement("span", {
     className: "text-blue-600 font-bold"
@@ -3930,6 +4040,7 @@ const EventManagerModal = ({
   const [tempName, setTempName] = useState(event.eventName);
   const [eventNote, setEventNote] = useState(config?.note || '');
   const [eventTime, setEventTime] = useState(config?.time || '');
+  const [eventTimeSlot, setEventTimeSlot] = useState(normalizeScheduleTimeSlot(config?.timeSlot, inferScheduleTimeSlot(config?.time || '')));
   const [eventLink, setEventLink] = useState(config?.link || '');
   const [backendColor, setBackendColor] = useState(config?.backendColor || '#eff6ff');
   const [displayName, setDisplayName] = useState(config?.displayName || '');
@@ -3973,19 +4084,19 @@ const EventManagerModal = ({
     return matches.length > 0 ? matches[matches.length - 1] : null;
   }, [customTemplates, normalizedInternalName]);
   const matchedTemplateKey = matchedTemplate ? `${matchedTemplate.id || matchedTemplate.name || matchedTemplate.eventName}::${normalizedInternalName}` : '';
-  const templateSuggestionNeeded = !!(matchedTemplate && (!eventTime && matchedTemplate.time || !eventLink && matchedTemplate.link || !displayName && matchedTemplate.displayName || !activityCategory && matchedTemplate.activityCategory || !eventNote && matchedTemplate.note || (capacity === 12 || capacity === '' || capacity === null || capacity === undefined) && matchedTemplate.capacity || !tags?.levels && matchedTemplate?.tags?.levels || !tags?.types && matchedTemplate?.tags?.types || !tags?.locations && matchedTemplate?.tags?.locations || !isPrivateGroupEvent && matchedTemplate.isPrivateGroupEvent || privateGroupLabel === '此為包團活動' && matchedTemplate.privateGroupLabel && matchedTemplate.privateGroupLabel !== '此為包團活動' || !(statusRules || []).length && (matchedTemplate.statusRules || []).length));
+  const templateSuggestionNeeded = !!(matchedTemplate && (!eventTime && matchedTemplate.time || !config?.timeSlot && matchedTemplate.timeSlot || !eventLink && matchedTemplate.link || !displayName && matchedTemplate.displayName || !activityCategory && matchedTemplate.activityCategory || !eventNote && matchedTemplate.note || (capacity === 12 || capacity === '' || capacity === null || capacity === undefined) && matchedTemplate.capacity || !tags?.levels && matchedTemplate?.tags?.levels || !tags?.types && matchedTemplate?.tags?.types || !tags?.locations && matchedTemplate?.tags?.locations || !isPrivateGroupEvent && matchedTemplate.isPrivateGroupEvent || privateGroupLabel === '此為包團活動' && matchedTemplate.privateGroupLabel && matchedTemplate.privateGroupLabel !== '此為包團活動' || !(statusRules || []).length && (matchedTemplate.statusRules || []).length));
   const shouldShowTemplateSuggestion = !!(templateSuggestionNeeded && matchedTemplateKey && matchedTemplateKey !== dismissedTemplateSuggestionKey && matchedTemplateKey !== appliedTemplateSuggestionKey);
   const hasChanges = useMemo(() => {
     const currentInstr = [...leadInstructors, ...supportInstructors].sort().join(' & ');
     const originalInstr = event.instructor || '';
     const originalLeadInstructors = config?.leadInstructors && config.leadInstructors.length > 0 ? config.leadInstructors : event.instructor ? event.instructor.split(/[&,]/).map(s => s.trim()).filter(Boolean) : [];
     const originalSupportInstructors = config?.supportInstructors || [];
-    return internalName !== event.eventName || capacity !== (config?.capacity || 12) || eventNote !== (config?.note || '') || eventTime !== (config?.time || '') || eventLink !== (config?.link || '') || backendColor !== (config?.backendColor || '#eff6ff') || displayName !== (config?.displayName || '') || activityCategory !== (config?.activityCategory || '') || carpoolDisplayMode !== resolveCarpoolDisplayMode(config?.carpoolDisplayMode, event.eventName) || isPrivateGroupEvent !== inferredPrivateGroupEvent || privateGroupLabel !== (config?.privateGroupLabel || '此為包團活動') || currentInstr !== originalInstr || JSON.stringify(leadInstructors) !== JSON.stringify(originalLeadInstructors) || JSON.stringify(supportInstructors) !== JSON.stringify(originalSupportInstructors) || JSON.stringify(tasks) !== JSON.stringify(config?.tasks || DEFAULT_TASKS_TEMPLATE) || JSON.stringify(tags) !== JSON.stringify(config?.tags || {
+    return internalName !== event.eventName || capacity !== (config?.capacity || 12) || eventNote !== (config?.note || '') || eventTime !== (config?.time || '') || eventTimeSlot !== normalizeScheduleTimeSlot(config?.timeSlot, inferScheduleTimeSlot(config?.time || '')) || eventLink !== (config?.link || '') || backendColor !== (config?.backendColor || '#eff6ff') || displayName !== (config?.displayName || '') || activityCategory !== (config?.activityCategory || '') || carpoolDisplayMode !== resolveCarpoolDisplayMode(config?.carpoolDisplayMode, event.eventName) || isPrivateGroupEvent !== inferredPrivateGroupEvent || privateGroupLabel !== (config?.privateGroupLabel || '此為包團活動') || currentInstr !== originalInstr || JSON.stringify(leadInstructors) !== JSON.stringify(originalLeadInstructors) || JSON.stringify(supportInstructors) !== JSON.stringify(originalSupportInstructors) || JSON.stringify(tasks) !== JSON.stringify(config?.tasks || DEFAULT_TASKS_TEMPLATE) || JSON.stringify(tags) !== JSON.stringify(config?.tags || {
       levels: '',
       types: '',
       locations: ''
     }) || JSON.stringify(statusRules) !== JSON.stringify(config?.statusRules ? normalizeStoredStatusRules(config.statusRules) : globalRules || DEFAULT_STATUS_RULES) || isCancelled !== !!config?.isCancelled;
-  }, [internalName, capacity, eventNote, eventTime, eventLink, backendColor, displayName, activityCategory, carpoolDisplayMode, isPrivateGroupEvent, inferredPrivateGroupEvent, privateGroupLabel, leadInstructors, supportInstructors, tasks, tags, statusRules, isCancelled, event, config]);
+  }, [internalName, capacity, eventNote, eventTime, eventTimeSlot, eventLink, backendColor, displayName, activityCategory, carpoolDisplayMode, isPrivateGroupEvent, inferredPrivateGroupEvent, privateGroupLabel, leadInstructors, supportInstructors, tasks, tags, statusRules, isCancelled, event, config]);
   const handleRequestClose = () => {
     if (hasChanges) {
       if (confirm("您有尚未儲存的編輯內容，確定要直接關閉嗎？（變更將會遺失）")) {
@@ -4029,9 +4140,9 @@ const EventManagerModal = ({
   const addLeadInstructor = name => {
     const clean = name.trim();
     if (!clean) return;
-    const isResting = instructorSchedule[event.date] && instructorSchedule[event.date].includes(clean);
+    const isResting = isInstructorRestingForSlot(instructorSchedule, event.date, clean, eventTimeSlot);
     if (isResting) {
-      if (!confirm(`${clean} 在 ${event.date} 已排休，確定要排入嗎？`)) return;
+      if (!confirm(`${clean} 在 ${event.date} ${getScheduleSlotLabel(eventTimeSlot)}已排休，確定要排入嗎？`)) return;
     }
     if (!leadInstructors.includes(clean)) setLeadInstructors([...leadInstructors, clean]);
     setTempLeadInstructor('');
@@ -4042,9 +4153,9 @@ const EventManagerModal = ({
   const addSupportInstructor = name => {
     const clean = name.trim();
     if (!clean) return;
-    const isResting = instructorSchedule[event.date] && instructorSchedule[event.date].includes(clean);
+    const isResting = isInstructorRestingForSlot(instructorSchedule, event.date, clean, eventTimeSlot);
     if (isResting) {
-      if (!confirm(`${clean} 在 ${event.date} 已排休，確定要排入嗎？`)) return;
+      if (!confirm(`${clean} 在 ${event.date} ${getScheduleSlotLabel(eventTimeSlot)}已排休，確定要排入嗎？`)) return;
     }
     if (!supportInstructors.includes(clean)) setSupportInstructors([...supportInstructors, clean]);
     setTempSupportInstructor('');
@@ -4080,10 +4191,11 @@ const EventManagerModal = ({
     const templatePayload = normalizeQuickCreateTemplate({
       id: matchedTemplate?.id || null,
       name: matchedTemplate?.name || cleanInternalName,
-      eventName: cleanInternalName,
-      instructor: currentInstructorStr || event.instructor || '',
-      time: eventTime || '',
-      duration: parseInt(config?.duration, 10) || 1,
+	      eventName: cleanInternalName,
+	      instructor: currentInstructorStr || event.instructor || '',
+	      time: eventTime || '',
+	      timeSlot: normalizeScheduleTimeSlot(eventTimeSlot, inferScheduleTimeSlot(eventTime)),
+	      duration: parseInt(config?.duration, 10) || 1,
       prepDays: parseInt(config?.prepDays, 10) || 0,
       prepTime: config?.prepTime || '',
       link: eventLink || '',
@@ -4116,9 +4228,10 @@ const EventManagerModal = ({
   };
   const applyTemplateToEvent = tpl => {
     if (!tpl) return;
-    const templateEventName = getTemplateEventName(tpl);
-    setEventTime(tpl.time || '');
-    setEventLink(tpl.link || '');
+	    const templateEventName = getTemplateEventName(tpl);
+	    setEventTime(tpl.time || '');
+	    setEventTimeSlot(normalizeScheduleTimeSlot(tpl.timeSlot, inferScheduleTimeSlot(tpl.time)));
+	    setEventLink(tpl.link || '');
     setEventNote(tpl.note || '');
     setDisplayName(tpl.displayName || '');
     setActivityCategory(tpl.activityCategory || '');
@@ -4149,9 +4262,10 @@ const EventManagerModal = ({
     onSaveConfig({
       capacity: parseInt(capacity),
       tasks,
-      note: eventNote,
-      time: eventTime,
-      link: eventLink,
+	      note: eventNote,
+	      time: eventTime,
+	      timeSlot: normalizeScheduleTimeSlot(eventTimeSlot, inferScheduleTimeSlot(eventTime)),
+	      link: eventLink,
       statusRules,
       displayName,
       activityCategory,
@@ -4455,13 +4569,25 @@ const EventManagerModal = ({
   }, "\uD83D\uDCC5 \u6642\u9593\u8207\u6642\u7A0B\u8A2D\u5B9A"), React.createElement("div", null, React.createElement("span", {
     className: "text-slate-500 text-xs font-bold mb-1 block"
   }, "\u6D3B\u52D5\u6642\u9593"), React.createElement("input", {
-    type: "time",
-    value: eventTime,
-    onChange: e => setEventTime(e.target.value),
-    className: "w-full px-2 py-1.5 text-center border border-slate-300 rounded-lg font-bold outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"
-  })), React.createElement("div", null, React.createElement("span", {
-    className: "text-slate-500 text-xs font-bold mb-1 block"
-  }, "\u4EBA\u6578\u4E0A\u9650"), React.createElement("input", {
+	    type: "time",
+	    value: eventTime,
+	    onChange: e => {
+	      setEventTime(e.target.value);
+	      setEventTimeSlot(inferScheduleTimeSlot(e.target.value));
+	    },
+	    className: "w-full px-2 py-1.5 text-center border border-slate-300 rounded-lg font-bold outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"
+	  })), React.createElement("div", null, React.createElement("span", {
+	    className: "text-slate-500 text-xs font-bold mb-1 block"
+	  }, "\u6D3B\u52D5\u6642\u6BB5"), React.createElement("select", {
+	    value: eventTimeSlot,
+	    onChange: e => setEventTimeSlot(normalizeScheduleTimeSlot(e.target.value, inferScheduleTimeSlot(eventTime))),
+	    className: "w-full px-2 py-1.5 text-center border border-slate-300 rounded-lg font-bold outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"
+	  }, SCHEDULE_TIME_SLOT_OPTIONS.map(option => React.createElement("option", {
+	    key: option.value,
+	    value: option.value
+	  }, option.label)))), React.createElement("div", null, React.createElement("span", {
+	    className: "text-slate-500 text-xs font-bold mb-1 block"
+	  }, "\u4EBA\u6578\u4E0A\u9650"), React.createElement("input", {
     type: "number",
     value: capacity,
     onChange: e => setCapacity(e.target.value),
@@ -5041,12 +5167,12 @@ const CalendarExportModal = ({
           style: 'outing'
         });
       });
-    });
-    dateKeys.forEach(dateKey => {
-      (Array.isArray(instructorSchedule?.[dateKey]) ? instructorSchedule[dateKey] : []).forEach(name => {
-        const cleanName = String(name || '').trim();
-        if (cleanName) instructorSet.add(cleanName);
-      });
+	    });
+	    dateKeys.forEach(dateKey => {
+	      getAllScheduleRestNames(instructorSchedule?.[dateKey]).forEach(name => {
+	        const cleanName = String(name || '').trim();
+	        if (cleanName) instructorSet.add(cleanName);
+	      });
     });
     const instructorNames = Array.from(instructorSet).filter(name => name && name !== '未定').sort((a, b) => a.localeCompare(b, 'zh-Hant'));
     const fallbackInstructors = (Array.isArray(availableInstructors) ? availableInstructors : []).map(name => String(name || '').trim()).filter(Boolean).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
@@ -5070,9 +5196,9 @@ const CalendarExportModal = ({
       style: 'header'
     }))]];
     dateKeys.forEach(dateKey => {
-      const restSet = new Set((Array.isArray(instructorSchedule?.[dateKey]) ? instructorSchedule[dateKey] : []).map(name => String(name || '').trim()).filter(Boolean));
-      const instructorCells = finalInstructorNames.map(name => {
-        const eventItems = eventCellMap?.[dateKey]?.[name] || [];
+	      const restItems = getScheduleRestDisplayItems(instructorSchedule?.[dateKey]);
+	      const instructorCells = finalInstructorNames.map(name => {
+	        const eventItems = eventCellMap?.[dateKey]?.[name] || [];
         if (eventItems.length > 0) {
           const hasCancelled = eventItems.some(item => item.style === 'cancelled');
           const hasPrimary = eventItems.some(item => item.style === 'event');
@@ -5082,13 +5208,20 @@ const CalendarExportModal = ({
             style: hasCancelled ? 'cancelled' : hasPrimary ? 'event' : hasOuting ? 'outing' : 'follow'
           };
         }
-        if (companyRestSet.has(dateKey) || restSet.has(name)) {
-          return {
-            value: '休',
-            style: 'rest'
-          };
-        }
-        return {
+	        if (companyRestSet.has(dateKey)) {
+	          return {
+	            value: '休',
+	            style: 'rest'
+	          };
+	        }
+	        const instructorRestItems = restItems.filter(item => item.name === name);
+	        if (instructorRestItems.length > 0) {
+	          return {
+	            value: instructorRestItems.map(item => item.slot === 'all' ? '休' : `${item.label}休`).join('\n'),
+	            style: 'rest'
+	          };
+	        }
+	        return {
           value: '',
           style: 'blank',
           isBlank: true
@@ -5314,9 +5447,10 @@ const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, on
     id: null,
     name: "",
     eventName: "",
-    instructor: "",
-    time: "",
-    duration: 1,
+	    instructor: "",
+	    time: "",
+	    timeSlot: "",
+	    duration: 1,
     prepDays: 0,
     prepTime: "",
     link: "",
@@ -5338,9 +5472,10 @@ const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, on
   const [formData, setFormData] = useState({
     dates: initialDate ? [initialDate] : [],
     eventName: "",
-    instructors: normalizedInitialInstructors,
-    time: "",
-    duration: 1,
+	    instructors: normalizedInitialInstructors,
+	    time: "",
+	    timeSlot: "",
+	    duration: 1,
     prepDays: 0,
     prepTime: "",
     link: "",
@@ -5375,14 +5510,14 @@ const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, on
   }, { all: normalizedTemplates.length }), [normalizedTemplates]);
   const [newTemplateData, setNewTemplateData] = useState(createEmptyTemplateData);
   const [newRule, setNewRule] = useState({ min: 0, max: 10, label: "", color: "blue" });
-  const unavailableInstructors = useMemo(() => {
-    const unavailable = /* @__PURE__ */ new Set();
-    formData.dates.forEach((date) => {
-      const resting = instructorSchedule[date] || [];
-      resting.forEach((name) => unavailable.add(name));
-    });
-    return unavailable;
-  }, [formData.dates, instructorSchedule]);
+	  const unavailableInstructors = useMemo(() => {
+	    const unavailable = /* @__PURE__ */ new Set();
+	    const selectedTimeSlot = normalizeScheduleTimeSlot(formData.timeSlot, inferScheduleTimeSlot(formData.time));
+	    formData.dates.forEach((date) => {
+	      getScheduleRestNamesForSlot(instructorSchedule[date], selectedTimeSlot).forEach((name) => unavailable.add(name));
+	    });
+	    return unavailable;
+	  }, [formData.dates, formData.time, formData.timeSlot, instructorSchedule]);
   const normalizedFormEventName = useMemo(
     () => String(formData.eventName || "").trim().replace(/\s+/g, ""),
     [formData.eventName]
@@ -5442,10 +5577,11 @@ const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, on
       const nextInstructors = prev.instructors.length > 0 ? prev.instructors : tplInstructors;
       return {
         ...prev,
-        eventName: templateEventName,
-        instructors: nextInstructors,
-        time: tpl.time || "",
-        duration: parseInt(tpl.duration, 10) || 1,
+	        eventName: templateEventName,
+	        instructors: nextInstructors,
+	        time: tpl.time || "",
+	        timeSlot: normalizeScheduleTimeSlot(tpl.timeSlot, inferScheduleTimeSlot(tpl.time)),
+	        duration: parseInt(tpl.duration, 10) || 1,
         prepDays: parseInt(tpl.prepDays, 10) || 0,
         prepTime: tpl.prepTime || "",
         link: tpl.link || "",
@@ -5484,10 +5620,11 @@ const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, on
     setNewTemplateData({
       id: tpl.id,
       name: tpl.name,
-      eventName: templateEventName,
-      instructor: tpl.instructor,
-      time: tpl.time || "",
-      duration: parseInt(tpl.duration, 10) || 1,
+	      eventName: templateEventName,
+	      instructor: tpl.instructor,
+	      time: tpl.time || "",
+	      timeSlot: normalizeScheduleTimeSlot(tpl.timeSlot, inferScheduleTimeSlot(tpl.time)),
+	      duration: parseInt(tpl.duration, 10) || 1,
       prepDays: parseInt(tpl.prepDays, 10) || 0,
       prepTime: tpl.prepTime || "",
       link: tpl.link || "",
@@ -5524,12 +5661,13 @@ const CreateEventModal = ({ onClose, onSave, customTemplates, onSaveTemplate, on
     let newDates = formData.dates.includes(dateStr) ? formData.dates.filter((d) => d !== dateStr) : [...formData.dates, dateStr].sort();
     setFormData({ ...formData, dates: newDates });
   };
-  const addInstructor = (name) => {
-    const clean = name.trim();
-    const isResting = formData.dates.some((d) => instructorSchedule[d] && instructorSchedule[d].includes(clean));
-    if (isResting) {
-      if (!confirm(`${clean} \u5728\u90E8\u5206\u9078\u5B9A\u7684\u65E5\u671F\u5DF2\u6392\u4F11\uFF0C\u78BA\u5B9A\u8981\u6392\u5165\u55CE\uFF1F`)) return;
-    }
+	  const addInstructor = (name) => {
+	    const clean = name.trim();
+	    const selectedTimeSlot = normalizeScheduleTimeSlot(formData.timeSlot, inferScheduleTimeSlot(formData.time));
+	    const isResting = formData.dates.some((d) => isInstructorRestingForSlot(instructorSchedule, d, clean, selectedTimeSlot));
+	    if (isResting) {
+	      if (!confirm(`${clean} \u5728\u90E8\u5206\u9078\u5B9A\u7684\u65E5\u671F\u5DF2\u6392 ${getScheduleSlotLabel(selectedTimeSlot)} \u4F11\uFF0C\u78BA\u5B9A\u8981\u6392\u5165\u55CE\uFF1F`)) return;
+	    }
     if (clean && !formData.instructors.includes(clean)) setFormData({ ...formData, instructors: [...formData.instructors, clean] });
     setTempInstructor("");
   };
@@ -9668,93 +9806,6 @@ const ProjectDetailModal = ({
     }
   })));
 };
-const useVisitorTracker = (db, dbSource, viewMode) => {
-  useEffect(() => {
-    if (!ANALYTICS_WRITE_ENABLED || viewMode === 'admin' || !db) return;
-    const sessionId = `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const todayStr = getLocalDateStr();
-    const startTime = Date.now();
-    let lastClickText = '進入網站';
-    const initSession = async () => {
-      const batch = writeBatch(db);
-      const basePath = `artifacts/${dbSource}/analytics`;
-      const sessionRef = doc(db, basePath, 'traffic', 'sessions', sessionId);
-      if (!sessionRef) return;
-      batch.set(sessionRef, {
-        startTime: new Date().toISOString(),
-        date: todayStr,
-        userAgent: navigator.userAgent,
-        device: /Mobi|Android/i.test(navigator.userAgent) ? 'Mobile' : 'Desktop',
-        lastActive: new Date().toISOString(),
-        durationSeconds: 0,
-        lastAction: '進入網站',
-        page: '首頁'
-      });
-      const totalRef = doc(db, basePath, 'stats', 'overview', 'total');
-      batch.set(totalRef, {
-        count: firebase.firestore.FieldValue.increment(1)
-      }, {
-        merge: true
-      });
-      const dailyRef = doc(db, basePath, 'stats', 'daily', todayStr);
-      batch.set(dailyRef, {
-        count: firebase.firestore.FieldValue.increment(1)
-      }, {
-        merge: true
-      });
-      try {
-        await batch.commit();
-      } catch (e) {
-        console.warn(e);
-      }
-    };
-    const startSessionWhenIdle = () => {
-      initSession();
-    };
-    const idleHandle = typeof window.requestIdleCallback === 'function' ? window.requestIdleCallback(startSessionWhenIdle, {
-      timeout: 2500
-    }) : window.setTimeout(startSessionWhenIdle, 1200);
-    const handleInteraction = e => {
-      if (e.type === 'click' && e.target) {
-        const eventTarget = e.target.closest('[data-analytics-event]');
-        if (eventTarget) {
-          lastClickText = `查看: ${eventTarget.getAttribute('data-analytics-event')}`;
-        } else {
-          const text = e.target.innerText || e.target.tagName;
-          lastClickText = text.substring(0, 20);
-        }
-      }
-    };
-    const flushSession = () => {
-      const duration = Math.floor((Date.now() - startTime) / 1000);
-      const sessionRef = doc(db, `artifacts/${dbSource}/analytics`, 'traffic', 'sessions', sessionId);
-      if (sessionRef) {
-        updateDoc(sessionRef, {
-          lastActive: new Date().toISOString(),
-          durationSeconds: duration,
-          lastAction: lastClickText
-        }).catch(() => {});
-      }
-    };
-    const handleVisibility = () => {
-      if (document.visibilityState === 'hidden') flushSession();
-    };
-    window.addEventListener('click', handleInteraction);
-    document.addEventListener('visibilitychange', handleVisibility);
-    window.addEventListener('beforeunload', flushSession);
-    return () => {
-      window.removeEventListener('click', handleInteraction);
-      document.removeEventListener('visibilitychange', handleVisibility);
-      window.removeEventListener('beforeunload', flushSession);
-      if (typeof window.cancelIdleCallback === 'function' && typeof idleHandle === 'number') {
-        window.cancelIdleCallback(idleHandle);
-      } else {
-        clearTimeout(idleHandle);
-      }
-      flushSession();
-    };
-  }, [db, dbSource, viewMode]);
-};
 const AnalyticsDashboard = ({
   db,
   dbSource
@@ -10687,6 +10738,7 @@ const MainApp = () => {
   const [globalRules, setGlobalRules] = useState(null);
   const [showGlobalRules, setShowGlobalRules] = useState(false);
   const [selectedPublicDate, setSelectedPublicDate] = useState(getLocalDateStr);
+  const [publicDaySheetOpen, setPublicDaySheetOpen] = useState(false);
   const lastLocalTodayRef = useRef(getLocalDateStr());
   const [editingProject, setEditingProject] = useState(null);
   const [tagDefinitions, setTagDefinitions] = useState(DEFAULT_TAG_DEFS);
@@ -10806,7 +10858,6 @@ const MainApp = () => {
   const [marqueeIconSize, setMarqueeIconSize] = useState(24);
   const [marqueeSpeed, setMarqueeSpeed] = useState(20);
   const [marqueeIcon, setMarqueeIcon] = useState('');
-  const [dailyStats, setDailyStats] = useState({});
   const [mascotConfig, setMascotConfig] = useState([]);
   const [showMascotSettings, setShowMascotSettings] = useState(false);
   const [outingPosterConfig, setOutingPosterConfig] = useState(DEFAULT_OUTING_POSTER_CONFIG);
@@ -10821,7 +10872,6 @@ const MainApp = () => {
   const [publicDateEntryNonce, setPublicDateEntryNonce] = useState(0);
   const shouldBootstrapAuth = showLoginModal || viewMode === 'admin';
   const canLoadAdminData = !!user && (!shouldBootstrapAuth || authReady);
-  useVisitorTracker(db, dbSource, viewMode);
   const handleDbSourceChange = newSource => {
     setDbSource(newSource);
     localStorage.setItem('crm_db_source', newSource);
@@ -11084,7 +11134,6 @@ const MainApp = () => {
   const shouldLoadMonthlyPlans = viewMode === 'admin' && activeTab === 'planning';
   const shouldLoadProjects = viewMode === 'admin' && activeTab === 'projects';
   const shouldLoadPromises = viewMode === 'admin' && activeTab === 'promises';
-  const shouldLoadDailyStats = viewMode === 'public' || viewMode === 'admin' && activeTab === 'analytics';
   useEffect(() => {
     if (!user) return undefined;
     setLoading(true);
@@ -11367,18 +11416,6 @@ const MainApp = () => {
       setPromises(nextPromises.sort((a, b) => new Date(a.date + 'T' + a.time) - new Date(b.date + 'T' + b.time)));
     });
   }, [canLoadAdminData, db, dbSource, shouldLoadPromises]);
-  useEffect(() => {
-    if (!user && viewMode === 'public' || viewMode === 'admin' && !canLoadAdminData || !shouldLoadDailyStats) return undefined;
-    if (!db) {
-      setDailyStats({});
-      return undefined;
-    }
-    const todayStr = getLocalDateStr();
-    const analyticsRef = doc(db, `artifacts/${dbSource}/analytics`, 'stats', 'daily', todayStr);
-    return onSnapshot(analyticsRef, s => {
-      if (s && s.exists()) setDailyStats(sanitizeFirebaseValue(s.data() || {}));else setDailyStats({});
-    });
-  }, [user, db, dbSource, shouldLoadDailyStats, viewMode, canLoadAdminData]);
   const validAdminPasswords = useMemo(() => Array.from(new Set([String(adminPassword || '').trim(), ...authAccounts.map(account => String(account.password || '').trim())].filter(Boolean))), [adminPassword, authAccounts]);
   const handleVerifyLogin = (inputPwd, callback) => {
     const cleanInput = String(inputPwd || '').trim();
@@ -11547,22 +11584,16 @@ const MainApp = () => {
       setPosterGenerating(false);
     }
   };
-  const handleToggleInstructorRest = async (date, name) => {
-    if (!user || !db) return;
-    const currentResting = instructorSchedule[date] || [];
-    let newResting;
-    if (currentResting.includes(name)) {
-      newResting = currentResting.filter(n => n !== name);
-    } else {
-      newResting = [...currentResting, name];
-    }
-    const newSchedule = {
-      ...instructorSchedule
-    };
-    if (newResting.length > 0) {
-      newSchedule[date] = newResting;
-    } else {
-      newSchedule[date] = [];
+	  const handleToggleInstructorRest = async (date, name, slot = 'all') => {
+	    if (!user || !db) return;
+	    const newResting = toggleScheduleRestEntry(instructorSchedule[date], name, slot);
+	    const newSchedule = {
+	      ...instructorSchedule
+	    };
+	    if (getAllScheduleRestNames(newResting).length > 0) {
+	      newSchedule[date] = newResting;
+	    } else {
+	      newSchedule[date] = [];
     }
     await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'schedule'), {
       resting: newSchedule
@@ -12414,10 +12445,11 @@ const MainApp = () => {
   };
   const handleCreateEvent = async ({
     dates,
-    eventName,
-    instructors,
-    time,
-    duration,
+	    eventName,
+	    instructors,
+	    time,
+	    timeSlot,
+	    duration,
     prepDays,
     prepTime,
     link,
@@ -12459,11 +12491,12 @@ const MainApp = () => {
     const nextConfigs = {
       ...eventConfigs
     };
-    cleanDates.forEach(d => {
-      const key = `${d}_${eventName}_${instr}`.replace(/[\/\\#\?]/g, '-');
-      nextConfigs[key] = {
-        time: time || '',
-        duration: parseInt(duration, 10) || 1,
+	    cleanDates.forEach(d => {
+	      const key = `${d}_${eventName}_${instr}`.replace(/[\/\\#\?]/g, '-');
+	      nextConfigs[key] = {
+	        time: time || '',
+	        timeSlot: normalizeScheduleTimeSlot(timeSlot, inferScheduleTimeSlot(time)),
+	        duration: parseInt(duration, 10) || 1,
         prepDays: parseInt(prepDays, 10) || 0,
         prepTime: prepTime || '',
         link: link || '',
@@ -12767,42 +12800,6 @@ const MainApp = () => {
     }, {
       merge: true
     });
-  };
-  const handleInitializeAnalytics = async () => {
-    if (!db || !user) return alert("資料庫未連線");
-    if (!confirm("確定要初始化流量統計資料庫嗎？")) return;
-    try {
-      const batch = writeBatch(db);
-      const basePath = `artifacts/${dbSource}/analytics`;
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const totalRef = doc(db, basePath, 'stats', 'overview', 'total');
-      batch.set(totalRef, {
-        count: 0
-      }, {
-        merge: true
-      });
-      const dailyRef = doc(db, basePath, 'stats', 'daily', todayStr);
-      batch.set(dailyRef, {
-        count: 0
-      }, {
-        merge: true
-      });
-      const testSessionRef = doc(db, basePath, 'traffic', 'sessions', `init_${Date.now()}`);
-      batch.set(testSessionRef, {
-        startTime: new Date().toISOString(),
-        date: todayStr,
-        device: 'System',
-        lastAction: '系統初始化建立',
-        durationSeconds: 1,
-        userAgent: 'System Admin Tool',
-        lastActive: new Date().toISOString()
-      });
-      await batch.commit();
-      alert("✅ 初始化成功！請切換至「流量分析」頁籤查看。");
-    } catch (e) {
-      console.error(e);
-      alert("❌ 初始化失敗，請檢查 Console 錯誤訊息");
-    }
   };
   const stats = useMemo(() => {
     const totalRev = parsedData.reduce((a, c) => a + c.price, 0);
@@ -13272,7 +13269,10 @@ const MainApp = () => {
       if (!match) return '';
       return `${match[1]}-${String(parseInt(match[2], 10)).padStart(2, '0')}-${String(parseInt(match[3], 10)).padStart(2, '0')}`;
     };
-    const normalizeNameList = list => Array.isArray(list) ? list.map(item => normalizeName(item)).filter(name => name && name !== '未定') : [];
+	    const normalizeNameList = list => {
+	      const source = Array.isArray(list) ? list : getAllScheduleRestNames(list);
+	      return source.map(item => normalizeName(item)).filter(name => name && name !== '未定');
+	    };
     const parseInstructorNames = value => String(value || '').split(/[&,、，]/).map(part => normalizeName(part)).filter(name => name && name !== '未定');
     const shiftDate = (dateKey, offset) => {
       const [y, m, d] = String(dateKey || '').split('-').map(Number);
@@ -13895,10 +13895,12 @@ const MainApp = () => {
       const mainDate = parseLocalDateKey(evt.date);
       if (isNaN(mainDate.getTime())) return;
       const cfg = eventConfigs[evt.key] || {};
-      const duration = parseInt(cfg.duration) || 1;
-      const prepDays = parseInt(cfg.prepDays) || 0;
-      const prepTime = cfg.prepTime || '09:00';
-      const mainTime = cfg.time || '23:59';
+	      const duration = parseInt(cfg.duration) || 1;
+	      const prepDays = parseInt(cfg.prepDays) || 0;
+	      const prepTime = cfg.prepTime || '09:00';
+	      const mainTime = cfg.time || '23:59';
+	      const prepTimeSlot = normalizeScheduleTimeSlot(cfg.prepTimeSlot, inferScheduleTimeSlot(prepTime));
+	      const mainTimeSlot = normalizeScheduleTimeSlot(cfg.timeSlot, inferScheduleTimeSlot(mainTime));
       for (let i = prepDays; i > 0; i--) {
         const d = new Date(mainDate);
         d.setDate(d.getDate() - i);
@@ -13906,10 +13908,11 @@ const MainApp = () => {
         if (!map[dateStr]) map[dateStr] = [];
         map[dateStr].push({
           type: 'prep',
-          evt,
-          cfg,
-          displayTime: prepTime,
-          label: `⚠️ 前置: ${evt.eventName}`
+	          evt,
+	          cfg,
+	          displayTime: prepTime,
+	          timeSlot: prepTimeSlot,
+	          label: `⚠️ 前置: ${evt.eventName}`
         });
       }
       for (let i = 0; i < duration; i++) {
@@ -13920,17 +13923,19 @@ const MainApp = () => {
         if (i === 0) {
           map[dateStr].push({
             type: 'main',
-            evt,
-            cfg,
-            displayTime: mainTime
+	            evt,
+	            cfg,
+	            displayTime: mainTime,
+	            timeSlot: mainTimeSlot
           });
         } else {
           map[dateStr].push({
             type: 'cont',
-            evt,
-            cfg,
-            displayTime: '00:00',
-            label: `↳ D${i + 1}: ${evt.eventName}`
+	            evt,
+	            cfg,
+	            displayTime: '00:00',
+	            timeSlot: mainTimeSlot,
+	            label: `↳ D${i + 1}: ${evt.eventName}`
           });
         }
       }
@@ -14109,6 +14114,89 @@ const MainApp = () => {
     }, {});
     const appliedTheme = normalizePublicTheme(publicTheme);
     const appliedSideDecor = normalizePublicSideDecor(publicSideDecor);
+    const selectedPublicDaySheetContent = companyRestDates.includes(selectedPublicDate) ? React.createElement("div", {
+      className: "rounded-3xl border border-red-100 bg-red-50 p-6 text-center"
+    }, React.createElement("div", {
+      className: "text-3xl mb-2"
+    }, "\uD83D\uDE34"), React.createElement("div", {
+      className: "font-bold text-red-400"
+    }, "\u672C\u65E5\u5168\u516C\u53F8\u516C\u4F11"), React.createElement("div", {
+      className: "text-sm text-red-300 mt-1"
+    }, "\u6211\u5011\u4F11\u606F\u5145\u96FB\u4E2D\uFF0C\u8ACB\u6539\u671F\u518D\u4F86\u5594\uFF01")) : isSelectedOutingDay ? React.createElement("div", {
+      className: "rounded-3xl border border-amber-200 bg-amber-50 p-6 text-center"
+    }, selectedOutingPoster?.filename && React.createElement("img", {
+      src: selectedOutingPoster.filename,
+      alt: "outing-poster",
+      className: "max-h-40 mx-auto mb-4 rounded-2xl border border-amber-200 bg-transparent object-contain"
+    }), React.createElement("div", {
+      className: "text-3xl mb-2"
+    }, "\uD83D\uDCF7"), React.createElement("div", {
+      className: "font-bold text-amber-700"
+    }, "\u51FA\u5916\u53D6\u6750\u4E2D"), React.createElement("div", {
+      className: "text-sm text-amber-500 mt-1"
+    }, "\u4ECA\u65E5\u66AB\u505C\u524D\u53F0\u6D3B\u52D5\u5C55\u793A\u3002")) : selectedDayItems.length > 0 ? selectedDayItems.map(item => {
+      const e = item.evt;
+      const cfg = eventConfigs[e.key] || {};
+      const status = getEventStatus(e.count, cfg.capacity, cfg, e.date, globalRules);
+      const displayName = toSafeDisplayText(cfg.displayName, toSafeDisplayText(e.eventName, '未命名活動'));
+      const tags = cfg.tags || {};
+      const safeTags = [tags.levels, tags.types, tags.locations].map(tag => toSafeDisplayText(tag, '').trim()).filter(Boolean);
+      const isPrivateGroupEvent = !!cfg.isPrivateGroupEvent || safeTags.includes('包團') || displayName.includes('包團') || e.eventName === '包團';
+      const privateGroupLabel = toSafeDisplayText(cfg.privateGroupLabel, '此為包團活動') || '此為包團活動';
+      const itemType = item.type;
+      const itemLabel = toSafeDisplayText(item.label, '');
+      const statusBadgeClass = status.isFull ? "bg-slate-600 text-white" : `${status.colorObj?.bg || 'bg-blue-50'} ${status.colorObj?.text || 'text-blue-600'}`;
+      return React.createElement("div", {
+        key: `mobile_sheet_${itemType}_${e.key}`,
+        className: "rounded-2xl border border-slate-100 bg-slate-50 p-4 shadow-sm"
+      }, React.createElement("div", {
+        className: "flex items-start justify-between gap-3"
+      }, React.createElement("div", {
+        className: "min-w-0"
+      }, itemType === 'prep' && React.createElement("span", {
+        className: "mb-1 inline-block rounded bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-700"
+      }, "\u26A0\uFE0F \u524D\u7F6E\u6E96\u5099"), itemType === 'cont' && itemLabel && React.createElement("span", {
+        className: "mb-1 inline-block rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600"
+      }, itemLabel.split(':')[0]), React.createElement("div", {
+        className: "text-base font-black text-slate-800 leading-snug"
+      }, displayName)), React.createElement("span", {
+        className: `shrink-0 rounded-lg px-2 py-1 text-[11px] font-bold ${isPrivateGroupEvent ? 'bg-amber-50 text-amber-700 border border-amber-200' : statusBadgeClass}`
+      }, isPrivateGroupEvent ? privateGroupLabel : toSafeDisplayText(status.label, '報名中'))), safeTags.length > 0 && React.createElement("div", {
+        className: "mt-3 flex flex-wrap gap-1.5"
+      }, safeTags.map(tag => React.createElement("span", {
+        key: `${e.key}_${tag}`,
+        className: "rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-500 border border-slate-200"
+      }, tag))), React.createElement("div", {
+        className: "mt-3 space-y-1.5 text-sm text-slate-600"
+      }, React.createElement("div", {
+        className: "flex items-center gap-2"
+      }, React.createElement(Icon, {
+        name: "user",
+        size: 15,
+        className: "text-slate-400"
+      }), "\u8B1B\u5E2B\uFF1A", toSafeDisplayText(e.instructor, '未定')), toSafeDisplayText(cfg.time, '') && React.createElement("div", {
+        className: "flex items-center gap-2"
+      }, React.createElement(Icon, {
+        name: "clock",
+        size: 15,
+        className: "text-slate-400"
+      }), "\u6642\u9593\uFF1A", toSafeDisplayText(cfg.time, ''))), cfg.link && React.createElement("button", {
+        disabled: status.isFull,
+        onClick: evt => {
+          evt.stopPropagation();
+          if (!status.isFull) window.open(cfg.link, '_blank');
+        },
+        className: `mt-4 w-full rounded-xl px-4 py-3 text-sm font-black shadow-sm transition-all ${status.isFull ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-blue-600 text-white active:scale-[0.98]'}`
+      }, status.isEnded ? '活動已結束' : status.isFull ? '名額已滿' : '前往報名'));
+    }) : React.createElement("div", {
+      className: "rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center"
+    }, React.createElement("div", {
+      className: "text-3xl mb-2"
+    }, "\uD83D\uDCC5"), React.createElement("div", {
+      className: "font-bold text-slate-400"
+    }, hasActiveFilters ? '此篩選條件下無活動' : '本日無活動'), React.createElement("div", {
+      className: "text-sm text-slate-300 mt-1"
+    }, "\u8ACB\u9EDE\u9078\u5176\u4ED6\u6709\u85CD\u9EDE\u7684\u65E5\u671F"));
     return React.createElement("div", {
       className: "min-h-screen pb-20 relative",
       style: {
@@ -14444,6 +14532,7 @@ const MainApp = () => {
           if (!isRestDay) {
             setSelectedPublicDate(dateStr);
             setPublicDateEntryNonce(n => n + 1);
+            setPublicDaySheetOpen(true);
           }
         },
         className: cellClass,
@@ -14534,10 +14623,6 @@ const MainApp = () => {
       const cfg = eventConfigs[e.key] || {};
       const status = getEventStatus(e.count, cfg.capacity, cfg, e.date, globalRules);
       const displayName = toSafeDisplayText(cfg.displayName, toSafeDisplayText(e.eventName, '未命名活動'));
-      const dayIndex = new Date(e.date).getDay();
-      const weekDays = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
-      const weekDayStr = weekDays[dayIndex] || '';
-      const analyticsLabel = `${e.date} (${weekDayStr}) ${displayName}`;
       let cardClass = 'bg-white border-slate-100 shadow-sm hover:shadow-md border-l-4';
       const borderColor = status.colorObj && status.colorObj.border ? status.colorObj.border.replace('border-', 'border-l-') : 'border-l-blue-500';
       if (status.isFull) cardClass = 'bg-slate-50 border-slate-200 border-l-slate-400';else cardClass = `bg-white border-slate-100 shadow-sm hover:shadow-md border-l-4 ${borderColor.replace('border-l-100', 'border-l-500')}`;
@@ -14554,11 +14639,10 @@ const MainApp = () => {
       const carpoolCount = Array.isArray(e.customers) ? e.customers.filter(customer => customer && customer.transport === '共乘').length : 0;
       const remainingCarpoolSeats = Math.max(DEFAULT_CARPOOL_CAPACITY - carpoolCount, 0);
       const carpoolHint = carpoolDisplayMode === 'none' ? '本活動無共乘' : remainingCarpoolSeats > 0 ? `付費共乘剩餘 ${remainingCarpoolSeats} 位` : '付費共乘基本已滿，可洽詢粉專客服';
-      return (React.createElement("div", {
-          key: e.key,
-          "data-analytics-event": analyticsLabel,
-          className: `p-5 rounded-2xl border transition-all group relative ${cardClass}`
-        }, React.createElement("div", {
+	      return (React.createElement("div", {
+	          key: e.key,
+	          className: `p-5 rounded-2xl border transition-all group relative ${cardClass}`
+	        }, React.createElement("div", {
           className: "flex justify-between items-start mb-3"
         }, React.createElement("div", {
           className: "font-bold text-lg text-slate-800"
@@ -14610,13 +14694,12 @@ const MainApp = () => {
         }, status.isEnded ? '活動已結束' : status.isFull ? '名額已滿' : '前往報名', !status.isFull && React.createElement(Icon, {
           name: "arrow-right",
           size: 16
-        })), React.createElement(EventMascot, {
-          eventName: displayName,
-          db: db,
-          dbSource: dbSource,
-          dailyStats: dailyStats,
-          config: mascotConfig
-        })))
+	        })), React.createElement(EventMascot, {
+	          eventName: displayName,
+	          db: db,
+	          dbSource: dbSource,
+	          config: mascotConfig
+	        })))
       );
     }) : React.createElement("div", {
       className: "text-center py-12 bg-slate-50 rounded-3xl border border-dashed border-slate-200"
@@ -14626,7 +14709,44 @@ const MainApp = () => {
       className: "text-slate-400 font-medium"
     }, hasActiveFilters ? '此篩選條件下無活動' : '本日無活動'), React.createElement("div", {
       className: "text-slate-300 text-sm mt-1"
-    }, "\u8ACB\u9EDE\u9078\u5176\u4ED6\u6709\u85CD\u9EDE\u7684\u65E5\u671F"))))), showLoginModal && React.createElement(LoginModal, {
+    }, "\u8ACB\u9EDE\u9078\u5176\u4ED6\u6709\u85CD\u9EDE\u7684\u65E5\u671F"))))), publicDaySheetOpen && React.createElement("div", {
+      className: "fixed inset-0 z-[90] sm:hidden",
+      role: "dialog",
+      "aria-modal": "true",
+      onClick: () => setPublicDaySheetOpen(false)
+    }, React.createElement("div", {
+      className: "absolute inset-0 bg-slate-900/35 backdrop-blur-[1px]"
+    }), React.createElement("div", {
+      className: "absolute inset-x-0 bottom-0 max-h-[82vh] overflow-y-auto rounded-t-[2rem] border border-slate-100 bg-white p-4 shadow-[0_-18px_45px_rgba(15,23,42,0.18)]",
+      onClick: e => e.stopPropagation()
+    }, React.createElement("button", {
+      type: "button",
+      onClick: () => setPublicDaySheetOpen(false),
+      className: "mx-auto mb-3 block h-1.5 w-12 rounded-full bg-slate-300",
+      "aria-label": "\u6536\u8D77\u6D3B\u52D5\u5217\u8868"
+    }), React.createElement("div", {
+      className: "mb-4 flex items-start justify-between gap-3"
+    }, React.createElement("div", null, React.createElement("div", {
+      className: "text-xs font-bold text-slate-400"
+    }, "\u5DF2\u9078\u65E5\u671F"), React.createElement("div", {
+      className: "text-xl font-black text-slate-900"
+    }, selectedPublicDate), React.createElement("div", {
+      className: "mt-1 text-sm font-bold text-slate-400"
+    }, selectedDayItems.length > 0 ? `${selectedDayItems.length} \u500B\u6D3B\u52D5` : companyRestDates.includes(selectedPublicDate) ? '\u516C\u4F11' : isSelectedOutingDay ? '\u5916\u51FA\u53D6\u6750' : '\u672C\u65E5\u7121\u6D3B\u52D5')), React.createElement("button", {
+      type: "button",
+      onClick: () => setPublicDaySheetOpen(false),
+      className: "rounded-full bg-slate-100 p-2 text-slate-500 active:scale-95",
+      "aria-label": "\u95DC\u9589"
+    }, React.createElement(Icon, {
+      name: "x",
+      size: 18
+    }))), React.createElement("div", {
+      className: "space-y-3 pb-3"
+    }, selectedPublicDaySheetContent), React.createElement("button", {
+      type: "button",
+      onClick: () => setPublicDaySheetOpen(false),
+      className: "sticky bottom-0 mt-2 w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-black text-white shadow-lg active:scale-[0.99]"
+    }, "\u6536\u8D77\uFF0C\u7E7C\u7E8C\u770B\u5176\u4ED6\u65E5\u671F"))), showLoginModal && React.createElement(LoginModal, {
       onClose: () => setShowLoginModal(false),
       onLogin: handleVerifyLogin
     }));
@@ -14699,14 +14819,7 @@ const MainApp = () => {
     activeTab: activeTab,
     setActiveTab: setActiveTab,
     onClick: () => setMobileMenuOpen(false)
-  }), " ", React.createElement(NavItem, {
-    id: "analytics",
-    icon: "activity",
-    label: "\u6D41\u91CF\u5206\u6790",
-    activeTab: activeTab,
-    setActiveTab: setActiveTab,
-    onClick: () => setMobileMenuOpen(false)
-  }), " ", React.createElement("div", {
+	  }), " ", React.createElement("div", {
     className: "border-t border-slate-100 my-2 pt-2"
   }, " ", React.createElement(NavItem, {
     id: "events",
@@ -14799,14 +14912,7 @@ const MainApp = () => {
     activeTab: activeTab,
     setActiveTab: setActiveTab,
     collapsed: sidebarCollapsed
-  }), " ", React.createElement(NavItem, {
-    id: "analytics",
-    icon: "activity",
-    label: "\u6D41\u91CF\u5206\u6790",
-    activeTab: activeTab,
-    setActiveTab: setActiveTab,
-    collapsed: sidebarCollapsed
-  }), " "), " ", React.createElement("div", {
+	  }), " "), " ", React.createElement("div", {
     className: "pt-4 border-t border-slate-100 space-y-2"
   }, " ", React.createElement(NavItem, {
     id: "events",
@@ -15175,10 +15281,11 @@ const MainApp = () => {
     const dateStr = day ? `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` : '';
     const dayItems = day ? calendarOccupancy[dateStr] || [] : [];
     const isCompanyRestDay = day ? companyRestDates.includes(dateStr) : false;
-    const isTodayCell = day ? dateStr === getLocalDateStr() : false;
-    const isInternalDay = day ? !!(internalDays[dateStr] && internalDays[dateStr].enabled) : false;
-    const internalLabel = day ? toSafeDisplayText(internalDays[dateStr]?.label, '').trim() : '';
-    return React.createElement("div", {
+	    const isTodayCell = day ? dateStr === getLocalDateStr() : false;
+	    const isInternalDay = day ? !!(internalDays[dateStr] && internalDays[dateStr].enabled) : false;
+	    const internalLabel = day ? toSafeDisplayText(internalDays[dateStr]?.label, '').trim() : '';
+	    const restDisplayItems = day ? getScheduleRestDisplayItems(instructorSchedule[dateStr]) : [];
+	    return React.createElement("div", {
       key: i,
       onClick: () => {
         if (day && !isCompanyRestDay) {
@@ -15209,18 +15316,20 @@ const MainApp = () => {
     }, dayItems.map((item, idx) => {
       const {
         type,
-        evt,
-        cfg,
-        label,
-        displayTime
-      } = item;
+	        evt,
+	        cfg,
+	        label,
+	        displayTime,
+	        timeSlot
+	      } = item;
       const isMain = type === 'main';
       const isPrep = type === 'prep';
       const isCancelled = !!cfg.isCancelled;
       const safeEventName = toSafeDisplayText(evt?.eventName, '未命名活動');
       const safeInstructor = toSafeDisplayText(evt?.instructor, '?');
-      const safeLabel = toSafeDisplayText(label, '');
-      const safeDisplayTime = toSafeDisplayText(displayTime, '');
+	      const safeLabel = toSafeDisplayText(label, '');
+	      const safeDisplayTime = toSafeDisplayText(displayTime, '');
+	      const safeTimeSlotLabel = getScheduleSlotLabel(timeSlot || inferScheduleTimeSlot(displayTime));
       const carpoolCount = Array.isArray(evt?.customers) ? evt.customers.filter(customer => customer && customer.transport === '共乘').length : 0;
       const totalPeople = Number.isFinite(Number(evt?.count)) ? Number(evt.count) : Array.isArray(evt?.customers) ? evt.customers.length : 0;
       let cardClass = 'mb-1 p-1 px-1.5 rounded-md border cursor-pointer transition-all group hover:shadow-md text-[10px] relative overflow-hidden ';
@@ -15268,7 +15377,7 @@ const MainApp = () => {
         className: "flex flex-col leading-none py-0.5"
       }, React.createElement("div", {
         className: "flex justify-between items-center opacity-70 text-[8px] mb-0.5 font-mono"
-      }, React.createElement("span", null, safeDisplayTime), React.createElement("span", {
+	      }, React.createElement("span", null, safeTimeSlotLabel, " ", safeDisplayTime), React.createElement("span", {
         className: "font-bold"
       }, carpoolCount, " / ", totalPeople, "\u4EBA")), React.createElement("div", {
         className: "truncate font-bold text-[10px] mb-0.5"
@@ -15278,7 +15387,7 @@ const MainApp = () => {
         className: "flex flex-col leading-none py-0.5"
       }, React.createElement("div", {
         className: "flex items-center gap-1 opacity-70 text-[8px] mb-0.5 font-mono"
-      }, React.createElement("span", null, safeDisplayTime), React.createElement(Icon, {
+	      }, React.createElement("span", null, safeTimeSlotLabel, " ", safeDisplayTime), React.createElement(Icon, {
         name: "alert-circle",
         size: 8
       }), React.createElement("span", null, "\u524D\u7F6E")), React.createElement("div", {
@@ -15288,15 +15397,16 @@ const MainApp = () => {
       }, "@", safeInstructor))) : React.createElement("div", {
         className: "flex items-center gap-1"
       }, safeLabel));
-    })), instructorSchedule[dateStr] && instructorSchedule[dateStr].length > 0 && !companyRestDates.includes(dateStr) && React.createElement("div", {
-      className: "text-[10px] text-red-400 flex flex-wrap gap-1 mt-1"
-    }, instructorSchedule[dateStr].map(name => {
-      const safeName = toSafeDisplayText(name, '').trim();
-      return safeName ? React.createElement("span", {
-        key: safeName,
-        className: "bg-red-50 px-1 rounded"
-      }, safeName, "\u4F11") : null;
-    })), outingDays[dateStr]?.enabled && !companyRestDates.includes(dateStr) && React.createElement("div", {
+	    })), restDisplayItems.length > 0 && !companyRestDates.includes(dateStr) && React.createElement("div", {
+	      className: "text-[10px] text-red-400 flex flex-wrap gap-1 mt-1"
+	    }, restDisplayItems.map(item => {
+	      const safeName = toSafeDisplayText(item.name, '').trim();
+	      const safeSlotLabel = item.slot === 'all' ? '' : toSafeDisplayText(item.label, '');
+	      return safeName ? React.createElement("span", {
+	        key: `${safeName}_${item.slot}`,
+	        className: "bg-red-50 px-1 rounded"
+	      }, safeName, safeSlotLabel, "\u4F11") : null;
+	    })), outingDays[dateStr]?.enabled && !companyRestDates.includes(dateStr) && React.createElement("div", {
       className: "absolute bottom-1 right-1 max-w-[90%] text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 leading-tight shadow-sm pointer-events-none"
     }, React.createElement("span", {
       className: "font-bold"
@@ -15586,10 +15696,7 @@ const MainApp = () => {
     className: "font-bold"
   }, "\u8ACB\u5F9E\u5DE6\u5074\u6392\u884C\u699C\u9078\u64C7\u4E00\u4F4D\u5BA2\u6236"), React.createElement("p", {
     className: "text-sm mt-1"
-  }, "\u6216\u4F7F\u7528\u4E0A\u65B9\u641C\u5C0B\u6B04\u67E5\u627E"))))), activeTab === 'analytics' && React.createElement(AnalyticsDashboard, {
-    db: db,
-    dbSource: dbSource
-  }), activeTab === 'import' && React.createElement("div", {
+	  }, "\u6216\u4F7F\u7528\u4E0A\u65B9\u641C\u5C0B\u6B04\u67E5\u627E"))))), activeTab === 'import' && React.createElement("div", {
     className: "fade-in max-w-6xl mx-auto space-y-8 pb-20"
   }, React.createElement("header", {
     className: "flex flex-col md:flex-row md:items-start justify-between gap-3"
@@ -15603,9 +15710,7 @@ const MainApp = () => {
     className: "text-slate-400 bg-slate-100 px-2 py-1 rounded"
   }, "\u4F86\u6E90: ", dbSource), React.createElement("div", {
     className: "text-slate-400 bg-slate-100 px-2 py-1 rounded"
-  }, "Build: ", APP_BUILD), React.createElement("div", {
-    className: `px-2 py-1 rounded ${ANALYTICS_WRITE_ENABLED ? 'text-emerald-700 bg-emerald-50' : 'text-amber-700 bg-amber-50'}`
-  }, "\u5206\u6790\u5BEB\u5165: ", ANALYTICS_WRITE_ENABLED ? '啟用' : '停用(配額保護)'), React.createElement("select", {
+	  }, "Build: ", APP_BUILD), React.createElement("select", {
     className: "text-xs p-1.5 border rounded",
     onChange: e => handleDbSourceChange(e.target.value),
     value: dbSource
@@ -15639,13 +15744,7 @@ const MainApp = () => {
   }, React.createElement(Icon, {
     name: "image",
     size: 14
-  }), " \u5916\u51FA\u5834\u520A\u8A2D\u5B9A"), React.createElement("button", {
-    onClick: handleInitializeAnalytics,
-    className: "bg-orange-500 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 hover:bg-orange-600 shadow-sm whitespace-nowrap"
-  }, React.createElement(Icon, {
-    name: "refresh-cw",
-    size: 14
-  }), " \u521D\u59CB\u5316\u6D41\u91CF\u6578\u64DA"), React.createElement("button", {
+	  }), " \u5916\u51FA\u5834\u520A\u8A2D\u5B9A"), React.createElement("button", {
     onClick: handleFirebaseHealthCheck,
     disabled: isHealthChecking,
     className: `text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow-sm whitespace-nowrap ${isHealthChecking ? 'bg-sky-400 cursor-not-allowed' : 'bg-sky-600 hover:bg-sky-700'}`
