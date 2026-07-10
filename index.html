@@ -117,12 +117,10 @@ table.cal{width:100%;border-collapse:collapse;table-layout:fixed}
 .day.sel{background:var(--moon)}
 .day.sel .n{color:var(--night);font-weight:700}
 /* ── 夜裡的小動物 ── */
-#decor{margin:6px 0 0 14px}
 #gresult{display:flex;align-items:center;gap:10px;background:rgba(255,201,77,.08);border:1px dashed rgba(255,201,77,.4);border-radius:12px;padding:8px 12px;margin-bottom:12px;font-size:13px;line-height:1.5}
 #gresult img{height:36px;width:36px;object-fit:contain;flex-shrink:0}
 #gresult b{color:var(--beam)}
 #gresult .gsil{flex-shrink:0;width:34px;height:34px;border-radius:50%;background:#000;box-shadow:0 0 10px rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;color:#3E4A40;font-weight:900;font-size:18px}
-@media(max-width:960px){#decor{display:none}}
 .loading img{height:64px;margin:0 auto 10px;display:block}
 /* ── 進站夜觀抽獎 ── */
 #gacha{position:fixed;inset:0;z-index:200;background:rgba(3,7,6,.82);backdrop-filter:blur(2.5px);-webkit-backdrop-filter:blur(2.5px);display:flex;align-items:center;justify-content:center;opacity:1;transition:opacity .4s ease}
@@ -268,7 +266,6 @@ a.charter.cday:hover .cgo{color:var(--ok)}
         <div class="legend" id="legend"></div>
         <div class="calnote">點日期直接跳到當天場次。名額即時同步報名系統，以報名頁為準。</div>
       </div>
-      <img id="decor" alt="" hidden>
     </aside>
 
     <section id="list">
@@ -437,7 +434,7 @@ let calY=+T0.slice(0,4),calM=+T0.slice(5,7); // 顯示中的月份
 
 async function load(){
   const[mainDoc,schDoc,cfgDocs]=await Promise.all([
-    fsGet('settings/main',['csvData','latestNews','mascotConfig','publicSideDecor','marqueeIcon','marqueeIconSize']),
+    fsGet('settings/main',['csvData','latestNews','mascotConfig','marqueeIcon','marqueeIconSize']),
     fsGet('settings/schedule',['companyRest','outingDays']).catch(()=>({})),
     fsList('event_configs',['displayName','time','capacity','isCancelled','link','duration']),
   ]);
@@ -497,12 +494,6 @@ async function load(){
     const ic=document.getElementById('newsIcon');
     ic.src='./'+encodeURIComponent(mainF.marqueeIcon);
     ic.style.height=(mainF.marqueeIconSize||30)+'px';ic.hidden=false;
-  }
-  const dec=mainF.publicSideDecor||{};
-  if(dec.leftImage){
-    const d=document.getElementById('decor');
-    d.src='./'+encodeURIComponent(dec.leftImage);
-    d.style.width=(dec.width||60)+'px';d.style.opacity=dec.opacity??1;d.hidden=false;
   }
   MASCOTS=Array.isArray(mainF.mascotConfig)?mainF.mascotConfig:[];
   buildToolbar();renderCal();renderList();
