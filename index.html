@@ -114,10 +114,14 @@ table.cal{width:100%;border-collapse:collapse;table-layout:fixed}
 .day.sel .n{color:var(--night);font-weight:700}
 /* ── 夜裡的小動物 ── */
 #decor{margin:6px 0 0 14px}
+#gresult{display:flex;align-items:center;gap:10px;background:rgba(255,201,77,.08);border:1px dashed rgba(255,201,77,.4);border-radius:12px;padding:8px 12px;margin-bottom:12px;font-size:13px;line-height:1.5}
+#gresult img{height:36px;width:36px;object-fit:contain;flex-shrink:0}
+#gresult b{color:var(--beam)}
+#gresult .gsil{flex-shrink:0;width:34px;height:34px;border-radius:50%;background:#000;box-shadow:0 0 10px rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;color:#3E4A40;font-weight:900;font-size:18px}
 @media(max-width:960px){#decor{display:none}}
 .loading img{height:64px;margin:0 auto 10px;display:block}
 /* ── 進站夜觀抽獎 ── */
-#gacha{position:fixed;inset:0;z-index:200;background:#030706;display:flex;align-items:center;justify-content:center;opacity:1;transition:opacity .4s ease}
+#gacha{position:fixed;inset:0;z-index:200;background:rgba(3,7,6,.82);backdrop-filter:blur(2.5px);-webkit-backdrop-filter:blur(2.5px);display:flex;align-items:center;justify-content:center;opacity:1;transition:opacity .4s ease}
 #gacha.bye{opacity:0;pointer-events:none}
 .gbeam{position:absolute;width:min(70vmin,340px);height:min(70vmin,340px);border-radius:50%;
   background:radial-gradient(circle,rgba(255,224,150,.5),rgba(255,201,77,.16) 55%,transparent 72%);
@@ -130,13 +134,13 @@ table.cal{width:100%;border-collapse:collapse;table-layout:fixed}
   100%{transform:translate(-32vw,-18vh) scale(.8)}
 }
 #gacha.found .gbeam{animation:none;transform:translate(0,-6vh) scale(1.15);transition:transform .5s ease}
-#gsearch{position:relative;text-align:center;color:var(--dim);font-size:15px;letter-spacing:.1em;z-index:2}
+#gsearch{position:relative;text-align:center;color:#D9DCD2;font-size:15px;letter-spacing:.1em;z-index:2;text-shadow:0 1px 8px rgba(0,0,0,.9)}
 #gsearch .dots::after{content:'⋯';animation:gdots 1.2s steps(4) infinite}
 @keyframes gdots{0%{content:''}25%{content:'・'}50%{content:'・・'}75%{content:'・・・'}}
 #gskip{position:absolute;bottom:calc(26px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);
   background:transparent;border:1px solid var(--line);color:var(--faint);font-size:13px;padding:8px 22px;border-radius:99px;cursor:pointer;font-family:var(--sans);z-index:3}
 #gskip:hover{color:var(--dim)}
-#gfound{position:relative;text-align:center;z-index:2;padding:0 24px;max-width:420px}
+#gfound{position:relative;text-align:center;z-index:2;padding:0 24px;max-width:420px;text-shadow:0 1px 10px rgba(0,0,0,.85)}
 #gfound .ganimal{height:min(38vmin,170px);margin:0 auto 6px;display:block;object-fit:contain;
   filter:drop-shadow(0 0 46px rgba(255,201,77,.45));animation:gpop .55s cubic-bezier(.34,1.56,.64,1)}
 @keyframes gpop{0%{transform:scale(0) rotate(-8deg);opacity:0}70%{transform:scale(1.12) rotate(2deg)}100%{transform:scale(1)}}
@@ -244,6 +248,7 @@ a.charter.cday:hover .cgo{color:var(--ok)}
     <aside>
       <div class="calbox" id="calbox">
         <button class="caltoggle" id="calToggle">收合月曆 ▲</button>
+        <div id="gresult" hidden></div>
         <div class="calnav">
           <button id="prevM" aria-label="上個月">‹</button>
           <div class="m" id="calTitle"></div>
@@ -280,14 +285,15 @@ a.charter.cday:hover .cgo{color:var(--ok)}
 <script>
 (function(){
   try{
-    if(!sessionStorage.getItem('tpha_night_gacha')){
+    if(!sessionStorage.getItem('tpha_gacha_result')){
       const g=document.getElementById('gacha');
       g.hidden=false;
       window.gachaShownAt=Date.now();
       document.getElementById('gskip').onclick=function(){
+        try{sessionStorage.setItem('tpha_gacha_result','skip')}catch(e){}
         g.classList.add('bye');
-        try{sessionStorage.setItem('tpha_night_gacha','1')}catch(e){}
         setTimeout(function(){g.remove()},450);
+        if(window.renderGachaBadge)renderGachaBadge();
       };
     }
   }catch(e){}
@@ -490,6 +496,7 @@ async function load(){
   }
   MASCOTS=Array.isArray(mainF.mascotConfig)?mainF.mascotConfig:[];
   buildToolbar();renderCal();renderList();
+  renderGachaBadge();
   gachaReveal();
 }
 
@@ -673,9 +680,8 @@ function gachaPick(){
   const {th,ss,who}=pool[Math.floor(Math.random()*pool.length)];
   const gifs=(th.gifs||[]).filter(g=>g.filename);
   if(!gifs.length)return null;
-  const total=gifs.reduce((a,g)=>a+(+g.weight||1),0);
-  let r=Math.random()*total,pick=gifs[0];
-  for(const g of gifs){r-=(+g.weight||1);if(r<=0){pick=g;break}}
+  /* 出現機率一律平均（世祥 2026-07-11 指定）；「超幸運」標籤仍依後台 weight 判定 */
+  const pick=gifs[Math.floor(Math.random()*gifs.length)];
   return{
     gif:pick.filename,action:pick.action||'',
     who:who||String(th.name||'').replace(/系列$/,''),
@@ -685,9 +691,25 @@ function gachaPick(){
 }
 function gachaClose(){
   const g=document.getElementById('gacha');
+  if(!g)return;
   g.classList.add('bye');
-  try{sessionStorage.setItem('tpha_night_gacha','1')}catch(e){}
   setTimeout(()=>g.remove(),450);
+}
+/* 月曆上的夜觀成果：看到結果→「你今天夜觀到了◯◯」；跳過→問號黑影 */
+function renderGachaBadge(){
+  const el=document.getElementById('gresult');
+  let v=null;try{v=sessionStorage.getItem('tpha_gacha_result')}catch(e){}
+  if(!v){el.hidden=true;return}
+  if(v==='skip'){
+    el.innerHTML=`<span class="gsil">？</span><span>剛剛好像有什麼黑影閃過去了⋯今晚牠躲起來了</span>`;
+  }else{
+    try{
+      const r=JSON.parse(v);
+      el.innerHTML=`<img src="./${encodeURIComponent(r.gif)}" alt="">
+        <span>你今天夜觀到了「<b>${r.who}</b>」${r.rare?'——超稀有的瞬間':''}，好幸運！</span>`;
+    }catch(e){el.hidden=true;return}
+  }
+  el.hidden=false;
 }
 function gachaReveal(){
   const g=document.getElementById('gacha');
@@ -697,6 +719,8 @@ function gachaReveal(){
   setTimeout(()=>{
     const e=gachaPick();
     if(!e){gachaClose();return}
+    try{sessionStorage.setItem('tpha_gacha_result',JSON.stringify({who:e.who,gif:e.gif,rare:e.rare}))}catch(x){}
+    renderGachaBadge();
     document.getElementById('gsearch').hidden=true;
     const skip=document.getElementById('gskip');if(skip)skip.hidden=true;
     g.classList.add('found'); /* 光束定住：找到了 */
