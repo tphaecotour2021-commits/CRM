@@ -113,8 +113,6 @@ table.cal{width:100%;border-collapse:collapse;table-layout:fixed}
 .day.sel{background:var(--moon)}
 .day.sel .n{color:var(--night);font-weight:700}
 /* ── 夜裡的小動物 ── */
-.calbox{overflow:hidden}
-.runner{position:absolute;bottom:2px;left:0;height:42px;pointer-events:none;z-index:3}
 #decor{margin:6px 0 0 14px}
 @media(max-width:960px){#decor{display:none}}
 .loading img{height:64px;margin:0 auto 10px;display:block}
@@ -259,7 +257,6 @@ a.charter.cday:hover .cgo{color:var(--ok)}
         </table>
         <div class="legend" id="legend"></div>
         <div class="calnote">點日期直接跳到當天場次。名額即時同步報名系統，以報名頁為準。</div>
-        <img id="runner" class="runner" alt="" hidden>
       </div>
       <img id="decor" alt="" hidden>
     </aside>
@@ -493,7 +490,6 @@ async function load(){
   }
   MASCOTS=Array.isArray(mainF.mascotConfig)?mainF.mascotConfig:[];
   buildToolbar();renderCal();renderList();
-  startRunner();
   gachaReveal();
 }
 
@@ -656,17 +652,25 @@ function renderList(){
 /* ═══ 進站夜觀抽獎（壽司郎式）：手電筒搜尋 → 隨機遇見動物 → 引導看場次 ═══ */
 let MASCOTS=[];
 const GACHA_MIN_MS=3000; /* 搜尋動畫至少播這麼久（gachaShownAt 由頁尾 inline script 設在 window 上） */
+/* 後台 mascotConfig 關鍵字補丁：後台關鍵字設得太窄時（冬季蛙比對不到夏季蛙場次、
+   水蛇的「水生蛇類」比對不到「水裡篇」），前端補上別名讓抽選池完整。
+   之後若在後台把關鍵字補齊，這裡的補丁自然變成無害的重複。 */
+const MASCOT_PATCH={
+  '冬季限定蛙':{kw:['夜訪蛙類','青蛙','蛙類系列'],who:'青蛙'},
+  '水蛇':{kw:['水裡篇']},
+};
 function gachaPick(){
   /* 只從「目前還有名額的系列」抽，保證遇到的動物一定有場次可報 */
   const pool=[];
   for(const th of MASCOTS){
-    const kws=String(th.keywords||'').split(/[,，]/).map(x=>x.trim()).filter(Boolean);
+    const patch=MASCOT_PATCH[String(th.name||'').trim()]||{};
+    const kws=String(th.keywords||'').split(/[,，]/).map(x=>x.trim()).filter(Boolean).concat(patch.kw||[]);
     if(!kws.length)continue;
     const ss=SESSIONS.filter(s=>s.bookable&&s.remaining>0&&kws.some(k=>(s.title+' '+s.id).includes(k)));
-    if(ss.length)pool.push({th,ss});
+    if(ss.length)pool.push({th,ss,who:patch.who});
   }
   if(!pool.length)return null;
-  const {th,ss}=pool[Math.floor(Math.random()*pool.length)];
+  const {th,ss,who}=pool[Math.floor(Math.random()*pool.length)];
   const gifs=(th.gifs||[]).filter(g=>g.filename);
   if(!gifs.length)return null;
   const total=gifs.reduce((a,g)=>a+(+g.weight||1),0);
@@ -674,7 +678,7 @@ function gachaPick(){
   for(const g of gifs){r-=(+g.weight||1);if(r<=0){pick=g;break}}
   return{
     gif:pick.filename,action:pick.action||'',
-    who:String(th.name||'').replace(/系列$/,''),
+    who:who||String(th.name||'').replace(/系列$/,''),
     rare:(+pick.weight||1)<=10,
     type:ss[0].type, n:ss.length,
   };
@@ -715,25 +719,6 @@ function gachaReveal(){
     };
     document.getElementById('gx').onclick=gachaClose;
   },wait);
-}
-/* 月曆過客：每 35–75 秒有一隻小動物跑過月曆底部 */
-function startRunner(){
-  if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
-  const el=document.getElementById('runner'),box=document.getElementById('calbox');
-  const runners=['sq_running.gif','hare_run.gif'];
-  function go(){
-    const table=box.querySelector('table.cal');
-    if(!table||!table.offsetParent){schedule();return} /* 月曆被收合就先不跑 */
-    el.src='./'+runners[Math.floor(Math.random()*runners.length)];
-    el.hidden=false;
-    const w=box.clientWidth;
-    const anim=el.animate(
-      [{transform:'translateX(-50px)'},{transform:`translateX(${w+50}px)`}],
-      {duration:8000+Math.random()*4000,easing:'linear'});
-    anim.onfinish=()=>{el.hidden=true;schedule()};
-  }
-  function schedule(){setTimeout(go,35000+Math.random()*40000)}
-  setTimeout(go,6000); /* 進站 6 秒後第一隻 */
 }
 /* 可包場模式：列出所有符合「當天開成 ≤ 1 場」的日子 */
 function renderCharterList(){
