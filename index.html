@@ -61,6 +61,10 @@ main{padding:26px 0 90px}
 .chip.on{background:var(--moon);color:var(--night);border-color:var(--moon);font-weight:700}
 .chip.on .dot{outline:2px solid rgba(11,18,16,.25)}
 .chip.tg.on{background:var(--beam);border-color:var(--beam)}
+.locsel{background:transparent;border:1px solid var(--line);color:var(--dim);font-size:13.5px;padding:7px 12px;border-radius:99px;font-family:var(--sans);cursor:pointer;-webkit-appearance:none;appearance:none}
+.locsel:hover{border-color:var(--dim)}
+.locsel.on{background:var(--beam);color:#241A02;border-color:var(--beam);font-weight:700}
+.locsel option{background:var(--panel);color:var(--moon)}
 .sep{width:1px;height:22px;background:var(--line);margin:0 6px}
 @media(max-width:960px){
   .toolbar{position:sticky;top:0;z-index:40;background:rgba(11,18,16,.92);backdrop-filter:blur(10px);padding:10px 0 8px;margin:0;gap:7px}
@@ -177,6 +181,7 @@ table.cal{width:100%;border-collapse:collapse;table-layout:fixed}
 .row .info{flex:1;min-width:0}
 .row .l1{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--dim);margin-bottom:2px}
 .row .l1 .tp{font-weight:700;font-size:11.5px;padding:1px 8px;border-radius:99px;border:1px solid currentColor}
+.row .l1 .locn{color:var(--moon);font-weight:600}
 .row .l1 .kind.k1{color:var(--dim);background:rgba(244,239,228,.07)}
 .row .l1 .kind.k2{color:#B8A9F0;background:rgba(184,169,240,.1)}
 .row.priv{background:var(--panel2);border-style:dashed}
@@ -382,6 +387,15 @@ function normDate(s){
   if(!m)return'';
   return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;
 }
+/* 地點：從場次名稱抽取（順序重要，先匹配子地名） */
+const LOC_RULES=[['大溝','內湖'],['內溝','內湖'],['內湖','內湖'],['富陽','大安'],['大安','大安'],
+ ['中正山','北投'],['北投','北投'],['廣興','新店'],['四崁水','新店'],['二叭子','新店'],['新店','新店'],
+ ['士林','士林'],['二子坪','陽明山'],['陽明','陽明山'],['指南宮','文山'],['文山','文山'],
+ ['信義','信義'],['圓山里','淡水'],['淡水','淡水'],['天母','天母']];
+function locOf(s){
+  for(const[k,v]of LOC_RULES)if(s.includes(k))return v;
+  return null;
+}
 function typeOf(n){
   if(/飛鼠|鼯/.test(n))return'飛鼠';
   if(/蛇/.test(n))return'蛇';
@@ -402,7 +416,7 @@ function dow(iso){return new Date(iso+'T00:00:00+08:00').getDay()}
 /* ═══ 狀態 ═══ */
 const T0=todayTW(),T1=addDays(T0,WINDOW_DAYS);
 let SESSIONS=[],BYDATE=new Map(),NEWS='',REST=new Set(),OUTING=new Set();
-let fType='全部',fSeats=false,fWeekend=false,fDate=null,fCharter=false;
+let fType='全部',fSeats=false,fWeekend=false,fDate=null,fCharter=false,fLoc='全部';
 const FB_DM='https://m.me/TPHAEcotourism';
 /* 可包場的日子：非公休、非出遊日、沒被多天活動（如大小雪山 7/18-19）蓋住，
    且當天「開成」的單日活動 ≤ 1 場。回傳 Map(日期→開成場數) */
@@ -466,6 +480,7 @@ async function load(){
       title:kind==='包團'?'包團活動':(dn||name).trim(),/* 包團不顯示客戶名稱 */
       instr,link,code,kind,bookable,
       type:typeOf(dn+name),
+      loc:locOf(dn+' '+name),
       cap,remaining:bookable?Math.max(0,cap-cnt):0,
       runs:kind!=='一般'||cnt>0, /* 「開成」＝包團/社群場、或已有人報名 */
       duration:Math.max(1,parseInt(f.duration,10)||1),
@@ -499,6 +514,7 @@ async function load(){
 function filtered(){
   return SESSIONS.filter(s=>
     (fType==='全部'||s.type===fType)&&
+    (fLoc==='全部'||s.loc===fLoc)&&
     (!fSeats||s.remaining>0)&&
     (!fWeekend||s.dow===0||s.dow===6)&&
     (!fDate||s.date===fDate));
@@ -507,6 +523,7 @@ function filtered(){
 function filteredNoDate(){
   return SESSIONS.filter(s=>
     (fType==='全部'||s.type===fType)&&
+    (fLoc==='全部'||s.loc===fLoc)&&
     (!fSeats||s.remaining>0)&&
     (!fWeekend||s.dow===0||s.dow===6));
 }
@@ -530,7 +547,17 @@ function buildToolbar(){
     b.onclick=()=>{set();buildToolbar();renderCal();renderList()};
     return b;
   };
+  /* 地點選單（依場次數排序） */
+  const locCnt={};
+  for(const s of SESSIONS)if(s.loc)locCnt[s.loc]=(locCnt[s.loc]||0)+1;
+  const locs=Object.keys(locCnt).sort((a,b)=>locCnt[b]-locCnt[a]);
+  const sel=document.createElement('select');
+  sel.className='locsel'+(fLoc!=='全部'?' on':'');
+  sel.innerHTML=`<option value="全部">📍 全部地點</option>`+
+    locs.map(l=>`<option value="${l}" ${l===fLoc?'selected':''}>📍 ${l}（${locCnt[l]}）</option>`).join('');
+  sel.onchange=()=>{fLoc=sel.value;buildToolbar();renderCal();renderList()};
   r2.append(
+    sel,
     mk('只看有名額',()=>fSeats,()=>fSeats=!fSeats),
     mk('只看週末',()=>fWeekend,()=>fWeekend=!fWeekend),
     mk('可包場的日子',()=>fCharter,()=>{fCharter=!fCharter;fDate=null})
@@ -633,7 +660,7 @@ function renderList(){
       <div class="info">
         <div class="l1"><span class="tp" style="color:${TYPE_COLOR[s.type]}">${s.type}</span>
           ${special?`<span class="tp kind ${s.kind==='包團'?'k1':'k2'}">${s.kind}</span>`:''}
-          ${s.time?`<span>${s.time}</span>`:''}${s.instr&&s.kind!=='包團'?`<span>講師 ${s.instr}</span>`:''}</div>
+          ${s.loc?`<span class="locn">📍${s.loc}</span>`:''}${s.time?`<span>${s.time}</span>`:''}${s.instr&&s.kind!=='包團'?`<span>講師 ${s.instr}</span>`:''}</div>
         <h3>${s.title}</h3>
         ${alts.length?`<div class="alt">這場滿了，同路線還有位：${alts.map(a=>{
           const[,m2,d2]=a.date.split('-');
