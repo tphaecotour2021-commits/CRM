@@ -662,25 +662,25 @@ const MASCOT_PATCH={
   '水蛇':{kw:['水裡篇']},
 };
 function gachaPick(){
-  /* 只從「目前還有名額的系列」抽，保證遇到的動物一定有場次可報 */
-  const pool=[];
+  /* 只從「目前還有名額的系列」抽，保證遇到的動物一定有場次可報。
+     機率：把所有合格系列的 GIF 攤平成一池，每個 GIF 等機率（世祥 2026-07-11 指定）。 */
+  const flat=[];
   for(const th of MASCOTS){
     const patch=MASCOT_PATCH[String(th.name||'').trim()]||{};
     const kws=String(th.keywords||'').split(/[,，]/).map(x=>x.trim()).filter(Boolean).concat(patch.kw||[]);
     if(!kws.length)continue;
     const ss=SESSIONS.filter(s=>s.bookable&&s.remaining>0&&kws.some(k=>(s.title+' '+s.id).includes(k)));
-    if(ss.length)pool.push({th,ss,who:patch.who});
+    if(!ss.length)continue;
+    for(const g of (th.gifs||[]).filter(g=>g.filename)){
+      flat.push({th,g,ss,who:patch.who});
+    }
   }
-  if(!pool.length)return null;
-  const {th,ss,who}=pool[Math.floor(Math.random()*pool.length)];
-  const gifs=(th.gifs||[]).filter(g=>g.filename);
-  if(!gifs.length)return null;
-  /* 出現機率一律平均（世祥 2026-07-11 指定）；「超幸運」標籤仍依後台 weight 判定 */
-  const pick=gifs[Math.floor(Math.random()*gifs.length)];
+  if(!flat.length)return null;
+  const {th,g,ss,who}=flat[Math.floor(Math.random()*flat.length)];
   return{
-    gif:pick.filename,action:pick.action||'',
+    gif:g.filename,action:g.action||'',
     who:who||String(th.name||'').replace(/系列$/,''),
-    rare:(+pick.weight||1)<=10,
+    rare:(+g.weight||1)<=10, /* 「超幸運」標籤仍依後台 weight 判定 */
     type:ss[0].type, n:ss.length,
   };
 }
