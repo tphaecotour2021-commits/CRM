@@ -659,7 +659,7 @@ const GACHA_MIN_MS=3000; /* 搜尋動畫至少播這麼久（gachaShownAt 由頁
    之後若在後台把關鍵字補齊，這裡的補丁自然變成無害的重複。 */
 const MASCOT_PATCH={
   '冬季限定蛙':{kw:['夜訪蛙類','青蛙','蛙類系列'],who:'青蛙'},
-  '水蛇':{kw:['水裡篇']},
+  '水蛇':{kw:['水裡篇'],gifs:[{filename:'watersnake_peek.gif',action:'探出頭來看你',weight:100}]},
 };
 function gachaPick(){
   /* 只從「目前還有名額的系列」抽，保證遇到的動物一定有場次可報。
@@ -671,7 +671,7 @@ function gachaPick(){
     if(!kws.length)continue;
     const ss=SESSIONS.filter(s=>s.bookable&&s.remaining>0&&kws.some(k=>(s.title+' '+s.id).includes(k)));
     if(!ss.length)continue;
-    for(const g of (th.gifs||[]).filter(g=>g.filename)){
+    for(const g of (th.gifs||[]).concat(patch.gifs||[]).filter(g=>g.filename)){
       flat.push({th,g,ss,who:patch.who});
     }
   }
