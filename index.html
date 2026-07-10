@@ -275,8 +275,8 @@ a.charter.cday:hover .cgo{color:var(--ok)}
 
 <button class="totop" id="totop">↑ 回到本週</button>
 
-<!-- 進站夜觀抽獎（每個瀏覽 session 一次） -->
-<div id="gacha" hidden>
+<!-- 進站夜觀抽獎（每次載入都重抽） -->
+<div id="gacha">
   <div class="gbeam"></div>
   <div id="gsearch">進入夜裡，尋找動物中<span class="dots"></span></div>
   <div id="gfound" hidden></div>
@@ -284,19 +284,14 @@ a.charter.cday:hover .cgo{color:var(--ok)}
 </div>
 <script>
 (function(){
-  try{
-    if(!sessionStorage.getItem('tpha_gacha_result')){
-      const g=document.getElementById('gacha');
-      g.hidden=false;
-      window.gachaShownAt=Date.now();
-      document.getElementById('gskip').onclick=function(){
-        try{sessionStorage.setItem('tpha_gacha_result','skip')}catch(e){}
-        g.classList.add('bye');
-        setTimeout(function(){g.remove()},450);
-        if(window.renderGachaBadge)renderGachaBadge();
-      };
-    }
-  }catch(e){}
+  window.gachaShownAt=Date.now();
+  document.getElementById('gskip').onclick=function(){
+    const g=document.getElementById('gacha');
+    window.gachaSkipped=true;
+    g.classList.add('bye');
+    setTimeout(function(){g.remove()},450);
+    if(window.renderGachaBadge)renderGachaBadge();
+  };
 })();
 </script>
 
@@ -695,20 +690,16 @@ function gachaClose(){
   g.classList.add('bye');
   setTimeout(()=>g.remove(),450);
 }
-/* 月曆上的夜觀成果：看到結果→「你今天夜觀到了◯◯」；跳過→問號黑影 */
+/* 月曆上的夜觀成果（只反映本次載入）：看到結果→「你今天夜觀到了◯◯」；跳過→問號黑影 */
 function renderGachaBadge(){
   const el=document.getElementById('gresult');
-  let v=null;try{v=sessionStorage.getItem('tpha_gacha_result')}catch(e){}
-  if(!v){el.hidden=true;return}
-  if(v==='skip'){
-    el.innerHTML=`<span class="gsil">？</span><span>剛剛好像有什麼黑影閃過去了⋯今晚牠躲起來了</span>`;
-  }else{
-    try{
-      const r=JSON.parse(v);
-      el.innerHTML=`<img src="./${encodeURIComponent(r.gif)}" alt="">
-        <span>你今天夜觀到了「<b>${r.who}</b>」${r.rare?'——超稀有的瞬間':''}，好幸運！</span>`;
-    }catch(e){el.hidden=true;return}
-  }
+  if(window.gachaResult){
+    const r=window.gachaResult;
+    el.innerHTML=`<img src="./${encodeURIComponent(r.gif)}" alt="">
+      <span>你今天夜觀到了「<b>${r.who}</b>」${r.rare?'——超稀有的瞬間':''}，好幸運！</span>`;
+  }else if(window.gachaSkipped){
+    el.innerHTML=`<span class="gsil">？</span><span>剛剛好像有什麼黑影閃過去了⋯重新整理再找一次</span>`;
+  }else{el.hidden=true;return}
   el.hidden=false;
 }
 function gachaReveal(){
@@ -717,9 +708,11 @@ function gachaReveal(){
   const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const wait=reduced?0:Math.max(0,(window.gachaShownAt||0)+GACHA_MIN_MS-Date.now());
   setTimeout(()=>{
+    /* 等待期間被跳過／黑幕已收 → 不揭曉 */
+    if(window.gachaSkipped||!document.getElementById('gacha'))return;
     const e=gachaPick();
     if(!e){gachaClose();return}
-    try{sessionStorage.setItem('tpha_gacha_result',JSON.stringify({who:e.who,gif:e.gif,rare:e.rare}))}catch(x){}
+    window.gachaResult={who:e.who,gif:e.gif,rare:e.rare};
     renderGachaBadge();
     document.getElementById('gsearch').hidden=true;
     const skip=document.getElementById('gskip');if(skip)skip.hidden=true;
