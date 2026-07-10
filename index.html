@@ -38,6 +38,7 @@ header{border-bottom:1px solid var(--line)}
 .news{background:linear-gradient(90deg,rgba(255,201,77,.14),rgba(255,201,77,.05));border-bottom:1px solid var(--line)}
 .news .in{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:13.5px}
 .news .tag{color:var(--beam);font-weight:700;flex-shrink:0}
+.news #newsIcon{flex-shrink:0}
 .news .marq{flex:1;min-width:0;overflow:hidden}
 .news .tx{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#E4E0D2}
 @media(max-width:720px){
@@ -76,7 +77,7 @@ main{padding:26px 0 90px}
   .caltoggle{display:block;width:100%;background:transparent;border:none;color:var(--dim);font:600 13.5px var(--sans);text-align:left;padding:2px 2px 10px;cursor:pointer}
   .calbox.closed .calnav,.calbox.closed table.cal,.calbox.closed .legend{display:none}
   .calbox.closed .caltoggle{padding:2px;color:var(--moon)}
-  .calbox{position:static;padding:12px 12px 10px}
+  .calbox{position:relative;top:auto;padding:12px 12px 10px}
   .calnav{margin-bottom:6px}
   .calnav .m{font-size:16px}
   .calnav button{width:30px;height:30px}
@@ -111,6 +112,17 @@ table.cal{width:100%;border-collapse:collapse;table-layout:fixed}
 .day.today{border-color:var(--beam);box-shadow:0 0 0 1px var(--beam) inset}
 .day.sel{background:var(--moon)}
 .day.sel .n{color:var(--night);font-weight:700}
+/* ── 夜裡的小動物 ── */
+.calbox{overflow:hidden}
+.runner{position:absolute;bottom:2px;left:0;height:42px;pointer-events:none;z-index:3}
+#decor{margin:6px 0 0 14px}
+@media(max-width:960px){#decor{display:none}}
+.mascot{display:flex;align-items:flex-end;gap:8px;margin-top:7px}
+.mascot img{height:46px;width:46px;object-fit:contain}
+.mascot .bub{position:relative;background:rgba(255,201,77,.12);border:1px solid rgba(255,201,77,.45);color:var(--moon);font-size:12.5px;padding:5px 11px;border-radius:12px 12px 12px 3px;line-height:1.5}
+.mascot .bub b{color:var(--beam)}
+.mascot .bub .rare{color:var(--beam);font-weight:700}
+.loading img{height:64px;margin:0 auto 10px;display:block}
 .legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:12px;color:var(--dim)}
 .legend i{display:inline-block;width:7px;height:7px;border-radius:99px;margin-right:5px}
 .calnote{margin-top:10px;font-size:11.5px;color:var(--faint)}
@@ -194,7 +206,7 @@ a.charter.cday:hover .cgo{color:var(--ok)}
 </header>
 
 <div class="news" id="news" hidden>
-  <div class="wrap in"><span class="tag">最新消息</span><span class="marq"><span class="tx" id="newsTx"></span></span></div>
+  <div class="wrap in"><img id="newsIcon" alt="" hidden><span class="tag">最新消息</span><span class="marq"><span class="tx" id="newsTx"></span></span></div>
 </div>
 
 <main>
@@ -218,11 +230,13 @@ a.charter.cday:hover .cgo{color:var(--ok)}
         </table>
         <div class="legend" id="legend"></div>
         <div class="calnote">點日期直接跳到當天場次。名額即時同步報名系統，以報名頁為準。</div>
+        <img id="runner" class="runner" alt="" hidden>
       </div>
+      <img id="decor" alt="" hidden>
     </aside>
 
     <section id="list">
-      <div class="loading">正在讀取最新場次⋯</div>
+      <div class="loading"><img src="./sq_running.gif" alt="">夜裡的動物們正在集合⋯</div>
     </section>
 
   </div>
@@ -358,7 +372,7 @@ let calY=+T0.slice(0,4),calM=+T0.slice(5,7); // 顯示中的月份
 
 async function load(){
   const[mainDoc,schDoc,cfgDocs]=await Promise.all([
-    fsGet('settings/main',['csvData','latestNews']),
+    fsGet('settings/main',['csvData','latestNews','mascotConfig','publicSideDecor','marqueeIcon','marqueeIconSize']),
     fsGet('settings/schedule',['companyRest','outingDays']).catch(()=>({})),
     fsList('event_configs',['displayName','time','capacity','isCancelled','link','duration']),
   ]);
@@ -412,7 +426,22 @@ async function load(){
   BYDATE=new Map();
   for(const s of list){if(!BYDATE.has(s.date))BYDATE.set(s.date,[]);BYDATE.get(s.date).push(s)}
   if(NEWS){document.getElementById('newsTx').textContent=NEWS;document.getElementById('news').hidden=false}
+  /* 夜裡的小動物：跑馬燈圖示、穿山甲裝飾、遭遇抽選（設定都來自後台 settings/main） */
+  if(mainF.marqueeIcon){
+    const ic=document.getElementById('newsIcon');
+    ic.src='./'+encodeURIComponent(mainF.marqueeIcon);
+    ic.style.height=(mainF.marqueeIconSize||30)+'px';ic.hidden=false;
+  }
+  const dec=mainF.publicSideDecor||{};
+  if(dec.leftImage){
+    const d=document.getElementById('decor');
+    d.src='./'+encodeURIComponent(dec.leftImage);
+    d.style.width=(dec.width||60)+'px';d.style.opacity=dec.opacity??1;d.hidden=false;
+  }
+  MASCOTS=Array.isArray(mainF.mascotConfig)?mainF.mascotConfig:[];
+  rollEncounters();
   buildToolbar();renderCal();renderList();
+  startRunner();
 }
 
 /* ═══ 篩選 ═══ */
@@ -559,6 +588,7 @@ function renderList(){
           const[,m2,d2]=a.date.split('-');
           return`<a href="#" data-jump="${a.date}">${+m2}/${+d2} ${WD[a.dow]}</a>`}).join('、')}</div>`:''}
         ${s.kind==='包團'?`<div class="alt">你也可以幫公司或朋友包一場 → <a class="dm" href="${FB_DM}" target="_blank" rel="noopener">私訊粉專</a></div>`:''}
+        ${mascotHtml(s)}
       </div>
       <div class="act">
         ${s.bookable?seatsHtml(s):`<span class="seats full">${s.kind==='包團'?'不開放報名':'社群成員限定'}</span>`}
@@ -570,6 +600,57 @@ function renderList(){
   html+=`<div class="endnote">只顯示未來 ${WINDOW_DAYS} 天。更遠的計畫、包團與客製行程 → <a href="https://tphaecotourism.rezio.shop/zh-TW" target="_blank" rel="noopener">活動總覽</a></div>`;
   el.innerHTML=html;
   el.querySelectorAll('[data-jump]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();selectDate(a.dataset.jump)}));
+}
+/* ═══ 遭遇系統：沿用正式後台的 mascotConfig（關鍵字＋權重） ═══ */
+let MASCOTS=[],ENC={};
+function rollEncounters(){
+  ENC={};
+  const matches=[];
+  for(const s of SESSIONS){
+    for(const th of MASCOTS){
+      const kws=String(th.keywords||'').split(/[,，]/).map(x=>x.trim()).filter(Boolean);
+      if(kws.some(k=>(s.title+' '+s.id).includes(k))){matches.push({s,th});break}
+    }
+  }
+  /* 每次載入隨機挑最多 3 場觸發遭遇 */
+  matches.sort(()=>Math.random()-.5);
+  for(const {s,th} of matches.slice(0,3)){
+    const gifs=(th.gifs||[]).filter(g=>g.filename);
+    if(!gifs.length)continue;
+    const total=gifs.reduce((a,g)=>a+(+g.weight||1),0);
+    let r=Math.random()*total,pick=gifs[0];
+    for(const g of gifs){r-=(+g.weight||1);if(r<=0){pick=g;break}}
+    ENC[s.id]={
+      gif:pick.filename,action:pick.action||'',
+      who:String(th.name||'').replace(/系列$/,''),
+      rare:(+pick.weight||1)<=10,
+    };
+  }
+}
+function mascotHtml(s){
+  const e=ENC[s.id];
+  if(!e)return'';
+  return`<div class="mascot"><img src="./${encodeURIComponent(e.gif)}" alt="">
+    <span class="bub">你遇到了<b>${e.who}</b>${e.action?`——正在${e.action}！`:'！'}${e.rare?'<span class="rare">　✨超幸運✨</span>':''}</span></div>`;
+}
+/* 月曆過客：每 35–75 秒有一隻小動物跑過月曆底部 */
+function startRunner(){
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  const el=document.getElementById('runner'),box=document.getElementById('calbox');
+  const runners=['sq_running.gif','hare_run.gif'];
+  function go(){
+    const table=box.querySelector('table.cal');
+    if(!table||!table.offsetParent){schedule();return} /* 月曆被收合就先不跑 */
+    el.src='./'+runners[Math.floor(Math.random()*runners.length)];
+    el.hidden=false;
+    const w=box.clientWidth;
+    const anim=el.animate(
+      [{transform:'translateX(-50px)'},{transform:`translateX(${w+50}px)`}],
+      {duration:8000+Math.random()*4000,easing:'linear'});
+    anim.onfinish=()=>{el.hidden=true;schedule()};
+  }
+  function schedule(){setTimeout(go,35000+Math.random()*40000)}
+  setTimeout(go,6000); /* 進站 6 秒後第一隻 */
 }
 /* 可包場模式：列出所有符合「當天開成 ≤ 1 場」的日子 */
 function renderCharterList(){
