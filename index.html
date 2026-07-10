@@ -117,12 +117,41 @@ table.cal{width:100%;border-collapse:collapse;table-layout:fixed}
 .runner{position:absolute;bottom:2px;left:0;height:42px;pointer-events:none;z-index:3}
 #decor{margin:6px 0 0 14px}
 @media(max-width:960px){#decor{display:none}}
-.mascot{display:flex;align-items:flex-end;gap:8px;margin-top:7px}
-.mascot img{height:46px;width:46px;object-fit:contain}
-.mascot .bub{position:relative;background:rgba(255,201,77,.12);border:1px solid rgba(255,201,77,.45);color:var(--moon);font-size:12.5px;padding:5px 11px;border-radius:12px 12px 12px 3px;line-height:1.5}
-.mascot .bub b{color:var(--beam)}
-.mascot .bub .rare{color:var(--beam);font-weight:700}
 .loading img{height:64px;margin:0 auto 10px;display:block}
+/* ── 進站夜觀抽獎 ── */
+#gacha{position:fixed;inset:0;z-index:200;background:#030706;display:flex;align-items:center;justify-content:center;opacity:1;transition:opacity .4s ease}
+#gacha.bye{opacity:0;pointer-events:none}
+.gbeam{position:absolute;width:min(70vmin,340px);height:min(70vmin,340px);border-radius:50%;
+  background:radial-gradient(circle,rgba(255,224,150,.5),rgba(255,201,77,.16) 55%,transparent 72%);
+  filter:blur(2px);animation:gsweep 3s ease-in-out infinite}
+@keyframes gsweep{
+  0%{transform:translate(-32vw,-18vh) scale(.8)}
+  22%{transform:translate(24vw,8vh) scale(1.05)}
+  45%{transform:translate(-16vw,16vh) scale(.9)}
+  70%{transform:translate(18vw,-14vh) scale(1.1)}
+  100%{transform:translate(-32vw,-18vh) scale(.8)}
+}
+#gacha.found .gbeam{animation:none;transform:translate(0,-6vh) scale(1.15);transition:transform .5s ease}
+#gsearch{position:relative;text-align:center;color:var(--dim);font-size:15px;letter-spacing:.1em;z-index:2}
+#gsearch .dots::after{content:'⋯';animation:gdots 1.2s steps(4) infinite}
+@keyframes gdots{0%{content:''}25%{content:'・'}50%{content:'・・'}75%{content:'・・・'}}
+#gskip{position:absolute;bottom:calc(26px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);
+  background:transparent;border:1px solid var(--line);color:var(--faint);font-size:13px;padding:8px 22px;border-radius:99px;cursor:pointer;font-family:var(--sans);z-index:3}
+#gskip:hover{color:var(--dim)}
+#gfound{position:relative;text-align:center;z-index:2;padding:0 24px;max-width:420px}
+#gfound .ganimal{height:min(38vmin,170px);margin:0 auto 6px;display:block;object-fit:contain;
+  filter:drop-shadow(0 0 46px rgba(255,201,77,.45));animation:gpop .55s cubic-bezier(.34,1.56,.64,1)}
+@keyframes gpop{0%{transform:scale(0) rotate(-8deg);opacity:0}70%{transform:scale(1.12) rotate(2deg)}100%{transform:scale(1)}}
+#gfound .glucky{font-family:var(--serif);font-weight:900;font-size:clamp(30px,7vw,40px);color:var(--beam);animation:gpop .55s .12s cubic-bezier(.34,1.56,.64,1) backwards}
+#gfound .gwho{margin-top:6px;font-size:16.5px;color:var(--moon)}
+#gfound .gwho b{color:var(--beam)}
+#gfound .grare{margin-top:6px;font-size:13px;color:var(--beam);letter-spacing:.08em}
+#gfound .gbtns{display:flex;flex-direction:column;gap:10px;margin-top:24px;align-items:center}
+#gfound .ggo{background:var(--beam);color:#241A02;border:none;font-weight:700;font-size:15.5px;padding:14px 26px;border-radius:13px;cursor:pointer;font-family:var(--sans);box-shadow:0 4px 26px rgba(255,201,77,.3)}
+#gfound .ggo:hover{background:#FFD873}
+#gfound .gx{background:transparent;border:none;color:var(--faint);font-size:13.5px;padding:8px 18px;cursor:pointer;font-family:var(--sans);text-decoration:underline;text-underline-offset:3px}
+#gfound .gx:hover{color:var(--dim)}
+@media(prefers-reduced-motion:reduce){.gbeam{animation:none;opacity:.5}#gfound .ganimal,#gfound .glucky{animation:none}}
 .legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:12px;color:var(--dim)}
 .legend i{display:inline-block;width:7px;height:7px;border-radius:99px;margin-right:5px}
 .calnote{margin-top:10px;font-size:11.5px;color:var(--faint)}
@@ -243,6 +272,30 @@ a.charter.cday:hover .cgo{color:var(--ok)}
 </main>
 
 <button class="totop" id="totop">↑ 回到本週</button>
+
+<!-- 進站夜觀抽獎（每個瀏覽 session 一次） -->
+<div id="gacha" hidden>
+  <div class="gbeam"></div>
+  <div id="gsearch">進入夜裡，尋找動物中<span class="dots"></span></div>
+  <div id="gfound" hidden></div>
+  <button id="gskip">跳過</button>
+</div>
+<script>
+(function(){
+  try{
+    if(!sessionStorage.getItem('tpha_night_gacha')){
+      const g=document.getElementById('gacha');
+      g.hidden=false;
+      window.gachaShownAt=Date.now();
+      document.getElementById('gskip').onclick=function(){
+        g.classList.add('bye');
+        try{sessionStorage.setItem('tpha_night_gacha','1')}catch(e){}
+        setTimeout(function(){g.remove()},450);
+      };
+    }
+  }catch(e){}
+})();
+</script>
 
 <script>
 /* ═══ Microsoft Clarity（行為追蹤）═══
@@ -439,9 +492,9 @@ async function load(){
     d.style.width=(dec.width||60)+'px';d.style.opacity=dec.opacity??1;d.hidden=false;
   }
   MASCOTS=Array.isArray(mainF.mascotConfig)?mainF.mascotConfig:[];
-  rollEncounters();
   buildToolbar();renderCal();renderList();
   startRunner();
+  gachaReveal();
 }
 
 /* ═══ 篩選 ═══ */
@@ -588,7 +641,6 @@ function renderList(){
           const[,m2,d2]=a.date.split('-');
           return`<a href="#" data-jump="${a.date}">${+m2}/${+d2} ${WD[a.dow]}</a>`}).join('、')}</div>`:''}
         ${s.kind==='包團'?`<div class="alt">你也可以幫公司或朋友包一場 → <a class="dm" href="${FB_DM}" target="_blank" rel="noopener">私訊粉專</a></div>`:''}
-        ${mascotHtml(s)}
       </div>
       <div class="act">
         ${s.bookable?seatsHtml(s):`<span class="seats full">${s.kind==='包團'?'不開放報名':'社群成員限定'}</span>`}
@@ -601,37 +653,68 @@ function renderList(){
   el.innerHTML=html;
   el.querySelectorAll('[data-jump]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();selectDate(a.dataset.jump)}));
 }
-/* ═══ 遭遇系統：沿用正式後台的 mascotConfig（關鍵字＋權重） ═══ */
-let MASCOTS=[],ENC={};
-function rollEncounters(){
-  ENC={};
-  const matches=[];
-  for(const s of SESSIONS){
-    for(const th of MASCOTS){
-      const kws=String(th.keywords||'').split(/[,，]/).map(x=>x.trim()).filter(Boolean);
-      if(kws.some(k=>(s.title+' '+s.id).includes(k))){matches.push({s,th});break}
-    }
+/* ═══ 進站夜觀抽獎（壽司郎式）：手電筒搜尋 → 隨機遇見動物 → 引導看場次 ═══ */
+let MASCOTS=[];
+const GACHA_MIN_MS=3000; /* 搜尋動畫至少播這麼久（gachaShownAt 由頁尾 inline script 設在 window 上） */
+function gachaPick(){
+  /* 只從「目前還有名額的系列」抽，保證遇到的動物一定有場次可報 */
+  const pool=[];
+  for(const th of MASCOTS){
+    const kws=String(th.keywords||'').split(/[,，]/).map(x=>x.trim()).filter(Boolean);
+    if(!kws.length)continue;
+    const ss=SESSIONS.filter(s=>s.bookable&&s.remaining>0&&kws.some(k=>(s.title+' '+s.id).includes(k)));
+    if(ss.length)pool.push({th,ss});
   }
-  /* 每次載入隨機挑最多 3 場觸發遭遇 */
-  matches.sort(()=>Math.random()-.5);
-  for(const {s,th} of matches.slice(0,3)){
-    const gifs=(th.gifs||[]).filter(g=>g.filename);
-    if(!gifs.length)continue;
-    const total=gifs.reduce((a,g)=>a+(+g.weight||1),0);
-    let r=Math.random()*total,pick=gifs[0];
-    for(const g of gifs){r-=(+g.weight||1);if(r<=0){pick=g;break}}
-    ENC[s.id]={
-      gif:pick.filename,action:pick.action||'',
-      who:String(th.name||'').replace(/系列$/,''),
-      rare:(+pick.weight||1)<=10,
-    };
-  }
+  if(!pool.length)return null;
+  const {th,ss}=pool[Math.floor(Math.random()*pool.length)];
+  const gifs=(th.gifs||[]).filter(g=>g.filename);
+  if(!gifs.length)return null;
+  const total=gifs.reduce((a,g)=>a+(+g.weight||1),0);
+  let r=Math.random()*total,pick=gifs[0];
+  for(const g of gifs){r-=(+g.weight||1);if(r<=0){pick=g;break}}
+  return{
+    gif:pick.filename,action:pick.action||'',
+    who:String(th.name||'').replace(/系列$/,''),
+    rare:(+pick.weight||1)<=10,
+    type:ss[0].type, n:ss.length,
+  };
 }
-function mascotHtml(s){
-  const e=ENC[s.id];
-  if(!e)return'';
-  return`<div class="mascot"><img src="./${encodeURIComponent(e.gif)}" alt="">
-    <span class="bub">你遇到了<b>${e.who}</b>${e.action?`——正在${e.action}！`:'！'}${e.rare?'<span class="rare">　✨超幸運✨</span>':''}</span></div>`;
+function gachaClose(){
+  const g=document.getElementById('gacha');
+  g.classList.add('bye');
+  try{sessionStorage.setItem('tpha_night_gacha','1')}catch(e){}
+  setTimeout(()=>g.remove(),450);
+}
+function gachaReveal(){
+  const g=document.getElementById('gacha');
+  if(!g||g.hidden)return;
+  const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const wait=reduced?0:Math.max(0,(window.gachaShownAt||0)+GACHA_MIN_MS-Date.now());
+  setTimeout(()=>{
+    const e=gachaPick();
+    if(!e){gachaClose();return}
+    document.getElementById('gsearch').hidden=true;
+    const skip=document.getElementById('gskip');if(skip)skip.hidden=true;
+    g.classList.add('found'); /* 光束定住：找到了 */
+    const box=document.getElementById('gfound');
+    box.innerHTML=`
+      <img class="ganimal" src="./${encodeURIComponent(e.gif)}" alt="">
+      <div class="glucky">${e.rare?'✨✨ 超幸運 ✨✨':'好幸運！'}</div>
+      <div class="gwho">你遇到了<b>${e.who}</b>${e.action?`——正在${e.action}`:''}</div>
+      ${e.rare?'<div class="grare">這個動作出現機率不到 10%</div>':''}
+      <div class="gbtns">
+        <button class="ggo" id="ggo">去看${e.who}的場次（${e.n} 場有名額）→</button>
+        <button class="gx" id="gx">關閉</button>
+      </div>`;
+    box.hidden=false;
+    document.getElementById('ggo').onclick=()=>{
+      fType=e.type;fDate=null;fCharter=false;
+      buildToolbar();renderCal();renderList();
+      gachaClose();
+      document.getElementById('list').scrollIntoView({block:'start'});
+    };
+    document.getElementById('gx').onclick=gachaClose;
+  },wait);
 }
 /* 月曆過客：每 35–75 秒有一隻小動物跑過月曆底部 */
 function startRunner(){
@@ -709,6 +792,7 @@ totop.onclick=()=>window.scrollTo({top:0});
 load().catch(e=>{
   document.getElementById('list').innerHTML=
     `<div class="empty">場次讀取失敗。請重新整理，或直接到 <a href="https://tphaecotourism.rezio.shop/zh-TW" style="color:var(--ok)">活動總覽</a> 報名。</div>`;
+  if(document.getElementById('gacha'))gachaClose(); /* 讀取失敗時收掉抽獎黑幕，不能擋住錯誤訊息 */
   console.error(e);
 });
 </script>
