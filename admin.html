@@ -1,0 +1,125 @@
+<!-- Generated from index.html by scripts/build_static_assets.py -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TPHA 台北城市狩獵活動行程表</title>
+    <link rel="icon" type="image/png" href="./LOGO.png">
+    <link rel="preconnect" href="https://unpkg.com" crossorigin>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+    
+    <!-- 0. 白屏救星：全域錯誤捕捉 -->
+    <script>
+        window.onerror = function(msg, url, line, col, error) {
+            // 忽略 ResizeObserver 錯誤，這是瀏覽器常見的良性錯誤
+            if (msg.includes("ResizeObserver loop")) return false;
+            
+            document.body.innerHTML = `
+                <div style="padding:20px; color:white; background:#ef4444; font-family:sans-serif; height:100vh; overflow:auto;">
+                    <h2 style="margin-top:0;">⚠️ 系統發生錯誤 (白屏偵錯)</h2>
+                    <p><strong>錯誤訊息:</strong> ${msg}</p>
+                    <p><strong>位置:</strong> Line ${line}:${col}</p>
+                    <pre style="background:rgba(0,0,0,0.2); padding:10px; border-radius:8px; overflow:auto; white-space:pre-wrap;">${error ? error.stack : 'No stack trace'}</pre>
+                    <button onclick="location.reload()" style="background:white; color:#ef4444; border:none; padding:10px 20px; border-radius:5px; cursor:pointer; font-weight:bold; margin-top:10px;">重新整理頁面</button>
+                    <button onclick="localStorage.clear();location.reload()" style="background:transparent; border:1px solid white; color:white; padding:10px 20px; border-radius:5px; cursor:pointer; margin-top:10px; margin-left:10px;">清除快取並重整</button>
+                </div>
+            `;
+            return false;
+        };
+    </script>
+
+    <!-- 1. 載入 Tailwind CSS -->
+    <link rel="stylesheet" href="./tailwind.generated.css?v=bb31b74bbad9">
+    
+    <!-- 2. 載入 React 全域變數版本 (UMD) -->
+    <script defer crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script defer crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- 3. 載入 Babel (翻譯 JSX) -->
+    
+    
+    <!-- 4. 載入 Lucide 圖標 -->
+    <script defer src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- 5. 載入 Recharts 圖表庫 (更換為穩定 CDN) -->
+    
+    
+    
+
+    <!-- 6. 載入 Firebase Compat 版本 -->
+    <script defer src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; -webkit-tap-highlight-color: transparent; }
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .glass-nav { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(226, 232, 240, 0.8); }
+        .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .custom-select { -webkit-appearance: none; -moz-appearance: none; appearance: none; }
+        
+        /* 跑馬燈動畫 */
+        @keyframes marquee {
+            0% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+        }
+        .animate-marquee {
+            display: inline-block;
+            white-space: nowrap;
+            animation: marquee 20s linear infinite;
+        }
+        .marquee-container:hover .animate-marquee {
+            animation-play-state: paused;
+        }
+        
+        /* 遊戲化樣式 */
+        .xp-bar-fill { transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); }
+        .quest-card { transition: all 0.2s ease; }
+        .quest-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; border: 2px solid transparent; background-clip: content-box; }
+        /* 像素風圖片修正 */
+        .pixel-art { image-rendering: pixelated; }
+        .schedule-title-wrap { overflow: visible; }
+        .schedule-side-decor { pointer-events: none; user-select: none; z-index: 5; }
+        @media (max-width: 767px) {
+            .schedule-side-decor {
+                display: block !important;
+                width: var(--decor-mobile-width) !important;
+                opacity: 1 !important;
+            }
+            .schedule-side-decor-left {
+                left: 0 !important;
+            }
+            .schedule-side-decor-right {
+                right: 0 !important;
+            }
+        }
+        @media (min-width: 1024px) {
+            .planning-palette-panel {
+                position: sticky;
+                top: 1.5rem;
+                align-self: flex-start;
+            }
+            .planning-calendar-panel {
+                grid-column: span 3 / span 3;
+                min-width: 0;
+            }
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@300;400;500;600;700&family=Noto+Serif+TC:wght@600;700;900&display=swap">
+</head>
+<body>
+    <div id="root"></div>
+
+    <script defer src="./app.bundle.js?v=20260626-remove-traffic-analytics"></script>
+</body>
+</html>

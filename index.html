@@ -1,125 +1,635 @@
-<!-- Generated from index.html by scripts/build_static_assets.py -->
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TPHA 台北城市狩獵活動行程表</title>
-    <link rel="icon" type="image/png" href="./LOGO.png">
-    <link rel="preconnect" href="https://unpkg.com" crossorigin>
-    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
-    <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
-    
-    <!-- 0. 白屏救星：全域錯誤捕捉 -->
-    <script>
-        window.onerror = function(msg, url, line, col, error) {
-            // 忽略 ResizeObserver 錯誤，這是瀏覽器常見的良性錯誤
-            if (msg.includes("ResizeObserver loop")) return false;
-            
-            document.body.innerHTML = `
-                <div style="padding:20px; color:white; background:#ef4444; font-family:sans-serif; height:100vh; overflow:auto;">
-                    <h2 style="margin-top:0;">⚠️ 系統發生錯誤 (白屏偵錯)</h2>
-                    <p><strong>錯誤訊息:</strong> ${msg}</p>
-                    <p><strong>位置:</strong> Line ${line}:${col}</p>
-                    <pre style="background:rgba(0,0,0,0.2); padding:10px; border-radius:8px; overflow:auto; white-space:pre-wrap;">${error ? error.stack : 'No stack trace'}</pre>
-                    <button onclick="location.reload()" style="background:white; color:#ef4444; border:none; padding:10px 20px; border-radius:5px; cursor:pointer; font-weight:bold; margin-top:10px;">重新整理頁面</button>
-                    <button onclick="localStorage.clear();location.reload()" style="background:transparent; border:1px solid white; color:white; padding:10px 20px; border-radius:5px; cursor:pointer; margin-top:10px; margin-left:10px;">清除快取並重整</button>
-                </div>
-            `;
-            return false;
-        };
-    </script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TPHA 活動行程表｜台北城市狩獵</title>
+<meta name="description" content="TPHA 台北城市狩獵完整場次表：夜訪飛鼠、蛇、蛙、昆蟲。名額即時同步，線上報名。">
+<link rel="icon" type="image/png" href="./LOGO.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --night:#0B1210; --panel:#121B17; --panel2:#0F1713;
+  --line:rgba(244,239,228,.13); --moon:#F4EFE4; --dim:#A9B2A4; --faint:#6D766B;
+  --beam:#FFC94D; --alert:#FF7A59; --ok:#9DC08B;
+  --serif:'Noto Serif TC',"PingFang TC",serif;
+  --sans:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC",sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--night);color:var(--moon);font-family:var(--sans);line-height:1.65;-webkit-font-smoothing:antialiased}
+img{display:block}
+a{color:inherit}
+.wrap{max-width:1160px;margin:0 auto;padding-left:18px;padding-right:18px}
 
-    <!-- 1. 載入 Tailwind CSS -->
-    <link rel="stylesheet" href="./tailwind.generated.css?v=bb31b74bbad9">
-    
-    <!-- 2. 載入 React 全域變數版本 (UMD) -->
-    <script defer crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script defer crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    
-    <!-- 3. 載入 Babel (翻譯 JSX) -->
-    
-    
-    <!-- 4. 載入 Lucide 圖標 -->
-    <script defer src="https://unpkg.com/lucide@latest"></script>
-    
-    <!-- 5. 載入 Recharts 圖表庫 (更換為穩定 CDN) -->
-    
-    
-    
+/* ── header ── */
+header{border-bottom:1px solid var(--line)}
+.hd{display:flex;align-items:center;justify-content:space-between;padding-top:14px;padding-bottom:14px;gap:12px}
+.hd .brand{display:flex;align-items:center;gap:10px;min-width:0}
+.hd .brand img{width:32px;height:32px;flex-shrink:0}
+.hd .brand .t{font-family:var(--serif);font-weight:900;font-size:17px;white-space:nowrap}
+.hd .brand .s{font-size:11.5px;color:var(--dim);letter-spacing:.12em;white-space:nowrap}
+.hd .adm{font-size:12.5px;color:var(--faint);text-decoration:none;white-space:nowrap}
+.hd .adm:hover{color:var(--dim)}
 
-    <!-- 6. 載入 Firebase Compat 版本 -->
-    <script defer src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script defer src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+/* ── 最新消息 ── */
+.news{background:linear-gradient(90deg,rgba(255,201,77,.14),rgba(255,201,77,.05));border-bottom:1px solid var(--line)}
+.news .in{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:13.5px}
+.news .tag{color:var(--beam);font-weight:700;flex-shrink:0}
+.news .marq{flex:1;min-width:0;overflow:hidden}
+.news .tx{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#E4E0D2}
+@media(max-width:720px){
+  .news .tx{overflow:visible;text-overflow:clip;width:max-content;animation:slide 16s linear infinite}
+  @keyframes slide{0%{transform:translateX(100vw)}100%{transform:translateX(-100%)}}
+}
 
-    <style>
-        
-        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; -webkit-tap-highlight-color: transparent; }
-        .fade-in { animation: fadeIn 0.3s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .glass-nav { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(226, 232, 240, 0.8); }
-        .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-        .custom-select { -webkit-appearance: none; -moz-appearance: none; appearance: none; }
-        
-        /* 跑馬燈動畫 */
-        @keyframes marquee {
-            0% { transform: translateX(100%); }
-            100% { transform: translateX(-100%); }
-        }
-        .animate-marquee {
-            display: inline-block;
-            white-space: nowrap;
-            animation: marquee 20s linear infinite;
-        }
-        .marquee-container:hover .animate-marquee {
-            animation-play-state: paused;
-        }
-        
-        /* 遊戲化樣式 */
-        .xp-bar-fill { transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); }
-        .quest-card { transition: all 0.2s ease; }
-        .quest-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; border: 2px solid transparent; background-clip: content-box; }
-        /* 像素風圖片修正 */
-        .pixel-art { image-rendering: pixelated; }
-        .schedule-title-wrap { overflow: visible; }
-        .schedule-side-decor { pointer-events: none; user-select: none; z-index: 5; }
-        @media (max-width: 767px) {
-            .schedule-side-decor {
-                display: block !important;
-                width: var(--decor-mobile-width) !important;
-                opacity: 1 !important;
-            }
-            .schedule-side-decor-left {
-                left: 0 !important;
-            }
-            .schedule-side-decor-right {
-                right: 0 !important;
-            }
-        }
-        @media (min-width: 1024px) {
-            .planning-palette-panel {
-                position: sticky;
-                top: 1.5rem;
-                align-self: flex-start;
-            }
-            .planning-calendar-panel {
-                grid-column: span 3 / span 3;
-                min-width: 0;
-            }
-        }
-    </style>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@300;400;500;600;700&family=Noto+Serif+TC:wght@600;700;900&display=swap">
+/* ── 佈局 ── */
+main{padding:26px 0 90px}
+.cols{display:grid;grid-template-columns:360px 1fr;gap:34px;align-items:start}
+.cols>*{min-width:0}
+@media(max-width:960px){.cols{grid-template-columns:1fr;gap:18px}}
+
+/* ── 篩選列 ── */
+.toolbar{grid-column:1/-1;display:flex;flex-direction:column;gap:8px;margin-bottom:4px}
+.trow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{background:transparent;border:1px solid var(--line);color:var(--dim);font-size:13.5px;padding:7px 15px;border-radius:99px;cursor:pointer;font-family:var(--sans);display:inline-flex;align-items:center;gap:7px;transition:border-color .12s}
+.chip:hover{border-color:var(--dim)}
+.chip .dot{width:8px;height:8px;border-radius:99px;background:var(--dot,#888)}
+.chip.on{background:var(--moon);color:var(--night);border-color:var(--moon);font-weight:700}
+.chip.on .dot{outline:2px solid rgba(11,18,16,.25)}
+.chip.tg.on{background:var(--beam);border-color:var(--beam)}
+.sep{width:1px;height:22px;background:var(--line);margin:0 6px}
+@media(max-width:960px){
+  .toolbar{position:sticky;top:0;z-index:40;background:rgba(11,18,16,.92);backdrop-filter:blur(10px);padding:10px 0 8px;margin:0;gap:7px}
+  .trow{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:1px}
+  .trow::-webkit-scrollbar{display:none}
+  .sep{display:none}
+  .chip{flex-shrink:0}
+}
+
+/* ── 月曆 ── */
+.calbox{position:sticky;top:18px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:18px}
+.caltoggle{display:none}
+@media(max-width:960px){
+  .caltoggle{display:block;width:100%;background:transparent;border:none;color:var(--dim);font:600 13.5px var(--sans);text-align:left;padding:2px 2px 10px;cursor:pointer}
+  .calbox.closed .calnav,.calbox.closed table.cal,.calbox.closed .legend{display:none}
+  .calbox.closed .caltoggle{padding:2px;color:var(--moon)}
+  .calbox{position:static;padding:12px 12px 10px}
+  .calnav{margin-bottom:6px}
+  .calnav .m{font-size:16px}
+  .calnav button{width:30px;height:30px}
+  .day{aspect-ratio:1/0.82;font-size:12.5px;border-radius:9px}
+  .legend{margin-top:8px;padding-top:8px;gap:4px 12px}
+  .calnote{display:none}
+}
+.calnav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.calnav .m{font-family:var(--serif);font-weight:900;font-size:19px}
+.calnav button{background:transparent;border:1px solid var(--line);color:var(--moon);width:34px;height:34px;border-radius:10px;cursor:pointer;font-size:15px}
+.calnav button:disabled{opacity:.25;cursor:default}
+.calnav button:not(:disabled):hover{border-color:var(--beam);color:var(--beam)}
+table.cal{width:100%;border-collapse:collapse;table-layout:fixed}
+.cal th{font-size:11.5px;color:var(--faint);font-weight:600;padding:4px 0 8px}
+.cal th.we{color:var(--beam)}
+.cal td{padding:2px}
+.day{position:relative;width:100%;aspect-ratio:1/1.02;border:1px solid transparent;border-radius:12px;background:transparent;cursor:default;font-family:var(--sans);color:var(--moon);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:13.5px}
+.day .n{line-height:1}
+.day .dots{display:flex;gap:3px;height:6px}
+.day .dots i{width:6px;height:6px;border-radius:99px}
+.day .fullmark{position:absolute;top:4px;right:5px;font-size:9px;color:var(--alert);font-weight:700}
+.day .restmark{font-size:10px;color:var(--faint);line-height:1;height:6px;display:flex;align-items:center}
+.day.rest .n{color:var(--faint)}
+.day.q{border-color:rgba(157,192,139,.6);background:rgba(157,192,139,.1);cursor:pointer}
+.day.q:hover{border-color:var(--ok)}
+.day.nq{opacity:.25}
+.day.has{cursor:pointer;background:var(--panel2);border-color:var(--line)}
+.day.has:hover{border-color:var(--beam)}
+.day.allfull{opacity:.5}
+.day.off .n{color:var(--faint)}
+.day.past{opacity:.28;cursor:default;background:transparent;border-color:transparent}
+.day.today{border-color:var(--beam);box-shadow:0 0 0 1px var(--beam) inset}
+.day.sel{background:var(--moon)}
+.day.sel .n{color:var(--night);font-weight:700}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:12px;color:var(--dim)}
+.legend i{display:inline-block;width:7px;height:7px;border-radius:99px;margin-right:5px}
+.calnote{margin-top:10px;font-size:11.5px;color:var(--faint)}
+
+/* ── 時間軸 ── */
+.stats{font-size:13.5px;color:var(--dim);margin-bottom:14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.stats b{color:var(--beam)}
+.clearday{background:var(--moon);border:none;color:var(--night);font-size:12.5px;font-weight:700;padding:5px 13px;border-radius:99px;cursor:pointer;font-family:var(--sans)}
+.clearday:hover{background:var(--beam)}
+.dgroup{margin-bottom:6px}
+.dhead{display:flex;align-items:baseline;gap:10px;padding:16px 0 10px;position:sticky;top:0;background:var(--night);z-index:5}
+@media(max-width:960px){.dhead{top:52px}}
+.dhead .d{font-family:var(--serif);font-weight:900;font-size:20px}
+.dhead .w{font-size:13px;color:var(--dim)}
+.dhead .w.we{color:var(--beam)}
+.dhead .tonight{font-size:11.5px;font-weight:700;background:var(--beam);color:#241A02;padding:2px 9px;border-radius:99px}
+.row{display:flex;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:12px;margin-bottom:10px;align-items:center;transition:border-color .12s}
+.row:hover{border-color:rgba(255,201,77,.45)}
+.row .thumb{width:86px;height:64px;border-radius:10px;object-fit:cover;flex-shrink:0;background:var(--panel2)}
+.row .thumb.ph{display:flex;align-items:center;justify-content:center;font-size:24px}
+.row .info{flex:1;min-width:0}
+.row .l1{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--dim);margin-bottom:2px}
+.row .l1 .tp{font-weight:700;font-size:11.5px;padding:1px 8px;border-radius:99px;border:1px solid currentColor}
+.row .l1 .kind.k1{color:var(--dim);background:rgba(244,239,228,.07)}
+.row .l1 .kind.k2{color:#B8A9F0;background:rgba(184,169,240,.1)}
+.row.priv{background:var(--panel2);border-style:dashed}
+.row.priv:hover{border-color:var(--line)}
+.row .alt a.dm,.stats a.dm{color:var(--beam);text-decoration:none;border-bottom:1px dotted var(--beam)}
+a.charter{display:block;background:rgba(157,192,139,.09);border:1px dashed rgba(157,192,139,.5);color:var(--ok);font-size:13.5px;font-weight:600;padding:11px 16px;border-radius:14px;margin-bottom:10px;text-decoration:none}
+a.charter:hover{border-color:var(--ok);background:rgba(157,192,139,.16)}
+a.charter.cday{display:flex;align-items:center;gap:14px}
+a.charter .cd{display:flex;align-items:baseline;gap:7px;min-width:96px;color:var(--moon)}
+a.charter .cd b{font-family:var(--serif);font-size:19px;font-weight:900}
+a.charter .cd span{font-size:12.5px;color:var(--dim)}
+a.charter .cd span.cwe{color:var(--beam)}
+a.charter .ct{flex:1}
+a.charter .cgo{font-size:12.5px;color:var(--dim);white-space:nowrap}
+a.charter.cday:hover .cgo{color:var(--ok)}
+.row h3{font-size:15px;font-weight:600;line-height:1.45;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .alt{font-size:12.5px;color:var(--dim);margin-top:3px}
+.row .alt a{color:var(--ok);text-decoration:none;border-bottom:1px dotted var(--ok);display:inline-block;padding:4px 2px;margin:-4px -2px}
+.row .act{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
+.row .seats{font-size:12px;font-weight:700;color:var(--ok);white-space:nowrap}
+.row .seats.low{color:var(--alert)}
+.row .seats.full{color:var(--faint)}
+.row .book{background:var(--beam);color:#241A02;font-weight:700;font-size:13.5px;padding:8px 18px;border-radius:9px;text-decoration:none;white-space:nowrap}
+.row .book:hover{background:#FFD873}
+.row .book .pr{font-weight:400;opacity:.75}
+.row.full{opacity:.6}
+.row.full:hover{border-color:var(--line)}
+.row.flash{animation:flash 1.6s ease}
+@keyframes flash{0%,60%{border-color:var(--beam);box-shadow:0 0 0 1px var(--beam)}100%{}}
+@media(max-width:720px){
+  .row{flex-wrap:wrap}
+  .row .thumb{width:64px;height:52px}
+  .row .info{flex:1 1 0;min-width:0}
+  .row h3{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .row .act{flex-direction:row;align-items:center;width:100%;justify-content:space-between;padding-top:4px;border-top:1px dashed var(--line)}
+}
+.empty{padding:40px 0;text-align:center;color:var(--dim)}
+.endnote{padding:26px 0;text-align:center;color:var(--faint);font-size:13.5px}
+.endnote a{color:var(--dim)}
+.loading{padding:60px 0;text-align:center;color:var(--dim)}
+
+/* 回到今天 */
+.totop{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:50;background:var(--panel);border:1px solid var(--line);color:var(--moon);font-size:13px;font-weight:600;padding:10px 16px;border-radius:99px;cursor:pointer;display:none;box-shadow:0 4px 18px rgba(0,0,0,.4)}
+.totop.show{display:block}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.news .tx{animation:none}}
+</style>
 </head>
 <body>
-    <div id="root"></div>
 
-    <script defer src="./app.bundle.js?v=20260626-remove-traffic-analytics"></script>
+<header>
+  <div class="wrap hd">
+    <div class="brand">
+      <img src="./LOGO.png" alt="">
+      <div><div class="t">活動行程表</div><div class="s">TPHA 台北城市狩獵</div></div>
+    </div>
+    <a class="adm" href="./admin.html">管理員登入</a>
+  </div>
+</header>
+
+<div class="news" id="news" hidden>
+  <div class="wrap in"><span class="tag">最新消息</span><span class="marq"><span class="tx" id="newsTx"></span></span></div>
+</div>
+
+<main>
+  <div class="wrap cols">
+
+    <div class="toolbar" id="toolbar"><!-- chips 由 JS 產生 --></div>
+
+    <aside>
+      <div class="calbox" id="calbox">
+        <button class="caltoggle" id="calToggle">收合月曆 ▲</button>
+        <div class="calnav">
+          <button id="prevM" aria-label="上個月">‹</button>
+          <div class="m" id="calTitle"></div>
+          <button id="nextM" aria-label="下個月">›</button>
+        </div>
+        <table class="cal" aria-label="活動月曆">
+          <thead><tr>
+            <th class="we">日</th><th>一</th><th>二</th><th>三</th><th>四</th><th>五</th><th class="we">六</th>
+          </tr></thead>
+          <tbody id="calBody"></tbody>
+        </table>
+        <div class="legend" id="legend"></div>
+        <div class="calnote">點日期直接跳到當天場次。名額即時同步報名系統，以報名頁為準。</div>
+      </div>
+    </aside>
+
+    <section id="list">
+      <div class="loading">正在讀取最新場次⋯</div>
+    </section>
+
+  </div>
+</main>
+
+<button class="totop" id="totop">↑ 回到本週</button>
+
+<script>
+/* ═══ Microsoft Clarity（行為追蹤）═══
+   到 https://clarity.microsoft.com 用 Microsoft 帳號建立專案後，
+   把專案的 Project ID 填進下面引號內即可生效；留空＝不追蹤。 */
+const CLARITY_ID='xkdjdbwe1f';
+if(CLARITY_ID){
+  (function(c,l,a,r,i,t,y){
+    c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+    t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+    y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+  })(window,document,"clarity","script",CLARITY_ID);
+}
+
+/* ═══ 與正式系統同一資料來源（唯讀 GET） ═══ */
+const PROJECT_ID='crm-sys-4184a';
+const API_KEY='AIzaSyBtfR8N9Dw9kG3jQSfJSs0p0MLvlQaOR74';
+const BASE=`https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/artifacts/default-app-id/public/data`;
+const WINDOW_DAYS=70;
+
+/* rezio 產品對照（縮圖與價格，2026-07-11 抓取；改價要更新） */
+const PRODUCTS={
+ "RVPMTW":{img:"https://img.rezio.io/seo1/10a4d770-0df7-48a7-b1a1-85f39cae4470/3b560497-9759-4e78-834f-cf0059503c42.jpeg",price:800},
+ "QUCGJY":{img:"https://img.rezio.io/seo1/10a4d770-0df7-48a7-b1a1-85f39cae4470/cbc4d848-1e57-4c60-a78a-c6cd5a3ba7f0.jpeg",price:800},
+ "YFSMMD":{img:"https://img.rezio.io/seo1/10a4d770-0df7-48a7-b1a1-85f39cae4470/5d88bf02-f2e8-4b50-9288-8197a8ab1bfa.jpeg",price:800},
+ "REESGE":{img:"https://img.rezio.io/seo1/10a4d770-0df7-48a7-b1a1-85f39cae4470/36b2affd-f9d0-4c85-bcf9-18b3bc0388fb.jpeg",price:800},
+ "DSTGTS":{img:"https://img.rezio.io/seo1/10a4d770-0df7-48a7-b1a1-85f39cae4470/7662fcd5-146b-42b1-a5cb-a159648eed14.jpeg",price:800},
+ "NLEGE1":{img:"https://img.rezio.io/seo1/10a4d770-0df7-48a7-b1a1-85f39cae4470/578fcdc4-4b58-4fb3-8530-28a38f0842f6.jpeg",price:800},
+ "MHNSMK":{img:"https://img.rezio.io/seo1/10a4d770-0df7-48a7-b1a1-85f39cae4470/39a5e779-7af3-484c-b747-ae17d0cfea64.jpeg",price:800},
+ "IKRH2W":{img:"https://img.rezio.io/seo1/10a4d770-0df7-48a7-b1a1-85f39cae4470/f591c392-7771-493a-926b-5ef4031a2d53.jpeg",price:800},
+ "SRSCG0":{img:"https://img.rezio.io/seo1/10a4d770-0df7-48a7-b1a1-85f39cae4470/e1351a12-87cd-4531-bca0-48a7805a8600.jpeg",price:300},
+ "EXS6H0":{img:"https://img.rezio.io/seo1/10a4d770-0df7-48a7-b1a1-85f39cae4470/5aaa50a7-8fe2-4710-b16e-5eb6baa2aadb.jpeg",price:800},
+ "CXFGQX":{img:"https://img.rezio.io/seo1/10a4d770-0df7-48a7-b1a1-85f39cae4470/a0a5ec12-f108-488f-850c-2bdf8caed146.jpeg",price:800},
+ "DAXMAJ":{img:"https://img.rezio.io/seo1/10a4d770-0df7-48a7-b1a1-85f39cae4470/a4b04f3c-102f-43e1-89af-c8d20955dc9f.jpeg",price:800},
+ "9FSTFI":{img:"",price:1500},
+ "KAMW6N":{img:"https://img.rezio.io/seo1/10a4d770-0df7-48a7-b1a1-85f39cae4470/dc8c610d-8e13-4dca-a791-aba9055c9fd0.jpeg",price:1899}
+};
+const TYPE_COLOR={'飛鼠':'#FFC94D','蛇':'#9DC08B','蛙':'#7FD1E8','昆蟲':'#E8A0C8','走走':'#F4EFE4','新手':'#B8A9F0','其他':'#A9B2A4'};
+const TYPE_EMOJI={'飛鼠':'🐿️','蛇':'🐍','蛙':'🐸','昆蟲':'🪲','走走':'🚶','新手':'🔦','其他':'🌿'};
+
+function decodeFs(v){
+  if(v==null||typeof v!=='object')return v;
+  if('stringValue'in v)return v.stringValue;
+  if('integerValue'in v)return parseInt(v.integerValue,10);
+  if('doubleValue'in v)return v.doubleValue;
+  if('booleanValue'in v)return v.booleanValue;
+  if('nullValue'in v)return null;
+  if('mapValue'in v){const o={};for(const[k,x]of Object.entries(v.mapValue.fields||{}))o[k]=decodeFs(x);return o}
+  if('arrayValue'in v)return(v.arrayValue.values||[]).map(decodeFs);
+  return v;
+}
+async function fsGet(path,masks=[]){
+  const q=masks.map(f=>'mask.fieldPaths='+encodeURIComponent(f)).join('&');
+  const r=await fetch(`${BASE}/${path}?key=${API_KEY}${q?'&'+q:''}`);
+  if(!r.ok)throw new Error('Firestore '+r.status);
+  return r.json();
+}
+async function fsList(collection,masks=[]){
+  const docs=[];let token='';
+  do{
+    const q=['pageSize=300',...masks.map(f=>'mask.fieldPaths='+encodeURIComponent(f))];
+    if(token)q.push('pageToken='+encodeURIComponent(token));
+    const r=await fetch(`${BASE}/${collection}?key=${API_KEY}&${q.join('&')}`);
+    if(!r.ok)throw new Error('Firestore '+r.status);
+    const j=await r.json();
+    for(const d of j.documents||[])docs.push(d);
+    token=j.nextPageToken||'';
+  }while(token);
+  return docs;
+}
+function eventKeyOf(date,name,instr){
+  const s=instr?instr.split(/[&,]/).map(x=>x.trim()).sort().join(' & '):'';
+  return `${date}_${name}_${s}`.replace(/[\/\\#\?]/g,'-');
+}
+function parseCSV(t){
+  const rows=[];let f='',row=[],q=false;
+  const pf=()=>{row.push(f);f=''},pr=()=>{if(row.length>1||row[0]!=='')rows.push(row);row=[]};
+  for(let i=0;i<t.length;i++){const c=t[i];
+    if(q){if(c==='"'){if(t[i+1]==='"'){f+='"';i++}else q=false}else f+=c}
+    else if(c==='"')q=true;else if(c===',')pf();else if(c==='\n'){pf();pr()}else if(c!=='\r')f+=c}
+  pf();pr();return rows;
+}
+function normDate(s){
+  s=String(s||'').trim();
+  const m=s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if(!m)return'';
+  return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;
+}
+function typeOf(n){
+  if(/飛鼠|鼯/.test(n))return'飛鼠';
+  if(/蛇/.test(n))return'蛇';
+  if(/蛙/.test(n))return'蛙';
+  if(/蟲/.test(n))return'昆蟲';
+  if(/走走/.test(n))return'走走';
+  if(/新手|夜觀/.test(n))return'新手';
+  return'其他';
+}
+function todayTW(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date())}
+function addDays(iso,n){
+  const d=new Date(iso+'T00:00:00+08:00');d.setDate(d.getDate()+n);
+  return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(d);
+}
+const WD=['週日','週一','週二','週三','週四','週五','週六'];
+function dow(iso){return new Date(iso+'T00:00:00+08:00').getDay()}
+
+/* ═══ 狀態 ═══ */
+const T0=todayTW(),T1=addDays(T0,WINDOW_DAYS);
+let SESSIONS=[],BYDATE=new Map(),NEWS='',REST=new Set(),OUTING=new Set();
+let fType='全部',fSeats=false,fWeekend=false,fDate=null,fCharter=false;
+const FB_DM='https://m.me/TPHAEcotourism';
+/* 可包場的日子：非公休、非出遊日、沒被多天活動（如大小雪山 7/18-19）蓋住，
+   且當天「開成」的單日活動 ≤ 1 場。回傳 Map(日期→開成場數) */
+function charterDays(){
+  const blocked=new Set([...REST,...OUTING]);
+  for(const s of SESSIONS){
+    if(s.runs&&s.duration>1)for(let i=0;i<s.duration;i++)blocked.add(addDays(s.date,i));
+  }
+  const m=new Map();
+  for(let d=T0;d<=T1;d=addDays(d,1)){
+    if(blocked.has(d))continue;
+    const runs=(BYDATE.get(d)||[]).filter(s=>s.runs).length;
+    if(runs<=1)m.set(d,runs);
+  }
+  return m;
+}
+let calY=+T0.slice(0,4),calM=+T0.slice(5,7); // 顯示中的月份
+
+async function load(){
+  const[mainDoc,schDoc,cfgDocs]=await Promise.all([
+    fsGet('settings/main',['csvData','latestNews']),
+    fsGet('settings/schedule',['companyRest','outingDays']).catch(()=>({})),
+    fsList('event_configs',['displayName','time','capacity','isCancelled','link','duration']),
+  ]);
+  const sch=decodeFs({mapValue:{fields:schDoc.fields||{}}});
+  REST=new Set(sch.companyRest||[]);
+  OUTING=new Set(Object.entries(sch.outingDays||{}).filter(([,v])=>v&&v.enabled).map(([k])=>k));
+  const mainF={};for(const[k,v]of Object.entries(mainDoc.fields||{}))mainF[k]=decodeFs(v);
+  NEWS=(mainF.latestNews||'').trim();
+  const counts={};
+  const rows=parseCSV(mainF.csvData||'');
+  for(let i=1;i<rows.length;i++){
+    const v=rows[i];if(v.length<5)continue;
+    const date=normDate(v[0]);if(!date||date<T0||date>T1)continue;
+    const key=eventKeyOf(date,(v[1]||'').trim(),(v[2]||'').trim());
+    if((v[3]||'').trim()==='開放報名中'){counts[key]=counts[key]||0;continue}
+    counts[key]=(counts[key]||0)+1;
+  }
+  const list=[];
+  for(const d of cfgDocs){
+    const id=decodeURIComponent(d.name.split('/').pop());
+    const date=id.slice(0,10);
+    if(date<T0||date>T1)continue;
+    const f={};for(const[k,v]of Object.entries(d.fields||{}))f[k]=decodeFs(v);
+    if(f.isCancelled)continue;
+    const link=(f.link||'').trim();
+    const parts=id.split('_');
+    const name=parts.slice(1,-1).join('_'),instr=parts[parts.length-1]||'';
+    const dn=(f.displayName||'').trim();
+    /* 場次性質：一般（可報名）／包團／社群限定。
+       沒有報名連結的場：帶客名括號或標包團→包團，其餘一律視為社群限定（世祥 2026-07-11 確認） */
+    let kind='一般';
+    if(/包團|包場/.test(dn)||(!link&&/[（(]/.test(name)))kind='包團';
+    else if(/社群/.test(dn+name)||!link)kind='社群限定';
+    const code=(link.match(/\/product\/([A-Z0-9]+)/i)||[])[1]||'';
+    const cap=parseInt(f.capacity,10)||12;
+    const cnt=counts[eventKeyOf(date,name,instr)]??counts[id]??0;
+    const bookable=!!link;
+    list.push({
+      id,date,dow:dow(date),time:(f.time||'').slice(0,5),/* 沒填時間就不顯示，避免誤導 */
+      title:kind==='包團'?'包團活動':(dn||name).trim(),/* 包團不顯示客戶名稱 */
+      instr,link,code,kind,bookable,
+      type:typeOf(dn+name),
+      cap,remaining:bookable?Math.max(0,cap-cnt):0,
+      runs:kind!=='一般'||cnt>0, /* 「開成」＝包團/社群場、或已有人報名 */
+      duration:Math.max(1,parseInt(f.duration,10)||1),
+      img:(PRODUCTS[code]||{}).img||'',
+    });
+  }
+  list.sort((a,b)=>a.date===b.date?a.time.localeCompare(b.time):a.date.localeCompare(b.date));
+  SESSIONS=list;
+  BYDATE=new Map();
+  for(const s of list){if(!BYDATE.has(s.date))BYDATE.set(s.date,[]);BYDATE.get(s.date).push(s)}
+  if(NEWS){document.getElementById('newsTx').textContent=NEWS;document.getElementById('news').hidden=false}
+  buildToolbar();renderCal();renderList();
+}
+
+/* ═══ 篩選 ═══ */
+function filtered(){
+  return SESSIONS.filter(s=>
+    (fType==='全部'||s.type===fType)&&
+    (!fSeats||s.remaining>0)&&
+    (!fWeekend||s.dow===0||s.dow===6)&&
+    (!fDate||s.date===fDate));
+}
+/* 月曆點點與可點狀態依「日期以外的篩選」計算，選了某天其他天仍可點 */
+function filteredNoDate(){
+  return SESSIONS.filter(s=>
+    (fType==='全部'||s.type===fType)&&
+    (!fSeats||s.remaining>0)&&
+    (!fWeekend||s.dow===0||s.dow===6));
+}
+function buildToolbar(){
+  const tb=document.getElementById('toolbar');
+  tb.innerHTML='';
+  /* 第一行：系列；第二行：功能開關（手機各自獨立橫向捲動，開關不再被擠出畫面） */
+  const r1=document.createElement('div');r1.className='trow';
+  const types=['全部',...new Set(SESSIONS.map(s=>s.type))];
+  for(const t of types){
+    const b=document.createElement('button');
+    b.className='chip'+(t===fType?' on':'');
+    b.innerHTML=(t==='全部'?'全部':`<span class="dot" style="--dot:${TYPE_COLOR[t]}"></span>${t}`);
+    b.onclick=()=>{fType=t;buildToolbar();renderCal();renderList()};
+    r1.appendChild(b);
+  }
+  const r2=document.createElement('div');r2.className='trow';
+  const mk=(label,get,set)=>{
+    const b=document.createElement('button');
+    b.className='chip tg'+(get()?' on':'');b.textContent=label;
+    b.onclick=()=>{set();buildToolbar();renderCal();renderList()};
+    return b;
+  };
+  r2.append(
+    mk('只看有名額',()=>fSeats,()=>fSeats=!fSeats),
+    mk('只看週末',()=>fWeekend,()=>fWeekend=!fWeekend),
+    mk('可包場的日子',()=>fCharter,()=>{fCharter=!fCharter;fDate=null})
+  );
+  tb.append(r1,r2);
+}
+
+/* ═══ 月曆 ═══ */
+function renderCal(){
+  const QUAL=charterDays();
+  const list=filteredNoDate();
+  const by=new Map();
+  for(const s of list){if(!by.has(s.date))by.set(s.date,[]);by.get(s.date).push(s)}
+  document.getElementById('calTitle').textContent=`${calY} 年 ${calM} 月`;
+  const first=`${calY}-${String(calM).padStart(2,'0')}-01`;
+  const startDow=dow(first);
+  const daysInM=new Date(calY,calM,0).getDate();
+  let html='',cell=0,row='<tr>';
+  for(let i=0;i<startDow;i++){row+='<td></td>';cell++}
+  for(let d=1;d<=daysInM;d++){
+    const iso=`${calY}-${String(calM).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const ss=by.get(iso)||[];
+    const past=iso<T0;
+    const rest=REST.has(iso)&&!ss.length;
+    const types=[...new Set(ss.map(s=>s.type))].slice(0,3);
+    const bk=ss.filter(s=>s.bookable);
+    const allFull=bk.length>0&&bk.every(s=>s.remaining<=0);
+    const q=fCharter&&QUAL.has(iso)&&!past;
+    const clickable=!past&&(fCharter?q:ss.length>0);
+    const cls=['day',past?'past':'',ss.length?'has':'off',allFull?'allfull':'',rest?'rest':'',
+      iso===T0?'today':'',iso===fDate?'sel':'',fCharter?(q?'q':'nq'):''].filter(Boolean).join(' ');
+    const dots=types.map(t=>`<i style="background:${TYPE_COLOR[t]}"></i>`).join('');
+    row+=`<td><button class="${cls}" ${clickable?`data-d="${iso}"`:'disabled'} aria-label="${iso}${ss.length?`，${ss.length} 場`:rest?'，公休':''}${q?'，可包場':''}">
+      <span class="n">${d}</span>${rest?'<span class="restmark">休</span>':`<span class="dots">${dots}</span>`}${allFull?'<span class="fullmark">滿</span>':''}
+    </button></td>`;
+    cell++;
+    if(cell%7===0){html+=row+'</tr>';row='<tr>'}
+  }
+  if(cell%7!==0){while(cell%7!==0){row+='<td></td>';cell++}html+=row+'</tr>'}
+  document.getElementById('calBody').innerHTML=html;
+  document.querySelectorAll('.day[data-d]').forEach(b=>b.onclick=()=>selectDate(b.dataset.d));
+  /* 月份導覽範圍：本月 ～ 資料窗口最後一個月 */
+  const minYM=T0.slice(0,7),maxYM=T1.slice(0,7);
+  const ym=`${calY}-${String(calM).padStart(2,'0')}`;
+  document.getElementById('prevM').disabled=ym<=minYM;
+  document.getElementById('nextM').disabled=ym>=maxYM;
+  /* 圖例 */
+  const used=[...new Set(SESSIONS.map(s=>s.type))];
+  document.getElementById('legend').innerHTML=
+    used.map(t=>`<span><i style="background:${TYPE_COLOR[t]}"></i>${t}</span>`).join('')
+    +'<span style="color:var(--alert)">滿＝全額滿</span><span style="color:var(--faint)">休＝公休</span>';
+}
+document.getElementById('prevM').onclick=()=>{calM--;if(calM<1){calM=12;calY--}renderCal()};
+document.getElementById('nextM').onclick=()=>{calM++;if(calM>12){calM=1;calY++}renderCal()};
+
+/* ═══ 時間軸 ═══ */
+function seatsHtml(s){
+  if(s.remaining<=0)return'<span class="seats full">已額滿</span>';
+  if(s.remaining<=2)return`<span class="seats low">最後 ${s.remaining} 位</span>`;
+  if(s.remaining<=5)return`<span class="seats low">剩 ${s.remaining} 位</span>`;
+  return`<span class="seats">名額充足</span>`;
+}
+function altDates(s){
+  /* 同一 rezio 產品、未來、還有位的其他日期（最多 3 個） */
+  if(!s.code)return[];
+  return SESSIONS.filter(x=>x.code===s.code&&x.date!==s.date&&x.bookable&&x.remaining>0).slice(0,3);
+}
+function renderList(){
+  if(fCharter){renderCharterList();return}
+  const el=document.getElementById('list');
+  const list=filtered();
+  if(!list.length){el.innerHTML='<div class="empty">這個組合近期沒有場次。試著取消一些篩選，或到 <a href="https://tphaecotourism.rezio.shop/zh-TW" style="color:var(--ok)">活動總覽</a> 看看。</div>';return}
+  const open=list.filter(s=>s.remaining>0);
+  const twoWeeks=list.filter(s=>s.date<=addDays(T0,14)&&s.remaining>0);
+  let html;
+  if(fDate){
+    const[,m,d]=fDate.split('-');
+    html=`<div class="stats"><span>只顯示 <b>${+m}/${+d} ${WD[dow(fDate)]}</b>，共 <b>${list.length}</b> 場、<b>${open.length}</b> 場有名額。</span>
+      <button class="clearday" onclick="selectDate(null)">✕ 顯示全部日期</button></div>`;
+  }else{
+    html=`<div class="stats"><span>未來 ${WINDOW_DAYS} 天共 <b>${list.length}</b> 場${fType==='全部'?'':`（${fType}）`}，
+    其中 <b>${open.length}</b> 場還有名額；兩週內還可報名 <b>${twoWeeks.length}</b> 場。</span></div>`;
+  }
+  let cur='';
+  for(const s of list){
+    if(s.date!==cur){
+      if(cur)html+='</div>';
+      cur=s.date;
+      const[,m,d]=s.date.split('-');
+      const we=s.dow===0||s.dow===6;
+      const tonight=s.date===T0?'今晚':s.date===addDays(T0,1)?'明晚':'';
+      html+=`<div class="dgroup" id="d-${s.date}">
+        <div class="dhead"><span class="d">${+m}/${+d}</span><span class="w ${we?'we':''}">${WD[s.dow]}</span>${tonight?`<span class="tonight">${tonight}</span>`:''}</div>`;
+    }
+    const full=s.bookable&&s.remaining<=0;
+    const alts=full?altDates(s):[];
+    const special=s.kind!=='一般';
+    html+=`<div class="row ${full?'full':''} ${special?'priv':''}">
+      ${s.img?`<img class="thumb" src="${s.img}" alt="" loading="lazy">`:`<div class="thumb ph">${TYPE_EMOJI[s.type]}</div>`}
+      <div class="info">
+        <div class="l1"><span class="tp" style="color:${TYPE_COLOR[s.type]}">${s.type}</span>
+          ${special?`<span class="tp kind ${s.kind==='包團'?'k1':'k2'}">${s.kind}</span>`:''}
+          ${s.time?`<span>${s.time}</span>`:''}${s.instr&&s.kind!=='包團'?`<span>講師 ${s.instr}</span>`:''}</div>
+        <h3>${s.title}</h3>
+        ${alts.length?`<div class="alt">這場滿了，同路線還有位：${alts.map(a=>{
+          const[,m2,d2]=a.date.split('-');
+          return`<a href="#" data-jump="${a.date}">${+m2}/${+d2} ${WD[a.dow]}</a>`}).join('、')}</div>`:''}
+        ${s.kind==='包團'?`<div class="alt">你也可以幫公司或朋友包一場 → <a class="dm" href="${FB_DM}" target="_blank" rel="noopener">私訊粉專</a></div>`:''}
+      </div>
+      <div class="act">
+        ${s.bookable?seatsHtml(s):`<span class="seats full">${s.kind==='包團'?'不開放報名':'社群成員限定'}</span>`}
+        ${s.bookable&&!full?`<a class="book" href="${s.link}" target="_blank" rel="noopener">報名</a>`:''}
+      </div>
+    </div>`;
+  }
+  if(cur)html+='</div>';
+  html+=`<div class="endnote">只顯示未來 ${WINDOW_DAYS} 天。更遠的計畫、包團與客製行程 → <a href="https://tphaecotourism.rezio.shop/zh-TW" target="_blank" rel="noopener">活動總覽</a></div>`;
+  el.innerHTML=html;
+  el.querySelectorAll('[data-jump]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();selectDate(a.dataset.jump)}));
+}
+/* 可包場模式：列出所有符合「當天開成 ≤ 1 場」的日子 */
+function renderCharterList(){
+  const el=document.getElementById('list');
+  const QUAL=charterDays();
+  let days=[...QUAL.keys()];
+  if(fWeekend)days=days.filter(d=>{const w=dow(d);return w===0||w===6});
+  if(fDate)days=days.filter(d=>d===fDate);
+  let html=`<div class="stats"><span>未來 ${WINDOW_DAYS} 天有 <b>${days.length}</b> 天可以接包場（開成的活動不超過一場）。
+    想幫公司、學校或朋友辦一場？<a class="dm" href="${FB_DM}" target="_blank" rel="noopener">私訊粉專</a>告訴我們人數、日期與地點偏好。</span>
+    ${fDate?'<button class="clearday" onclick="selectDate(null)">✕ 顯示全部日期</button>':''}</div>`;
+  if(!days.length)html+='<div class="empty">這個組合下近期沒有可包場的日子。</div>';
+  /* 只列日期，不列當天場次（世祥 2026-07-11 指定） */
+  for(const d of days){
+    const[,m,dd]=d.split('-');
+    const we=dow(d)===0||dow(d)===6;
+    const runs=QUAL.get(d);
+    html+=`<a class="charter cday" id="d-${d}" href="${FB_DM}" target="_blank" rel="noopener">
+      <span class="cd"><b>${+m}/${+dd}</b><span class="${we?'cwe':''}">${WD[dow(d)]}</span></span>
+      <span class="ct">${runs===0?'整天可包場':'還接得下一組包團'}</span>
+      <span class="cgo">私訊預約 →</span>
+    </a>`;
+  }
+  html+=`<div class="endnote">開團門檻 4 人，湊足即可私訊粉專預約時間與地點。</div>`;
+  el.innerHTML=html;
+}
+/* 點月曆日期＝篩選當天；再點同一天或按「顯示全部日期」取消 */
+function selectDate(iso){
+  fDate=(iso&&fDate!==iso)?iso:null;
+  if(fDate){
+    /* 跳到選取日期所在的月份 */
+    calY=+fDate.slice(0,4);calM=+fDate.slice(5,7);
+  }
+  renderCal();renderList();
+  /* 手機上月曆在列表上方，選完幫忙捲到列表開頭 */
+  if(fDate&&window.matchMedia('(max-width:960px)').matches){
+    document.getElementById('list').scrollIntoView({block:'start'});
+  }
+}
+
+/* 手機版月曆收合（記住偏好） */
+const calbox=document.getElementById('calbox'),calT=document.getElementById('calToggle');
+function setCalOpen(open){
+  calbox.classList.toggle('closed',!open);
+  calT.textContent=open?'收合月曆 ▲':'📅 展開月曆（點日期篩選當天） ▼';
+  try{localStorage.setItem('tpha_cal_open',open?'1':'0')}catch(e){}
+}
+calT.onclick=()=>setCalOpen(calbox.classList.contains('closed'));
+try{setCalOpen(localStorage.getItem('tpha_cal_open')!=='0')}catch(e){setCalOpen(true)}
+
+/* 回到本週 */
+const totop=document.getElementById('totop');
+window.addEventListener('scroll',()=>totop.classList.toggle('show',window.scrollY>900),{passive:true});
+totop.onclick=()=>window.scrollTo({top:0});
+
+load().catch(e=>{
+  document.getElementById('list').innerHTML=
+    `<div class="empty">場次讀取失敗。請重新整理，或直接到 <a href="https://tphaecotourism.rezio.shop/zh-TW" style="color:var(--ok)">活動總覽</a> 報名。</div>`;
+  console.error(e);
+});
+</script>
 </body>
 </html>
