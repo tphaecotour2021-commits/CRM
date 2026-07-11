@@ -151,6 +151,9 @@ table.cal{width:100%;border-collapse:collapse;table-layout:fixed}
 #gfound .gwho{margin-top:6px;font-size:16.5px;color:var(--moon)}
 #gfound .gwho b{color:var(--beam)}
 #gfound .grare{margin-top:6px;font-size:13px;color:var(--beam);letter-spacing:.08em}
+#gfound .gnear{margin-top:16px;font-size:15px;color:var(--moon)}
+#gfound .gnear b{color:var(--beam);font-family:var(--serif);font-size:18px}
+#gfound .gother{margin-top:4px;font-size:13px;color:var(--dim)}
 #gfound .gbtns{display:flex;flex-direction:column;gap:10px;margin-top:24px;align-items:center}
 #gfound .ggo{background:var(--beam);color:#241A02;border:none;font-weight:700;font-size:15.5px;padding:14px 26px;border-radius:13px;cursor:pointer;font-family:var(--sans);box-shadow:0 4px 26px rgba(255,201,77,.3)}
 #gfound .ggo:hover{background:#FFD873}
@@ -697,12 +700,17 @@ function gachaPick(){
   }
   if(!flat.length)return null;
   const {th,g,ss,who}=flat[Math.floor(Math.random()*flat.length)];
+  const dates=[...new Set(ss.map(s=>s.date))]; /* SESSIONS 已依日期排序 */
   return{
     gif:g.filename,action:g.action||'',
     who:who||String(th.name||'').replace(/系列$/,''),
     rare:(+g.weight||1)<=10, /* 「超幸運」標籤仍依後台 weight 判定 */
-    type:ss[0].type, n:ss.length,
+    type:ss[0].type, n:ss.length, dates,
   };
+}
+function fmtDate(iso,withWeek){
+  const[,m,d]=iso.split('-');
+  return `${+m}/${+d}`+(withWeek?`（${WD[dow(iso)]}）`:'');
 }
 function gachaClose(){
   const g=document.getElementById('gacha');
@@ -738,13 +746,16 @@ function gachaReveal(){
     const skip=document.getElementById('gskip');if(skip)skip.hidden=true;
     g.classList.add('found'); /* 光束定住：找到了 */
     const box=document.getElementById('gfound');
+    const others=e.dates.slice(1,4).map(d=>fmtDate(d,false)).join('、');
     box.innerHTML=`
       <img class="ganimal" src="./${encodeURIComponent(e.gif)}" alt="">
       <div class="glucky">${e.rare?'✨✨ 超幸運 ✨✨':'好幸運！'}</div>
       <div class="gwho">你遇到了<b>${e.who}</b>${e.action?`——正在${e.action}`:''}</div>
       ${e.rare?'<div class="grare">這個動作出現機率不到 10%</div>':''}
+      <div class="gnear">想見到本尊嗎？最近一場：<b>${fmtDate(e.dates[0],true)}</b></div>
+      ${others?`<div class="gother">其他還有 ${others}${e.dates.length>4?'⋯':''}</div>`:''}
       <div class="gbtns">
-        <button class="ggo" id="ggo">去看${e.who}的場次（${e.n} 場有名額）→</button>
+        <button class="ggo" id="ggo">看更多${e.who}場次 →</button>
         <button class="gx" id="gx">關閉</button>
       </div>`;
     box.hidden=false;
