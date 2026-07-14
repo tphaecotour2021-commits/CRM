@@ -417,11 +417,17 @@ function dow(iso){return new Date(iso+'T00:00:00+08:00').getDay()}
 
 /* ═══ 狀態 ═══ */
 const T0=todayTW(),T1=addDays(T0,WINDOW_DAYS);
-let SESSIONS=[],BYDATE=new Map(),NEWS='',REST=new Set(),OUTING=new Set();
+let SESSIONS=[],BYDATE=new Map(),NEWS='',REST=new Set(),OUTING=new Set(),RESTING={};
 let fType='全部',fSeats=false,fWeekend=false,fDate=null,fCharter=false,fLoc='全部';
 const FB_DM='https://m.me/TPHAEcotourism';
 /* 可包場的日子：非公休、非出遊日、沒被多天活動（如大小雪山 7/18-19）蓋住，
    且當天「開成」的單日活動 ≤ 1 場。回傳 Map(日期→開成場數) */
+const CHARTER_STAFF=3;  // 可帶團總人力（規則見下）
+/* 當天休假人數：resting[date] 的 all ∪ evening（活動多在晚上）去重計人 */
+function leaveCount(d){
+  const r=RESTING[d]; if(!r)return 0;
+  return new Set([...(r.all||[]),...(r.evening||[])]).size;
+}
 function charterDays(){
   const blocked=new Set([...REST,...OUTING]);
   for(const s of SESSIONS){
@@ -431,7 +437,13 @@ function charterDays(){
   for(let d=T0;d<=T1;d=addDays(d,1)){
     if(blocked.has(d))continue;
     const runs=(BYDATE.get(d)||[]).filter(s=>s.runs).length;
-    if(runs<=1)m.set(d,runs);
+    /* 2026-07-14 新增人力規則（世祥）：
+       當天「所有場」（含開放中沒人報名的，因為它可能成團要留人）＋ 1 個包團，
+       不能超過 總人力 − 當天休假人數。
+       情境驗證：1團0休→可；成團1+空團1+休1→不可；成團1+休2→不可 */
+    const allSessions=(BYDATE.get(d)||[]).length;
+    const staffOK=allSessions+1 <= CHARTER_STAFF-leaveCount(d);
+    if(runs<=1 && staffOK)m.set(d,runs);
   }
   return m;
 }
@@ -440,11 +452,12 @@ let calY=+T0.slice(0,4),calM=+T0.slice(5,7); // 顯示中的月份
 async function load(){
   const[mainDoc,schDoc,cfgDocs]=await Promise.all([
     fsGet('settings/main',['csvData','latestNews','mascotConfig','marqueeIcon','marqueeIconSize']),
-    fsGet('settings/schedule',['companyRest','outingDays']).catch(()=>({})),
+    fsGet('settings/schedule',['companyRest','outingDays','resting']).catch(()=>({})),
     fsList('event_configs',['displayName','time','capacity','isCancelled','link','duration']),
   ]);
   const sch=decodeFs({mapValue:{fields:schDoc.fields||{}}});
   REST=new Set(sch.companyRest||[]);
+  RESTING=sch.resting||{};
   OUTING=new Set(Object.entries(sch.outingDays||{}).filter(([,v])=>v&&v.enabled).map(([k])=>k));
   const mainF={};for(const[k,v]of Object.entries(mainDoc.fields||{}))mainF[k]=decodeFs(v);
   NEWS=(mainF.latestNews||'').trim();
