@@ -128,7 +128,7 @@ table.cal{width:100%;border-collapse:collapse;table-layout:fixed}
 #gacha.bye{opacity:0;pointer-events:none}
 .gbeam{position:absolute;width:min(70vmin,340px);height:min(70vmin,340px);border-radius:50%;
   background:radial-gradient(circle,rgba(255,224,150,.5),rgba(255,201,77,.16) 55%,transparent 72%);
-  filter:blur(2px);animation:gsweep 3s ease-in-out infinite}
+  filter:blur(2px);animation:gsweep 1.5s ease-in-out infinite}
 @keyframes gsweep{
   0%{transform:translate(-32vw,-18vh) scale(.8)}
   22%{transform:translate(24vw,8vh) scale(1.05)}
@@ -676,7 +676,7 @@ function renderList(){
 }
 /* ═══ 進站夜觀抽獎（壽司郎式）：手電筒搜尋 → 隨機遇見動物 → 引導看場次 ═══ */
 let MASCOTS=[];
-const GACHA_MIN_MS=3000; /* 搜尋動畫至少播這麼久（gachaShownAt 由頁尾 inline script 設在 window 上） */
+const GACHA_MIN_MS=1500; /* 搜尋動畫至少播這麼久（gachaShownAt 由頁尾 inline script 設在 window 上） */
 /* 後台 mascotConfig 關鍵字補丁：後台關鍵字設得太窄時（冬季蛙比對不到夏季蛙場次、
    水蛇的「水生蛇類」比對不到「水裡篇」），前端補上別名讓抽選池完整。
    之後若在後台把關鍵字補齊，這裡的補丁自然變成無害的重複。 */
