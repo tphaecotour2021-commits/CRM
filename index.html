@@ -347,10 +347,10 @@ const PRODUCTS={
  "9FSTFI":{img:"",price:1500},
  "KAMW6N":{img:"https://img.rezio.io/seo1/10a4d770-0df7-48a7-b1a1-85f39cae4470/dc8c610d-8e13-4dca-a791-aba9055c9fd0.jpeg",price:1899}
 };
-/* 行事曆→rezio 流量追蹤（2026-07-18）：報名連結一律走 Lihi 短網址（目的地已帶
-   utm_source=calendar&utm_medium=website），Lihi 後台標籤「行事曆」可看各產品點擊數。
-   新產品沒建短網址前，fallback 直接在原網址補 UTM 參數，追蹤不中斷；補建後把短網址加進 LIHI 表。 */
-const CAL_UTM='utm_source=calendar&utm_medium=website&utm_campaign=';
+/* 行事曆→rezio 流量追蹤（2026-07-18）：報名連結一律走 Lihi 短網址，
+   Lihi 後台標籤「行事曆」可看各產品點擊數。
+   2026-07-21 拿掉 UTM 參數（Dudu：會蓋掉廣告的 last-click 歸因），流量只看 Lihi 點擊數；
+   新產品沒建短網址前 fallback 直接用原網址，補建後把短網址加進 LIHI 表。 */
 const LIHI={
  "IKRH2W":"https://lihi2.me/62mPX","YFSMMD":"https://lihi2.me/WPiI7","CXFGQX":"https://lihi2.me/3zqVm",
  "DAXMAJ":"https://lihi2.me/TJkzh","DSTGTS":"https://lihi2.me/gwhGw","REESGE":"https://lihi2.me/eh2pY",
@@ -360,9 +360,7 @@ const LIHI={
 };
 /* rezio 首頁（活動總覽）的行事曆流量走 https://lihi2.me/P5C5R，下方三處 href 直接用它 */
 function trackLink(link,code){
-  if(LIHI[code])return LIHI[code];
-  if(!link)return link;
-  return link+(link.includes('?')?'&':'?')+CAL_UTM;
+  return LIHI[code]||link;
 }
 const TYPE_COLOR={'飛鼠':'#FFC94D','蛇':'#9DC08B','蛙':'#7FD1E8','昆蟲':'#E8A0C8','走走':'#F4EFE4','新手':'#B8A9F0','其他':'#A9B2A4'};
 const TYPE_EMOJI={'飛鼠':'🐿️','蛇':'🐍','蛙':'🐸','昆蟲':'🪲','走走':'🚶','新手':'🔦','其他':'🌿'};
