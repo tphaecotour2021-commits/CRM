@@ -12409,6 +12409,13 @@ const MainApp = () => {
     if (!newReg.date || !newReg.eventName || !newReg.customerName) {
       return;
     }
+    // 防呆：公開行事曆只認 event_configs，沒建場次就加報名，前台永遠看不到這一場
+    const _regPrefix = `${newReg.date}_${newReg.eventName}_`;
+    if (!Object.keys(eventConfigs || {}).some(k => k.startsWith(_regPrefix))) {
+      if (!confirm(`「${newReg.date} ${newReg.eventName}」還沒有場次設定，公開行事曆不會顯示這一場。\n建議先用「新增活動」建立場次，再回來加報名。\n\n仍要只加報名資料嗎？`)) {
+        return;
+      }
+    }
     setAddRegStatus('saving');
     let currentData = csvInput.trim();
     if (!currentData || !currentData.startsWith("日期")) {
@@ -12435,6 +12442,12 @@ const MainApp = () => {
     setTimeout(() => setAddRegStatus('idle'), 2000);
   };
   const handleAddDirectReg = async (eventInfo, customerData) => {
+    const _drPrefix = `${eventInfo.date}_${eventInfo.eventName}_`;
+    if (!Object.keys(eventConfigs || {}).some(k => k.startsWith(_drPrefix))) {
+      if (!confirm(`「${eventInfo.date} ${eventInfo.eventName}」還沒有場次設定，公開行事曆不會顯示這一場。\n\n仍要加報名資料嗎？`)) {
+        return;
+      }
+    }
     let currentData = csvInput.trim();
     if (!currentData || !currentData.startsWith("日期")) {
       currentData = CSV_HEADER + "\n" + currentData;
@@ -12753,7 +12766,13 @@ const MainApp = () => {
     const nextConfigs = {
       ...eventConfigs
     };
-    delete nextConfigs[key];
+    // 防呆：講師順序可能與文件 ID 不一致（如「口永 & 世祥」vs「世祥 & 口永」），
+    // 用 日期_活動名 前綴＋講師正規化比對，把同場次的所有 key 變體一起刪，避免留下孤兒
+    const _cfgPrefix = `${date}_${eventName}_`.replace(/[\/\\#\?]/g, '-');
+    const _normInstr = s => String(s || '').split(/[&,]/).map(x => x.trim()).filter(Boolean).sort().join(' & ');
+    const _targetInstr = key.startsWith(_cfgPrefix) ? _normInstr(key.slice(_cfgPrefix.length)) : '';
+    const _cfgKeysToRemove = [...new Set([key, ...Object.keys(eventConfigs).filter(k => k.startsWith(_cfgPrefix) && _normInstr(k.slice(_cfgPrefix.length)) === _targetInstr)])];
+    _cfgKeysToRemove.forEach(k => delete nextConfigs[k]);
     try {
       pushEventVersionStatus('checking', `正在刪除 ${date} ${eventName}...`);
       await handleSaveCSV(arrayToCSV(sortedRows));
@@ -12763,9 +12782,12 @@ const MainApp = () => {
       return;
     }
     try {
-      await deleteDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', key));
+      for (const k of _cfgKeysToRemove) {
+        await deleteDoc(doc(db, `artifacts/${dbSource}/public/data`, 'event_configs', k));
+      }
     } catch (e) {
-      console.log('Config removal optional', e);
+      console.warn('event_configs 刪除失敗（前台可能殘留孤兒場次）', e);
+      pushEventDeleteStatus('warning', `場次設定檔刪除失敗，公開行事曆可能殘留：${formatFirestoreError(e)}`);
     }
     try {
       await saveEventScheduleVersionEntry({

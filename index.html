@@ -501,6 +501,8 @@ async function load(){
     if(date<T0||date>T1)continue;
     const f={};for(const[k,v]of Object.entries(d.fields||{}))f[k]=decodeFs(v);
     if(f.isCancelled)continue;
+    /* 防呆：空殼設定檔（建立/刪除只做一半留下的孤兒，連名稱時間名額連結都沒有）不上牆 */
+    if(!f.displayName&&!f.time&&!f.capacity&&!f.link)continue;
     const link=(f.link||'').trim();
     const parts=id.split('_');
     const name=parts.slice(1,-1).join('_'),instr=parts[parts.length-1]||'';
@@ -508,12 +510,12 @@ async function load(){
     /* 場次性質：一般（可報名）／包團／社群限定。
        沒有報名連結的場：帶客名括號或標包團→包團，其餘一律視為社群限定（世祥 2026-07-11 確認） */
     let kind='一般';
-    if(/包團|包場/.test(dn)||(!link&&/[（(]/.test(name)))kind='包團';
+    if(/包團|包場/.test(dn)||/[（(]/.test(name))kind='包團';/* 防呆：帶客名括號一律包團，就算誤填了 link 也不外洩客名 */
     else if(/社群/.test(dn+name)||!link)kind='社群限定';
     const code=(link.match(/\/product\/([A-Z0-9]+)/i)||[])[1]||'';
     const cap=parseInt(f.capacity,10)||12;
     const cnt=counts[eventKeyOf(date,name,instr)]??counts[id]??0;
-    const bookable=!!link;
+    const bookable=kind==='一般'&&!!link;/* 包團/社群限定即使誤填 link 也不開報名鈕 */
     list.push({
       id,date,dow:dow(date),time:(f.time||'').slice(0,5),/* 沒填時間就不顯示，避免誤導 */
       title:kind==='包團'?'包團活動':(dn||name).trim(),/* 包團不顯示客戶名稱 */
