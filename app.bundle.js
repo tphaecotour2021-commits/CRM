@@ -233,18 +233,13 @@ const toFirestoreRestValue = value => {
     stringValue: String(value)
   };
 };
+/* 2026-07-29 資安修補：不再自動換匿名 token。REST 備援一律要求「已經用工作人員帳號登入」。 */
 const getAuthTokenForRest = async () => {
   const authInstance = await ensureFirebaseAuthReady();
-  let currentUser = authInstance.currentUser;
-  if (!currentUser) {
-    try {
-      await authInstance.signInAnonymously();
-    } catch (_) {}
-    currentUser = authInstance.currentUser;
-  }
-  if (!currentUser) throw {
+  const currentUser = authInstance.currentUser;
+  if (!currentUser || currentUser.isAnonymous) throw {
     code: 'unauthenticated',
-    message: '尚未登入匿名帳號'
+    message: '尚未登入工作人員帳號，請重新登入後再試'
   };
   return currentUser.getIdToken(true);
 };
@@ -394,8 +389,50 @@ const onSnapshot = (ref, callback, onError) => {
     if (onError) onError(error);
   });
 };
-const signInAnonymously = authInstance => authInstance.signInAnonymously();
+/* 2026-09-07 資安修補（世祥拍板）：匿名登入與 settings/auth 的 4 碼明文密碼整套拿掉，
+   後台改用 Google 登入。工作人員共用 TPHA 的 Gmail 登入即可，不另建個人帳號；
+   登入前先選「我是誰」，版本紀錄照舊記操作人。（這個月曆站之後會停用，只做最小改動。） */
+const signInWithGoogle = async authInstance => {
+  const provider = new window.firebase.auth.GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+  return authInstance.signInWithPopup(provider);
+};
+const signOutUser = authInstance => authInstance.signOut();
 const onAuthStateChanged = (authInstance, callback) => authInstance.onAuthStateChanged(callback);
+/* 允許進後台的 Google 帳號（Firestore 規則也用同一份名單擋，這裡只是讓錯誤訊息友善） */
+const STAFF_EMAILS = ['tphaecotour2021@gmail.com', 'sean91612@gmail.com', 'ceankuo318@gmail.com'];
+const isStaffAuthUser = u => !!(u && u.email && !u.isAnonymous && STAFF_EMAILS.includes(String(u.email).trim().toLowerCase()));
+/* 個人 Google 帳號 → 操作人；共用的 TPHA 帳號 → 用登入時選的名字（存瀏覽器） */
+const STAFF_OPERATOR_NAMES = {
+  'sean91612@gmail.com': '世祥',
+  'ceankuo318@gmail.com': '玟希'
+};
+const STAFF_OPERATOR_OPTIONS = ['世祥', '口永', '玟希'];
+const OPERATOR_NAME_STORAGE_KEY = 'crm_operator_name';
+const readStoredOperatorName = () => {
+  try {
+    return String(localStorage.getItem(OPERATOR_NAME_STORAGE_KEY) || '').trim();
+  } catch (_) {
+    return '';
+  }
+};
+const operatorNameOfUser = u => {
+  const email = String(u?.email || '').trim().toLowerCase();
+  if (!email) return DEFAULT_AUTH_ACCOUNT_NAME;
+  return STAFF_OPERATOR_NAMES[email] || readStoredOperatorName() || email.split('@')[0] || DEFAULT_AUTH_ACCOUNT_NAME;
+};
+const formatAuthError = e => {
+  const code = String(e?.code || '');
+  if (code.includes('popup-closed-by-user') || code.includes('cancelled-popup-request')) return '登入視窗被關掉了，請再按一次';
+  if (code.includes('popup-blocked')) return '瀏覽器擋掉了登入視窗，請允許彈出視窗後再試';
+  if (code.includes('unauthorized-domain')) return '這個網址還沒加進 Firebase 的授權網域（Console → Authentication → 設定 → 授權網域）';
+  if (code.includes('user-not-found') || code.includes('wrong-password') || code.includes('invalid-credential') || code.includes('invalid-login-credentials')) return '帳號或密碼錯誤';
+  if (code.includes('invalid-email')) return 'Email 格式不正確';
+  if (code.includes('too-many-requests')) return '嘗試次數過多，請稍後再試';
+  if (code.includes('network-request-failed')) return '網路連線失敗，請檢查網路';
+  if (code.includes('operation-not-allowed')) return 'Email／密碼登入尚未在 Firebase Console 開啟';
+  return e?.message || '登入失敗';
+};
 const defaultAppId = 'default-app-id';
 const APP_BUILD = '2026-03-03 23:45';
 const APP_VERSION = APP_BUILD;
@@ -459,6 +496,83 @@ const parseCsvDataRows = raw => {
       isCheckedIn: v[14]?.trim() === '1'
     };
   }).filter(row => row && row.date);
+};
+
+/* ═══════════════════════════════════════════════════════════════════════
+   2026-07-29 資安修補：去識別化公開計數文件 settings/public_counts
+   前台 index.html（crmcalender）不再下載 csvData，只讀這份。
+   下面三個函式是 index.html 演算法的逐字移植，改動時兩邊必須同步：
+     parsePublicCountsCsv ←→ index.html parseCSV
+     normPublicCountsDate ←→ index.html normDate
+     publicCountsEventKey ←→ index.html eventKeyOf
+   ═══════════════════════════════════════════════════════════════════════ */
+const PUBLIC_COUNTS_PLACEHOLDER = '開放報名中'; // 佔位列：計數時當 0，不是一筆報名
+const parsePublicCountsCsv = t => {
+  const rows = [];
+  let f = '',
+    row = [],
+    q = false;
+  const pf = () => {
+    row.push(f);
+    f = '';
+  };
+  const pr = () => {
+    if (row.length > 1 || row[0] !== '') rows.push(row);
+    row = [];
+  };
+  const text = String(t || '');
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') {
+        if (text[i + 1] === '"') {
+          f += '"';
+          i++;
+        } else q = false;
+      } else f += c;
+    } else if (c === '"') q = true;else if (c === ',') pf();else if (c === '\n') {
+      pf();
+      pr();
+    } else if (c !== '\r') f += c;
+  }
+  pf();
+  pr();
+  return rows;
+};
+const normPublicCountsDate = s => {
+  const text = String(s || '').trim();
+  const m = text.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (!m) return '';
+  return `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}`;
+};
+const publicCountsEventKey = (date, name, instr) => {
+  const s = instr ? String(instr).split(/[&,]/).map(x => x.trim()).sort().join(' & ') : '';
+  return `${date}_${name}_${s}`.replace(/[\/\\#\?]/g, '-');
+};
+/* 只吐出「eventKey → 已報名人數」與「eventKey → 共乘人數」，不含任何客戶欄位。
+   演算法與官網 tpha-platform/src/lib/publicCounts.ts 一字不差（官網同步 cron 也會重算這份）。 */
+const buildPublicCounts = raw => {
+  const counts = {};
+  const carpools = {};
+  const rows = parsePublicCountsCsv(raw);
+  for (let i = 1; i < rows.length; i++) {
+    const v = rows[i];
+    if (v.length < 5) continue;
+    const date = normPublicCountsDate(v[0]);
+    if (!date) continue;
+    const key = publicCountsEventKey(date, String(v[1] || '').trim(), String(v[2] || '').trim());
+    if (counts[key] === undefined) {
+      counts[key] = 0;
+      carpools[key] = 0;
+    }
+    if (String(v[3] || '').trim() === PUBLIC_COUNTS_PLACEHOLDER) continue;
+    counts[key] += 1;
+    if (String(v[5] || '').trim() === '共乘') carpools[key] += 1;
+  }
+  return {
+    counts,
+    carpools
+  };
 };
 const getLocalDateStr = () => {
   const d = new Date();
@@ -728,21 +842,7 @@ const CARPOOL_DISPLAY_MODE_OPTIONS = [{
   helper: '前台固定顯示本活動無共乘'
 }];
 const DEFAULT_AUTH_ACCOUNT_NAME = '管理員';
-const normalizeAuthAccounts = (accounts = [], fallbackPassword = '') => {
-  const normalized = (Array.isArray(accounts) ? accounts : []).map((account, index) => ({
-    id: String(account?.id || `auth_${index}`),
-    name: String(account?.name || '').trim(),
-    password: String(account?.password || '').trim()
-  })).filter(account => account.password);
-  if (normalized.length === 0 && String(fallbackPassword || '').trim()) {
-    return [{
-      id: 'legacy_admin',
-      name: DEFAULT_AUTH_ACCOUNT_NAME,
-      password: String(fallbackPassword || '').trim()
-    }];
-  }
-  return normalized;
-};
+/* 2026-07-29 資安修補：normalizeAuthAccounts（settings/auth 的明文帳密正規化）已移除。 */
 const DEFAULT_NO_CARPOOL_EVENT_NAMES = new Set(['大安鼠', '新店鼠']);
 const getDefaultCarpoolDisplayModeForEventName = (eventName = '') => DEFAULT_NO_CARPOOL_EVENT_NAMES.has(String(eventName || '').trim()) ? 'none' : 'normal';
 const resolveCarpoolDisplayMode = (value, eventName = '') => value === 'none' || value === 'normal' ? value : getDefaultCarpoolDisplayModeForEventName(eventName);
@@ -2444,18 +2544,40 @@ const CircularProgress = ({
     className: "absolute text-[10px] font-bold text-slate-600"
   }, Math.round(safeValue / max * 100), "%"));
 };
+/* 2026-07-29 資安修補：登入改成 Firebase Auth Email／密碼（一人一組帳號，可單獨停用）。
+   帳密不寫死在程式裡，也不再跟 settings/auth 的明文密碼比對。 */
 const LoginModal = ({
   onClose,
   onLogin
 }) => {
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState(false);
+  const [operator, setOperator] = useState(() => {
+    const stored = readStoredOperatorName();
+    if (!stored) return '';
+    return STAFF_OPERATOR_OPTIONS.includes(stored) ? stored : '其他';
+  });
+  const [customName, setCustomName] = useState(() => {
+    const stored = readStoredOperatorName();
+    return stored && !STAFF_OPERATOR_OPTIONS.includes(stored) ? stored : '';
+  });
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const finalName = operator === '其他' ? String(customName || '').trim() : operator;
   const handleSubmit = e => {
     e.preventDefault();
-    onLogin(password, isSuccess => {
-      if (!isSuccess) setError(true);
+    if (submitting) return;
+    if (!finalName) {
+      setError('請先選你是誰，版本紀錄要記操作人');
+      return;
+    }
+    setSubmitting(true);
+    setError('');
+    onLogin(finalName, (isSuccess, message) => {
+      setSubmitting(false);
+      if (isSuccess) return;
+      setError(message || '登入失敗，請重試');
     });
   };
+  const optionClass = active => `flex-1 min-h-[44px] rounded-xl border text-sm font-bold transition-colors ${active ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`;
   return React.createElement("div", {
     className: "fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 fade-in backdrop-blur-sm"
   }, React.createElement("div", {
@@ -2469,33 +2591,55 @@ const LoginModal = ({
     size: 24
   })), React.createElement("h3", {
     className: "text-xl font-bold text-slate-800"
-  }, "\u7BA1\u7406\u54E1\u767B\u5165"), React.createElement("p", {
-    className: "text-sm text-slate-500 text-center"
-  }, "\u8ACB\u8F38\u5165\u5BC6\u78BC\u4EE5\u5B58\u53D6\u5F8C\u53F0\uFF0C\u82E5\u6709\u8A2D\u5B9A\u500B\u4EBA\u5BC6\u78BC\uFF0C\u767B\u5165\u5F8C\u6703\u81EA\u52D5\u5E36\u5165\u64CD\u4F5C\u4EBA\u3002")), React.createElement("form", {
+  }, "管理員登入"), React.createElement("p", {
+    className: "text-sm text-slate-500 text-center mt-1"
+  }, "用 TPHA 的 Google 帳號（tphaecotour2021@gmail.com）登入。先選你是誰，版本紀錄會記下操作人。")), React.createElement("form", {
     onSubmit: handleSubmit,
     className: "space-y-4"
-  }, React.createElement("div", null, React.createElement("input", {
-    type: "password",
-    className: `w-full p-3 border rounded-xl outline-none transition-all text-center tracking-widest font-bold text-lg ${error ? 'border-red-500 bg-red-50' : 'border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'}`,
-    placeholder: "\u8F38\u5165\u5BC6\u78BC",
-    value: password,
+  }, React.createElement("div", {
+    className: "space-y-2"
+  }, React.createElement("div", {
+    className: "text-xs font-bold text-slate-500"
+  }, "我是"), React.createElement("div", {
+    className: "flex gap-2"
+  }, STAFF_OPERATOR_OPTIONS.map(name => React.createElement("button", {
+    key: name,
+    type: "button",
+    onClick: () => {
+      setOperator(name);
+      setError('');
+    },
+    className: optionClass(operator === name)
+  }, name)), React.createElement("button", {
+    type: "button",
+    onClick: () => {
+      setOperator('其他');
+      setError('');
+    },
+    className: optionClass(operator === '其他')
+  }, "其他")), operator === '其他' && React.createElement("input", {
+    type: "text",
+    className: "w-full p-3 border rounded-xl outline-none transition-all border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200",
+    placeholder: "輸入你的名字",
+    value: customName,
     onChange: e => {
-      setPassword(e.target.value);
-      setError(false);
+      setCustomName(e.target.value);
+      setError('');
     },
     autoFocus: true
   }), error && React.createElement("p", {
     className: "text-red-500 text-xs text-center mt-2"
-  }, "\u5BC6\u78BC\u932F\u8AA4\uFF0C\u8ACB\u91CD\u8A66")), React.createElement("div", {
+  }, error)), React.createElement("div", {
     className: "flex gap-2"
   }, React.createElement("button", {
     type: "button",
     onClick: onClose,
     className: "flex-1 py-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
-  }, "\u53D6\u6D88"), React.createElement("button", {
+  }, "取消"), React.createElement("button", {
     type: "submit",
-    className: "flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow-md transition-colors"
-  }, "\u767B\u5165")))));
+    disabled: submitting,
+    className: `flex-1 py-2 text-white rounded-lg font-bold shadow-md transition-colors ${submitting ? 'bg-blue-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`
+  }, submitting ? '登入中...' : '用 Google 登入')))));
 };
 const AddPromiseModal = ({
   onClose,
@@ -4062,8 +4206,7 @@ const EventManagerModal = ({
   onAddTag,
   parsedData,
   onAddDirectReg,
-  customTemplates = [],
-  adminPasswords = []
+  customTemplates = []
 }) => {
   const [capacity, setCapacity] = useState(config?.capacity || 12);
   const [internalName, setInternalName] = useState(event.eventName);
@@ -4383,12 +4526,12 @@ const EventManagerModal = ({
     autoFocus: true
   }), React.createElement("button", {
     onClick: () => {
-      const pwd = prompt("修改後台名稱將連動所有報名資料，請輸入管理員密碼確認：");
-      if (adminPasswords.includes(pwd)) {
+      /* 2026-07-29 資安修補：原本是再輸入一次 4 碼共用密碼確認（密碼來自全世界可讀的
+         settings/auth）。改用 Firebase Auth 後，能進到這個畫面的人已經通過身分驗證，
+         這裡只保留「防手滑」的二次確認。 */
+      if (confirm("修改後台名稱將連動所有報名資料，確定要改嗎？")) {
         setInternalName(tempName);
         setIsEditingInternalName(false);
-      } else if (pwd !== null) {
-        alert("密碼錯誤，取消修改");
       }
     },
     className: "bg-blue-600 text-white p-1 rounded hover:bg-blue-700 shadow-sm"
@@ -10876,14 +11019,8 @@ const MainApp = () => {
   const [promises, setPromises] = useState([]);
   const [instructorSchedule, setInstructorSchedule] = useState({});
   const [companyRestDates, setCompanyRestDates] = useState([]);
-  const [newPasswordInput, setNewPasswordInput] = useState('');
-  const [passwordSaveStatus, setPasswordSaveStatus] = useState('idle');
-  const [authAccounts, setAuthAccounts] = useState([]);
-  const [newAuthAccount, setNewAuthAccount] = useState({
-    name: '',
-    password: ''
-  });
-  const [authAccountsSaveStatus, setAuthAccountsSaveStatus] = useState('idle');
+  /* 2026-07-29 資安修補：原本這裡有 newPasswordInput／authAccounts 等狀態，
+     服務的是「4 碼共用密碼 + settings/auth」那套客端登入，已隨登入改 Firebase Auth 移除。 */
   const [addRegStatus, setAddRegStatus] = useState('idle');
   const [csvSaveStatus, setCsvSaveStatus] = useState('idle');
   const [isHealthChecking, setIsHealthChecking] = useState(false);
@@ -10900,7 +11037,6 @@ const MainApp = () => {
   const [viewMode, setViewMode] = useState('public');
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [authReady, setAuthReady] = useState(() => !!auth);
-  const [adminPassword, setAdminPassword] = useState('8888');
   const [selectedCustomer, setSelectedCustomer] = useState('');
   const [currentDate, setCurrentDate] = useState(() => parseLocalDateKey(getLocalDateStr()));
   useEffect(() => {
@@ -10955,8 +11091,12 @@ const MainApp = () => {
   const [publicSideDecor, setPublicSideDecor] = useState(DEFAULT_PUBLIC_SIDE_DECOR);
   const [selectedOutingPosterRandom, setSelectedOutingPosterRandom] = useState(null);
   const [publicDateEntryNonce, setPublicDateEntryNonce] = useState(0);
-  const shouldBootstrapAuth = showLoginModal || viewMode === 'admin';
-  const canLoadAdminData = !!user && (!shouldBootstrapAuth || authReady);
+  /* 2026-07-29 資安修補：後台資料一律要「真的登入」才讀得到（規則已鎖 settings/main 等文件）。 */
+  const isStaffUser = isStaffAuthUser(user);
+  const canLoadAdminData = authReady && isStaffUser;
+  /* settings/main 的伺服器端快照，只留下 public_counts 需要的欄位（零客戶資料） */
+  const [serverMainForPublicCounts, setServerMainForPublicCounts] = useState(null);
+  const publicCountsSyncHashRef = useRef('');
   const handleDbSourceChange = newSource => {
     setDbSource(newSource);
     localStorage.setItem('crm_db_source', newSource);
@@ -11022,9 +11162,9 @@ const MainApp = () => {
   const getCurrentIdToken = async () => {
     const authInstance = await ensureFirebaseAuthReady();
     const currentUser = authInstance.currentUser;
-    if (!currentUser) throw {
+    if (!currentUser || currentUser.isAnonymous) throw {
       code: 'unauthenticated',
-      message: '尚未登入匿名帳號'
+      message: '尚未登入工作人員帳號，請重新登入後再試'
     };
     return currentUser.getIdToken(true);
   };
@@ -11084,10 +11224,10 @@ const MainApp = () => {
   };
   const handleFirebaseHealthCheck = async () => {
     const checkedAt = new Date().toLocaleString('zh-TW');
-    if (!db || !user) {
+    if (!db || !isStaffUser) {
       setFirebaseHealth({
         status: 'error',
-        message: '資料庫未連線或尚未登入匿名帳號',
+        message: '資料庫未連線，或尚未用工作人員帳號登入',
         checkedAt
       });
       return;
@@ -11110,7 +11250,7 @@ const MainApp = () => {
           _healthPing: probeValue,
           _healthPingAt: new Date().toISOString(),
           _healthSource: dbSource,
-          _healthUid: user.uid || 'anonymous'
+          _healthUid: user?.uid || 'unknown'
         }, {
           merge: true
         }), 10000, '寫入 settings/main');
@@ -11124,7 +11264,7 @@ const MainApp = () => {
           _healthPing: probeValue,
           _healthPingAt: new Date().toISOString(),
           _healthSource: dbSource,
-          _healthUid: user.uid || 'anonymous'
+          _healthUid: user?.uid || 'unknown'
         }), 15000, 'REST 備援寫入 settings/main');
       }
       let serverVisible = true;
@@ -11168,7 +11308,7 @@ const MainApp = () => {
       const reason = formatFirestoreError(e);
       let hint = '';
       if (String(e?.code || '').includes('permission-denied')) hint = '（規則權限不足）';
-      if (String(e?.code || '').includes('unauthenticated')) hint = '（匿名登入可能被停用）';
+      if (String(e?.code || '').includes('unauthenticated')) hint = '（登入階段可能已過期，請重新登入）';
       if (String(e?.code || '').includes('resource-exhausted')) hint = '（配額或大小限制）';
       if (String(e?.code || '').includes('deadline-exceeded')) hint = '（網路不穩或 Firebase 未回應）';
       if (window.location.protocol === 'file:') hint += '（目前以 file:// 開啟，建議改用 http://localhost）';
@@ -11181,6 +11321,9 @@ const MainApp = () => {
       setIsHealthChecking(false);
     }
   };
+  /* 2026-07-29 資安修補：
+     一律在載入時 bootstrap Auth（不再自動匿名登入），好讓重新整理後能還原既有登入狀態。
+     沒登入時 user 仍給一個 demo 佔位物件，讓公開唯讀訂閱（event_configs／schedule）照舊運作。 */
   useEffect(() => {
     let unsub = () => {};
     let cancelled = false;
@@ -11188,22 +11331,28 @@ const MainApp = () => {
       isAnonymous: true,
       uid: 'demo'
     });
-    if (!shouldBootstrapAuth) return () => {};
     ensureFirebaseAuthReady().then(authInstance => {
       if (cancelled) return;
       setAuthReady(true);
       unsub = onAuthStateChanged(authInstance, nextUser => {
         if (cancelled) return;
-        setUser(nextUser || {
+        if (isStaffAuthUser(nextUser)) {
+          const operatorName = operatorNameOfUser(nextUser);
+          setPlanningOperatorName(operatorName);
+          setEventVersionOperatorName(operatorName);
+          setUser(nextUser);
+          return;
+        }
+        if (nextUser && nextUser.email && !nextUser.isAnonymous) {
+          /* 登入了但不在工作人員名單：規則會擋資料，這裡直接登出免得畫面半死不活 */
+          signOutUser(authInstance).catch(() => {});
+        }
+        setUser({
           isAnonymous: true,
           uid: 'demo'
         });
+        setViewMode(mode => mode === 'admin' ? 'public' : mode);
       });
-      if (!authInstance.currentUser) {
-        signInAnonymously(authInstance).catch(error => {
-          console.warn('Anonymous auth bootstrap failed:', error);
-        });
-      }
     }).catch(error => {
       if (cancelled) return;
       console.warn('Firebase auth lazy bootstrap failed:', error);
@@ -11213,8 +11362,7 @@ const MainApp = () => {
       cancelled = true;
       if (unsub) unsub();
     };
-  }, [shouldBootstrapAuth]);
-  const shouldLoadAuthSettings = showLoginModal || viewMode === 'admin';
+  }, []);
   const shouldLoadTemplates = viewMode === 'admin' && (activeTab === 'events' || activeTab === 'planning' || showCreateEvent || !!editingEvent);
   const shouldLoadMonthlyPlans = viewMode === 'admin' && activeTab === 'planning';
   const shouldLoadProjects = viewMode === 'admin' && activeTab === 'projects';
@@ -11256,10 +11404,28 @@ const MainApp = () => {
       setEventConfigs(cfgs);
       return Object.keys(cfgs).length;
     };
-    const unsubMain = onSnapshot(mainRef, s => {
+    /* 2026-07-29 資安修補：settings/main 裝著整份報名 CSV（身分證／生日／手機／Email），
+       規則已改成只有登入的工作人員讀得到。沒登入就整段不訂閱，也不會噴 permission-denied。 */
+    let unsubMain = () => {};
+    if (!isStaffUser) {
+      setLoading(false);
+      setServerMainForPublicCounts(null);
+      if (!isEditingRef.current) {
+        setCsvInput('');
+        setParsedData([]);
+      }
+    } else unsubMain = onSnapshot(mainRef, s => {
       if (s && s.exists()) {
         const data = sanitizeFirebaseValue(s.data() || {});
         const d = data.csvData || '';
+        /* 給 public_counts 同步用的伺服器端快照（只留計數與前台顯示設定會用到的欄位） */
+        setServerMainForPublicCounts({
+          csvData: d,
+          latestNews: String(data.latestNews || ''),
+          mascotConfig: Array.isArray(data.mascotConfig) ? data.mascotConfig : [],
+          marqueeIcon: String(data.marqueeIcon || ''),
+          marqueeIconSize: Number(data.marqueeIconSize) || 30
+        });
         if (Array.isArray(data.globalRules)) {
           const cleanedGlobalRules = normalizeStoredStatusRules(data.globalRules);
           setGlobalRules(cleanedGlobalRules);
@@ -11288,11 +11454,15 @@ const MainApp = () => {
         setPerformanceProductSettings({});
         setMonthlyKpis({});
         setLegacyMonthlyPlans({});
+        setServerMainForPublicCounts(null);
         if (!isEditingRef.current) {
           setCsvInput('');
           setParsedData([]);
         }
       }
+      setLoading(false);
+    }, error => {
+      console.warn('settings/main 讀取失敗（權限或網路）：', error);
       setLoading(false);
     });
     let unsubConfigFallback = null;
@@ -11337,7 +11507,7 @@ const MainApp = () => {
       cleanupConfigs();
       if (unsubSchedule) unsubSchedule();
     };
-  }, [user, db, dbSource, viewMode]);
+  }, [user, db, dbSource, viewMode, isStaffUser]);
   useEffect(() => {
     if (!db || !user || viewMode !== 'admin' || !canLoadAdminData) return undefined;
     const normalizedConfigs = {};
@@ -11370,26 +11540,9 @@ const MainApp = () => {
     }, 1500);
     return () => clearTimeout(timer);
   }, [db, user, dbSource, viewMode, canLoadAdminData, eventConfigs]);
-  useEffect(() => {
-    if (!canLoadAdminData || !shouldLoadAuthSettings) return undefined;
-    if (!db) {
-      setAdminPassword('8888');
-      setAuthAccounts(normalizeAuthAccounts([], '8888'));
-      return undefined;
-    }
-    const settingsRef = doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'auth');
-    return onSnapshot(settingsRef, s => {
-      if (s && s.exists()) {
-        const authData = sanitizeFirebaseValue(s.data() || {});
-        const fallbackPassword = authData.password || '8888';
-        setAdminPassword(fallbackPassword);
-        setAuthAccounts(normalizeAuthAccounts(authData.accounts, fallbackPassword));
-      } else {
-        setAdminPassword('8888');
-        setAuthAccounts(normalizeAuthAccounts([], '8888'));
-      }
-    });
-  }, [canLoadAdminData, db, dbSource, shouldLoadAuthSettings]);
+  /* 2026-07-29 資安修補：原本這裡訂閱 settings/auth（4 碼明文密碼＋3 組工作人員帳密，
+     而且全世界可讀），登入是在瀏覽器裡比字串。整段移除，改用 Firebase Auth。
+     settings/auth 這份文件請在 Console 直接刪掉。 */
   useEffect(() => {
     if (!shouldLoadTemplates) {
       setTemplatesLoadState(current => current === 'loading' ? 'idle' : current);
@@ -11501,77 +11654,102 @@ const MainApp = () => {
       setPromises(nextPromises.sort((a, b) => new Date(a.date + 'T' + a.time) - new Date(b.date + 'T' + b.time)));
     });
   }, [canLoadAdminData, db, dbSource, shouldLoadPromises]);
-  const validAdminPasswords = useMemo(() => Array.from(new Set([String(adminPassword || '').trim(), ...authAccounts.map(account => String(account.password || '').trim())].filter(Boolean))), [adminPassword, authAccounts]);
-  const handleVerifyLogin = (inputPwd, callback) => {
-    const cleanInput = String(inputPwd || '').trim();
-    const matchedAccount = authAccounts.find(account => account.password === cleanInput);
-    if (matchedAccount || cleanInput === adminPassword) {
-      const operatorName = String(matchedAccount?.name || DEFAULT_AUTH_ACCOUNT_NAME).trim() || DEFAULT_AUTH_ACCOUNT_NAME;
+  /* 2026-07-29 資安修補：改成真正的 Firebase Auth 登入。
+     帳密由使用者輸入，程式裡不寫死；比對也不再發生在瀏覽器（權限由 Firestore 規則決定）。 */
+  /* 2026-09-07：Google 登入。共用 TPHA Gmail 時操作人＝登入視窗選的名字（存瀏覽器）。 */
+  const handleVerifyLogin = async (operatorNameInput, callback) => {
+    const picked = String(operatorNameInput || '').trim();
+    if (!picked) {
+      callback(false, '請先選你是誰');
+      return;
+    }
+    try {
+      const authInstance = await ensureFirebaseAuthReady();
+      const credential = await signInWithGoogle(authInstance);
+      const nextUser = credential?.user || authInstance.currentUser;
+      if (!isStaffAuthUser(nextUser)) {
+        const who = String(nextUser?.email || '');
+        try {
+          await signOutUser(authInstance);
+        } catch (_) {}
+        callback(false, `${who || '這個 Google 帳號'} 不是工作人員帳號，請改用 TPHA 的 Gmail（tphaecotour2021@gmail.com）登入`);
+        return;
+      }
+      try {
+        localStorage.setItem(OPERATOR_NAME_STORAGE_KEY, picked);
+      } catch (_) {}
+      const operatorName = operatorNameOfUser(nextUser);
       setPlanningOperatorName(operatorName);
       setEventVersionOperatorName(operatorName);
+      setUser(nextUser);
+      setAuthReady(true);
       setViewMode('admin');
       setShowLoginModal(false);
       callback(true);
-      return;
-    }
-    callback(false);
-  };
-  const handleUpdatePassword = async () => {
-    if (!newPasswordInput) return;
-    setPasswordSaveStatus('saving');
-    try {
-      const ref = doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'auth');
-      if (ref) await setDoc(ref, {
-        password: newPasswordInput
-      }, {
-        merge: true
-      });
-      setNewPasswordInput('');
-      setPasswordSaveStatus('success');
-      setTimeout(() => setPasswordSaveStatus('idle'), 2000);
     } catch (e) {
-      console.error("Password update failed", e);
-      setPasswordSaveStatus('idle');
+      console.warn('登入失敗:', e?.code || e);
+      callback(false, formatAuthError(e));
     }
   };
-  const handleSaveAuthAccounts = async nextAccounts => {
+  const handleLogout = async () => {
+    try {
+      const authInstance = await ensureFirebaseAuthReady();
+      await signOutUser(authInstance);
+    } catch (e) {
+      console.warn('登出失敗:', e);
+    }
+    setViewMode('public');
+  };
+  /* ═══════════════════════════════════════════════════════════════════
+     2026-07-29 資安修補：寫入去識別化的 settings/public_counts
+     前台 crmcalender 只吃這一份，所以任何會動到 csvData 或跑馬燈／吉祥物設定的
+     存檔動作，都必須順手把這份重算一次。
+     走現有的 setDoc 包裝 → 逾時會自動退到 REST PATCH 備援。
+     ═══════════════════════════════════════════════════════════════════ */
+  const syncPublicCountsDoc = async (overrides = {}) => {
     if (!db) return;
-    const normalizedAccounts = normalizeAuthAccounts(nextAccounts, adminPassword);
-    setAuthAccountsSaveStatus('saving');
+    const base = serverMainForPublicCounts || {};
+    const pick = (key, fallback) => overrides[key] !== undefined ? overrides[key] : base[key] !== undefined ? base[key] : fallback;
+    const built = buildPublicCounts(pick('csvData', ''));
+    const payload = {
+      counts: built.counts,
+      carpools: built.carpools,
+      latestNews: String(pick('latestNews', '') || ''),
+      mascotConfig: (() => {
+        const v = pick('mascotConfig', []);
+        return Array.isArray(v) ? v : [];
+      })(),
+      marqueeIcon: String(pick('marqueeIcon', '') || ''),
+      marqueeIconSize: Number(pick('marqueeIconSize', 30)) || 30
+    };
+    const hash = JSON.stringify([payload.counts, payload.carpools, payload.latestNews, payload.mascotConfig, payload.marqueeIcon, payload.marqueeIconSize]);
+    if (hash === publicCountsSyncHashRef.current) return;
+    /* 用整份覆寫（不 merge）：這是衍生資料，絕不能讓舊欄位殘留 */
+    await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'public_counts'), {
+      ...payload,
+      updated: new Date().toISOString()
+    });
+    publicCountsSyncHashRef.current = hash;
+  };
+  const syncPublicCountsSafely = async (overrides = {}) => {
     try {
-      await setDoc(doc(db, `artifacts/${dbSource}/public/data`, 'settings', 'auth'), {
-        accounts: normalizedAccounts
-      }, {
-        merge: true
-      });
-      setAuthAccounts(normalizedAccounts);
-      setAuthAccountsSaveStatus('success');
-      setTimeout(() => setAuthAccountsSaveStatus('idle'), 2000);
+      await syncPublicCountsDoc(overrides);
+      return true;
     } catch (e) {
-      console.error('Auth accounts update failed', e);
-      setAuthAccountsSaveStatus('idle');
-      alert(`❌ 操作人帳號儲存失敗：${formatFirestoreError(e)}`);
+      console.error('public_counts 同步失敗:', e);
+      alert(`⚠️ 資料已存進後台，但前台名額（public_counts）同步失敗：${formatFirestoreError(e)}\n前台名額可能會停在舊數字，請重新存檔一次。`);
+      return false;
     }
   };
-  const handleAddAuthAccount = async () => {
-    const name = String(newAuthAccount.name || '').trim();
-    const password = String(newAuthAccount.password || '').trim();
-    if (!name || !password) return;
-    const nextAccounts = [...authAccounts, {
-      id: `auth_${Date.now()}`,
-      name,
-      password
-    }];
-    await handleSaveAuthAccounts(nextAccounts);
-    setNewAuthAccount({
-      name: '',
-      password: ''
-    });
-  };
-  const handleDeleteAuthAccount = async accountId => {
-    if (!confirm('確定要刪除這組登入密碼對應嗎？')) return;
-    await handleSaveAuthAccounts(authAccounts.filter(account => account.id !== accountId));
-  };
+  /* 安全網：只要伺服器端的 settings/main 有變（不管是哪條路徑改的、或是別台電腦改的），
+     登入中的後台就在 800ms 後補寫一次 public_counts。hash 相同就不會重複寫。 */
+  useEffect(() => {
+    if (!db || !isStaffUser || !serverMainForPublicCounts) return undefined;
+    const timer = setTimeout(() => {
+      syncPublicCountsDoc({}).catch(e => console.error('public_counts 背景同步失敗:', e));
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [db, dbSource, isStaffUser, serverMainForPublicCounts]);
   const handleExportCurrentCsvAsTxt = () => {
     const rawContent = String(csvInput || '').trim();
     if (!rawContent) {
@@ -12303,7 +12481,7 @@ const MainApp = () => {
       savedAt,
       savedAtMs: Date.now(),
       savedByName: operatorName,
-      savedByUid: user?.uid || 'anonymous',
+      savedByUid: user?.uid || 'unknown',
       snapshot: sanitizedEntry
     };
     setPlanningSaveStatus('saving');
@@ -12344,6 +12522,10 @@ const MainApp = () => {
         csvData: newData
       }, {
         merge: true
+      });
+      /* 2026-07-29：報名資料一改，前台名額（public_counts）要同步重算 */
+      await syncPublicCountsSafely({
+        csvData: newData
       });
       setCsvInput(newData);
       setParsedData(parseCsvDataRows(newData));
@@ -12394,7 +12576,7 @@ const MainApp = () => {
       savedAt: new Date().toISOString(),
       savedAtMs: Date.now(),
       savedByName: operatorName,
-      savedByUid: user?.uid || 'anonymous',
+      savedByUid: user?.uid || 'unknown',
       snapshot: afterSnapshot
     };
     if (restoredFromVersion?.id) payload.restoredFromVersionId = restoredFromVersion.id;
@@ -13912,7 +14094,7 @@ const MainApp = () => {
       savedAt,
       savedAtMs: Date.now(),
       savedByName: operatorName,
-      savedByUid: user?.uid || 'anonymous',
+      savedByUid: user?.uid || 'unknown',
       restoredFromVersionId: version.id || '',
       snapshot: restoredEntry
     };
@@ -15907,16 +16089,10 @@ const MainApp = () => {
     className: "text-slate-400"
   }), React.createElement("span", {
     className: "text-xs font-bold text-slate-600 whitespace-nowrap"
-  }, "\u5B89\u5168\u9396"), React.createElement("input", {
-    type: "password",
-    placeholder: "\u7BA1\u7406\u54E1\u5BC6\u78BC...",
-    className: "px-2 py-1.5 border rounded text-xs w-full md:w-32 outline-none focus:border-blue-400 bg-white",
-    value: newPasswordInput,
-    onChange: e => setNewPasswordInput(e.target.value)
-  }), React.createElement("button", {
-    onClick: handleUpdatePassword,
-    className: `text-xs text-white px-3 py-1.5 rounded transition-colors whitespace-nowrap ${passwordSaveStatus === 'success' ? 'bg-green-500' : 'bg-slate-600 hover:bg-slate-700'}`
-  }, passwordSaveStatus === 'success' ? '已更新' : '更新')), React.createElement("div", {
+  }, "\u76EE\u524D\u767B\u5165\uFF1A", String(user?.email || ''), "\uFF08\u64CD\u4F5C\u4EBA\uFF1A", operatorNameOfUser(user), "\uFF09"), React.createElement("button", {
+    onClick: handleLogout,
+    className: "text-xs text-white px-3 py-1.5 rounded transition-colors whitespace-nowrap bg-slate-600 hover:bg-slate-700"
+  }, "\u767B\u51FA")), React.createElement("div", {
     className: "flex items-center gap-2 w-full md:w-auto"
   }, React.createElement("button", {
     onClick: () => handleSaveCSV(csvInput),
@@ -15931,60 +16107,7 @@ const MainApp = () => {
     name: "save"
   }), React.createElement("span", null, csvSaveStatus === 'saving' ? '儲存中...' : csvSaveStatus === 'success' ? '✅ 已成功儲存！' : '儲存變更')), csvSaveStatus === 'success' && React.createElement("span", {
     className: "text-xs text-slate-400 hidden md:inline"
-  }, "Saved"))), React.createElement("div", {
-    className: "mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4"
-  }, React.createElement("div", {
-    className: "flex flex-col gap-2 md:flex-row md:items-center md:justify-between"
-  }, React.createElement("div", null, React.createElement("div", {
-    className: "text-sm font-bold text-slate-700"
-  }, "\u767B\u5165\u5BC6\u78BC\u5C0D\u61C9\u64CD\u4F5C\u4EBA"), React.createElement("div", {
-    className: "text-xs text-slate-400 mt-1"
-  }, "\u767B\u5165\u5F8C\u6703\u81EA\u52D5\u628A\u64CD\u4F5C\u4EBA\u5E36\u5165\u7248\u672C\u63A7\u5236\u3002\u820A\u7684\u5171\u7528\u5BC6\u78BC\u4ECD\u53EF\u4FDD\u7559\uFF0C\u4E0B\u9762\u9019\u88E1\u5247\u53EF\u4EE5\u70BA\u6BCF\u4F4D\u6210\u54E1\u8A2D\u5B9A\u81EA\u5DF1\u7684\u5BC6\u78BC\u3002")), React.createElement("div", {
-    className: "text-xs text-slate-400"
-  }, authAccountsSaveStatus === 'saving' && '儲存中...', authAccountsSaveStatus === 'success' && '已更新', authAccountsSaveStatus === 'idle' && `${authAccounts.length} 組對應`)), React.createElement("div", {
-    className: "mt-3 space-y-2"
-  }, authAccounts.length > 0 ? authAccounts.map(account => React.createElement("div", {
-    key: account.id,
-    className: "flex flex-col gap-2 rounded-lg border border-slate-200 bg-white px-3 py-3 md:flex-row md:items-center md:justify-between"
-  }, React.createElement("div", {
-    className: "flex flex-col"
-  }, React.createElement("span", {
-    className: "text-sm font-bold text-slate-700"
-  }, toSafeDisplayText(account.name, DEFAULT_AUTH_ACCOUNT_NAME)), React.createElement("span", {
-    className: "text-xs text-slate-400"
-  }, "\u5BC6\u78BC\uFF1A", toSafeDisplayText(account.password, ''))), React.createElement("button", {
-    onClick: () => handleDeleteAuthAccount(account.id),
-    className: "inline-flex items-center justify-center gap-1 rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50"
-  }, React.createElement(Icon, {
-    name: "trash-2",
-    size: 13
-  }), " \u522A\u9664"))) : React.createElement("div", {
-    className: "rounded-lg border border-dashed border-slate-200 bg-white px-3 py-4 text-sm text-slate-400"
-  }, "\u76EE\u524D\u53EA\u6709\u5171\u7528\u5BC6\u78BC\uFF0C\u9084\u6C92\u6709\u500B\u4EBA\u767B\u5165\u5C0D\u61C9\u3002")), React.createElement("div", {
-    className: "mt-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_auto]"
-  }, React.createElement("input", {
-    type: "text",
-    placeholder: "\u64CD\u4F5C\u4EBA\u540D\u7A31\uFF0C\u4F8B\u5982 \u90ED\u739F\u5E0C",
-    className: "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400",
-    value: newAuthAccount.name,
-    onChange: e => setNewAuthAccount(prev => ({
-      ...prev,
-      name: e.target.value
-    }))
-  }), React.createElement("input", {
-    type: "password",
-    placeholder: "\u5C0D\u61C9\u767B\u5165\u5BC6\u78BC",
-    className: "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400",
-    value: newAuthAccount.password,
-    onChange: e => setNewAuthAccount(prev => ({
-      ...prev,
-      password: e.target.value
-    })),
-    onKeyDown: e => e.key === 'Enter' && handleAddAuthAccount()
-  }), React.createElement("button", {
-    onClick: handleAddAuthAccount,
-    className: "rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700"
-  }, "\u65B0\u589E\u5C0D\u61C9"))))), React.createElement("div", {
+  }, "Saved"))))), React.createElement("div", {
     className: "bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden table-container"
   }, React.createElement("div", {
     className: "p-4 border-b border-slate-100 flex gap-4 sticky left-0"
@@ -16371,6 +16494,12 @@ const MainApp = () => {
       }, {
         merge: true
       });
+      /* 2026-07-29：跑馬燈公告是前台顯示欄位，要同步進 public_counts */
+      await syncPublicCountsSafely({
+        latestNews,
+        marqueeIcon,
+        marqueeIconSize
+      });
       setMarqueeIconHistory(newHistory);
       alert("公告設定已更新並紀錄圖檔名稱！");
     },
@@ -16571,8 +16700,7 @@ const MainApp = () => {
     onAddTag: handleAddTagDefinition,
     parsedData: parsedData,
     onAddDirectReg: handleAddDirectReg,
-    customTemplates: customTemplates,
-    adminPasswords: validAdminPasswords
+    customTemplates: customTemplates
   }), editingProject && React.createElement(ProjectDetailModal, {
     project: editingProject,
     onClose: () => setEditingProject(null),
@@ -16629,6 +16757,10 @@ const MainApp = () => {
         mascotConfig: newList
       }, {
         merge: true
+      });
+      /* 2026-07-29：吉祥物設定是前台顯示欄位，要同步進 public_counts */
+      await syncPublicCountsSafely({
+        mascotConfig: newList
       });
       setShowMascotSettings(false);
     }
