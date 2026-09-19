@@ -495,6 +495,18 @@ async function load(){
   const counts=(mainF.counts&&typeof mainF.counts==='object'&&!Array.isArray(mainF.counts))?mainF.counts:{};
   /* 共乘人數（交通方式＝共乘）同樣由後台預先算好，放在 public_counts.carpools（2026-09-06） */
   const cpools=(mainF.carpools&&typeof mainF.carpools==='object'&&!Array.isArray(mainF.carpools))?mainF.carpools:{};
+  /* 2026-09-19：官網後台改講師只會把 event_configs 改名（新 id＝新講師），報名列的講師欄不變，
+     public_counts 的 key 仍是舊講師 → 精確 key 查不到、整場被當 0 人（9/21 大安鼠實際 11 人卻顯示名額充足）。
+     查不到時改用「同日＋同活動名」比對：剛好一筆才採用；零筆或多筆不猜，維持 0。 */
+  const countKeys=Object.keys(counts);
+  function keyFor(id,date,name,instr){
+    const k=eventKeyOf(date,name,instr);
+    if(counts[k]!=null)return k;
+    if(counts[id]!=null)return id;
+    const pre=`${date}_${name}_`.replace(/[\/\\#\?]/g,'-');
+    const near=countKeys.filter(x=>x.startsWith(pre));
+    return near.length===1?near[0]:k;
+  }
   /* 沒有 counts 就不要假裝名額是滿的，改顯示「名額請洽報名頁」 */
   COUNTS_OK=!!(pubDoc&&mainF.counts&&typeof mainF.counts==='object');
   const list=[];
@@ -517,8 +529,9 @@ async function load(){
     else if(/社群/.test(dn+name)||!link)kind='社群限定';
     const code=(link.match(/\/product\/([A-Z0-9]+)/i)||[])[1]||'';
     const cap=parseInt(f.capacity,10)||12;
-    const cnt=counts[eventKeyOf(date,name,instr)]??counts[id]??0;
-    const cpc=cpools[eventKeyOf(date,name,instr)]??cpools[id]??0;
+    const ck=keyFor(id,date,name,instr);
+    const cnt=counts[ck]??0;
+    const cpc=cpools[ck]??0;
     const cpm=(f.carpoolDisplayMode==='none'||f.carpoolDisplayMode==='normal')
       ?f.carpoolDisplayMode:(NO_CARPOOL_NAMES.has(name.trim())?'none':'normal');
     const bookable=kind==='一般'&&!!link;/* 包團/社群限定即使誤填 link 也不開報名鈕 */
