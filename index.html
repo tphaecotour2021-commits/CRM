@@ -324,14 +324,11 @@ if(CLARITY_ID){
   })(window,document,"clarity","script",CLARITY_ID);
 }
 
-/* ═══ 與正式系統同一資料來源（唯讀 GET） ═══ */
+/* ═══ 資料來源（唯讀）：場次＝官網 tours；公休／休假＝settings/schedule；跑馬燈＝settings/public_counts ═══ */
 const PROJECT_ID='crm-sys-4184a';
 const API_KEY='AIzaSyBtfR8N9Dw9kG3jQSfJSs0p0MLvlQaOR74';
 const BASE=`https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/artifacts/default-app-id/public/data`;
 const WINDOW_DAYS=70;
-/* 付費共乘：與舊後台同一套規則（容量固定 4 席；大安鼠/新店鼠預設無共乘） */
-const CARPOOL_CAP=4;
-const NO_CARPOOL_NAMES=new Set(['大安鼠','新店鼠']);
 
 /* rezio 產品對照（縮圖與價格，2026-07-11 抓取；改價要更新） */
 const PRODUCTS={
@@ -477,14 +474,68 @@ function charterDays(){
 }
 let calY=+T0.slice(0,4),calM=+T0.slice(5,7); // 顯示中的月份
 
+/* ═══ 2026-10-14：場次改讀官網（tours 集合），不再以舊 CRM 的 event_configs 為場次來源 ═══
+   世祥指定三件事：
+   1. 場次、人數、共乘一律以官網為準；
+   2. 顯示與否完全照官網行事曆（官網設成隱藏／不公開的場次這裡也不顯示）；
+   3. 報名連結：舊 CRM 設定檔有填連結（rezio）的照舊，沒有的連到官網該場次頁。
+   event_configs 只剩兩個用途：查報名連結與分類標籤，讀不到也不影響場次上牆。 */
+const ROOT=`https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
+const SITE='https://tphaecotourism.com';
+const TOUR_FIELDS=['date','guides','dispName','title','shortName','templateId','visibility','accessMode','access',
+  'isCommunityOnly','isActive','isSeries','cancelled','eventKind','capacityTotal','capacityBooked',
+  'carpoolCapacity','carpoolBooked','carpoolRemaining','durationDays','location','imageUrl'];
+async function fsTours(fromISO,toISO){
+  const ts=iso=>new Date(iso+'T00:00:00+08:00').toISOString();
+  const fld=f=>({fieldPath:f});
+  const body={structuredQuery:{from:[{collectionId:'tours'}],
+    where:{compositeFilter:{op:'AND',filters:[
+      {fieldFilter:{field:fld('date'),op:'GREATER_THAN_OR_EQUAL',value:{timestampValue:ts(fromISO)}}},
+      {fieldFilter:{field:fld('date'),op:'LESS_THAN',value:{timestampValue:ts(addDays(toISO,1))}}}]}},
+    select:{fields:TOUR_FIELDS.map(fld)}}};
+  const r=await fetch(`${ROOT}:runQuery?key=${API_KEY}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!r.ok)throw new Error('Firestore '+r.status);
+  return(await r.json()).filter(x=>x.document).map(x=>x.document);
+}
+/* 觀看權限：照抄官網 lib/access.ts＋tourCatalog.isSessionOnCalendar（訪客視角）。
+   own＝這一場自己的設定（單場例外用例外值，繼承用活動設定）；eff＝再跟活動設定取嚴格者。 */
+const ACCESS_LEVELS=['public','members','unlisted','private'];
+function strictest(a,b){
+  if(a===b)return a;
+  if(a==='private'||b==='private')return'private';
+  if(a==='public')return b;
+  if(b==='public')return a;
+  return'private';
+}
+function accessOf(f,actLevel){
+  let own;
+  if(f.accessMode==='override'&&ACCESS_LEVELS.includes(f.access))own=f.access;
+  else if(f.accessMode==='inherit')own=actLevel;
+  else{
+    const legacy=f.visibility==='hidden'?'unlisted':((f.visibility==='vip'||f.isCommunityOnly===true)?'members':'public');
+    own=legacy===actLevel?actLevel:legacy;
+  }
+  return{own,eff:strictest(actLevel,own)};
+}
+/* 沒有後台標籤可用時，以官網活動代號判斷分類 */
+function typeOfSlug(t){
+  if(/squirrel/.test(t))return'飛鼠';
+  if(/snake/.test(t))return'蛇';
+  if(/frog/.test(t))return'蛙';
+  if(/bug/.test(t))return'昆蟲';
+  if(/walk/.test(t))return'走走';
+  if(t==='starter')return'新手';
+  return null;
+}
+
 async function load(){
-  /* settings/public_counts：後台存檔時寫入的去識別化文件（counts / latestNews / 吉祥物與跑馬燈設定）。
-     讀不到就走「名額未知」模式，場次照樣上牆——絕對不再 fallback 去讀 settings/main。 */
-  const[pubDoc,schDoc,cfgDocs]=await Promise.all([
-    fsGet('settings/public_counts',['counts','carpools','latestNews','mascotConfig','marqueeIcon','marqueeIconSize'])
-      .catch(e=>{console.warn('public_counts 讀取失敗，改用名額未知模式：',e);return null}),
+  /* settings/public_counts 現在只拿跑馬燈、吉祥物設定（人數已改讀官網場次本身） */
+  const[pubDoc,schDoc,tourDocs,accDoc,cfgDocs]=await Promise.all([
+    fsGet('settings/public_counts',['latestNews','mascotConfig','marqueeIcon','marqueeIconSize']).catch(()=>null),
     fsGet('settings/schedule',['companyRest','outingDays','resting']).catch(()=>({})),
-    fsList('event_configs',['displayName','time','capacity','isCancelled','link','duration','carpoolDisplayMode','tags']),
+    fsTours(T0,T1),
+    fetch(`${ROOT}/site_config/activity_access?key=${API_KEY}`).then(r=>r.ok?r.json():{}).catch(()=>({})),
+    fsList('event_configs',['link','tags']).catch(e=>{console.warn('event_configs 讀取失敗，報名連結一律改連官網：',e);return[]}),
   ]);
   const sch=decodeFs({mapValue:{fields:schDoc.fields||{}}});
   REST=new Set(sch.companyRest||[]);
@@ -492,65 +543,62 @@ async function load(){
   OUTING=new Set(Object.entries(sch.outingDays||{}).filter(([,v])=>v&&v.enabled).map(([k])=>k));
   const mainF={};for(const[k,v]of Object.entries((pubDoc&&pubDoc.fields)||{}))mainF[k]=decodeFs(v);
   NEWS=(mainF.latestNews||'').trim();
-  const counts=(mainF.counts&&typeof mainF.counts==='object'&&!Array.isArray(mainF.counts))?mainF.counts:{};
-  /* 共乘人數（交通方式＝共乘）同樣由後台預先算好，放在 public_counts.carpools（2026-09-06） */
-  const cpools=(mainF.carpools&&typeof mainF.carpools==='object'&&!Array.isArray(mainF.carpools))?mainF.carpools:{};
-  /* 2026-09-19：官網後台改講師只會把 event_configs 改名（新 id＝新講師），報名列的講師欄不變，
-     public_counts 的 key 仍是舊講師 → 精確 key 查不到、整場被當 0 人（9/21 大安鼠實際 11 人卻顯示名額充足）。
-     查不到時改用「同日＋同活動名」比對：剛好一筆才採用；零筆或多筆不猜，維持 0。 */
-  const countKeys=Object.keys(counts);
-  function keyFor(id,date,name,instr){
-    const k=eventKeyOf(date,name,instr);
-    if(counts[k]!=null)return k;
-    if(counts[id]!=null)return id;
-    const pre=`${date}_${name}_`.replace(/[\/\\#\?]/g,'-');
-    const near=countKeys.filter(x=>x.startsWith(pre));
-    return near.length===1?near[0]:k;
-  }
-  /* 沒有 counts 就不要假裝名額是滿的，改顯示「名額請洽報名頁」 */
-  COUNTS_OK=!!(pubDoc&&mainF.counts&&typeof mainF.counts==='object');
-  const list=[];
+  const actAccess=decodeFs({mapValue:{fields:(accDoc&&accDoc.fields)||{}}});
+  const cfgById=new Map();
   for(const d of cfgDocs){
-    const id=decodeURIComponent(d.name.split('/').pop());
-    const date=id.slice(0,10);
-    if(date<T0||date>T1)continue;
     const f={};for(const[k,v]of Object.entries(d.fields||{}))f[k]=decodeFs(v);
-    if(f.isCancelled)continue;
-    /* 防呆：空殼設定檔（建立/刪除只做一半留下的孤兒，連名稱時間名額連結都沒有）不上牆 */
-    if(!f.displayName&&!f.time&&!f.capacity&&!f.link)continue;
-    const link=(f.link||'').trim();
-    const parts=id.split('_');
-    const name=parts.slice(1,-1).join('_'),instr=parts[parts.length-1]||'';
-    const dn=(f.displayName||'').trim();
-    /* 場次性質：一般（可報名）／包團／社群限定。
-       沒有報名連結的場：帶客名括號或標包團→包團，其餘一律視為社群限定（世祥 2026-07-11 確認） */
+    cfgById.set(decodeURIComponent(d.name.split('/').pop()),f);
+  }
+  COUNTS_OK=true;
+  const fmtD=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'});
+  const fmtT=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Taipei',hour:'2-digit',minute:'2-digit',hour12:false});
+  const list=[];
+  for(const d of tourDocs){
+    const id=decodeURIComponent(d.name.split('/').pop());
+    const f={};for(const[k,v]of Object.entries(d.fields||{}))f[k]=decodeFs(v);
+    if(f.isSeries)continue;                       /* 活動主檔，不是場次 */
+    if(f.isActive===false||f.cancelled===true)continue;
+    const raw=f.date&&f.date.timestampValue;if(!raw)continue;
+    const dt=new Date(raw);if(isNaN(dt))continue;
+    const date=fmtD.format(dt);
+    if(date<T0||date>T1)continue;
+    const tpl=String(f.templateId||'');
+    const lv=(actAccess[tpl]||{}).level;
+    const acc=accessOf(f,ACCESS_LEVELS.includes(lv)?lv:'public');
+    /* 官網行事曆同一條規則：場次自己設成隱藏、或不公開，就不列 */
+    if(f.visibility==='hidden'||acc.own==='private')continue;
+    const short=String(f.shortName||'').trim();
+    const dn=String(f.dispName||f.title||short).trim();
+    const isGroup=f.eventKind==='private-group'||tpl==='private';
+    /* 場次性質：包團（不顯示客戶名稱、不開放報名）／社群限定／一般 */
     let kind='一般';
-    if(/包團|包場/.test(dn)||/[（(]/.test(name))kind='包團';/* 防呆：帶客名括號一律包團，就算誤填了 link 也不外洩客名 */
-    else if(/社群/.test(dn+name)||!link)kind='社群限定';
-    const code=(link.match(/\/product\/([A-Z0-9]+)/i)||[])[1]||'';
-    const cap=parseInt(f.capacity,10)||12;
-    const ck=keyFor(id,date,name,instr);
-    const cnt=counts[ck]??0;
-    const cpc=cpools[ck]??0;
-    const cpm=(f.carpoolDisplayMode==='none'||f.carpoolDisplayMode==='normal')
-      ?f.carpoolDisplayMode:(NO_CARPOOL_NAMES.has(name.trim())?'none':'normal');
-    const bookable=kind==='一般'&&!!link;/* 包團/社群限定即使誤填 link 也不開報名鈕 */
-    const tg=f.tags||{};
-    let type=kind==='包團'?'其他':(typeFromTags(tg)||typeOf(dn+name));
-    if(type==='新手'&&tg.levels&&tg.levels!=='新手')type='其他';/* 後台有標 levels 卻非新手 → 名稱含「夜觀」也不判新手 */
+    if(isGroup)kind='包團';
+    else if(acc.own==='members'||acc.eff==='members'||acc.eff==='private')kind='社群限定';
+    /* 報名連結：舊 CRM 設定檔（只有 crm- 開頭的場次對得到）有填就照舊，否則連官網該場次頁 */
+    const cfg=id.startsWith('crm-')?(cfgById.get(id.slice(4))||{}):{};
+    const cfgLink=String(cfg.link||'').trim();
+    const link=cfgLink||(tpl?`${SITE}/tours/${encodeURIComponent(tpl)}?session=${encodeURIComponent(id)}`:'');
+    const code=(cfgLink.match(/\/product\/([A-Z0-9]+)/i)||[])[1]||'';
+    const cap=parseInt(f.capacityTotal,10)||12;
+    const cnt=Math.max(0,parseInt(f.capacityBooked,10)||0);
+    const cpCap=parseInt(f.carpoolCapacity,10);
+    const cpLeft=parseInt(f.carpoolRemaining,10);
+    const cpm=(isNaN(cpCap)||cpCap<0)?'none':'normal';
+    const bookable=kind==='一般'&&!!link;
+    let type=kind==='包團'?'其他':(typeFromTags(cfg.tags)||typeOfSlug(tpl)||typeOf(dn+short));
+    if(type==='新手'&&cfg.tags&&cfg.tags.levels&&cfg.tags.levels!=='新手')type='其他';/* 後台有標 levels 卻非新手 → 名稱含「夜觀」也不判新手 */
     list.push({
-      id,date,dow:dow(date),time:(f.time||'').slice(0,5),/* 沒填時間就不顯示，避免誤導 */
-      title:kind==='包團'?'包團活動':(dn||name).trim(),/* 包團不顯示客戶名稱 */
-      instr,link,code,kind,bookable,cnt,cpc,cpm,type,
-      loc:locOf(dn+' '+name),
+      id,short,tpl,date,dow:dow(date),time:fmtT.format(dt),
+      title:kind==='包團'?'包團活動':dn,/* 包團不顯示客戶名稱 */
+      instr:Array.isArray(f.guides)?f.guides.join(' & '):'',link,code,kind,bookable,cnt,cpm,type,
+      cpLeft:cpm==='none'?0:Math.max(0,isNaN(cpLeft)||cpLeft<0?cpCap-(parseInt(f.carpoolBooked,10)||0):cpLeft),
+      loc:locOf(dn+' '+short+' '+String(f.location||'')),
       cap,
-      /* 讀不到 public_counts 時：名額當「未知」（seatsUnknown），remaining 先給滿額
-         讓場次不被「還有名額」篩選誤殺，畫面上改顯示「名額請洽報名頁」 */
-      remaining:bookable?(COUNTS_OK?Math.max(0,cap-cnt):cap):0,
-      seatsUnknown:bookable&&!COUNTS_OK,
-      runs:COUNTS_OK?(kind!=='一般'||cnt>0):true, /* 「開成」＝包團/社群場、或已有人報名；未知時保守當作有開 */
-      duration:Math.max(1,parseInt(f.duration,10)||1),
-      img:(PRODUCTS[code]||{}).img||'',
+      remaining:bookable?Math.max(0,cap-cnt):0,
+      seatsUnknown:false,
+      runs:kind!=='一般'||cnt>0, /* 「開成」＝包團/社群場、或已有人報名 */
+      duration:Math.max(1,parseInt(f.durationDays,10)||1),
+      img:(PRODUCTS[code]||{}).img||(kind==='包團'?'':String(f.imageUrl||'')),
     });
   }
   list.sort((a,b)=>a.date===b.date?a.time.localeCompare(b.time):a.date.localeCompare(b.date));
@@ -685,13 +733,13 @@ function seatsHtml(s){
 function carpoolHtml(s){
   if(s.kind==='包團')return'';
   if(s.cpm==='none')return'<div class="alt cph">本活動無共乘</div>';
-  const left=Math.max(0,CARPOOL_CAP-s.cpc);
+  const left=s.cpLeft;
   return`<div class="alt cph">🚗 ${left>0?`付費共乘剩餘 ${left} 位`:'付費共乘基本已滿，可洽詢粉專客服'}</div>`;
 }
 function altDates(s){
-  /* 同一 rezio 產品、未來、還有位的其他日期（最多 3 個） */
-  if(!s.code)return[];
-  return SESSIONS.filter(x=>x.code===s.code&&x.date!==s.date&&x.bookable&&x.remaining>0).slice(0,3);
+  /* 同一個官網活動、未來、還有位的其他日期（最多 3 個） */
+  if(!s.tpl)return[];
+  return SESSIONS.filter(x=>x.tpl===s.tpl&&x.date!==s.date&&x.bookable&&x.remaining>0).slice(0,3);
 }
 function renderList(){
   if(fCharter){renderCharterList();return}
@@ -766,7 +814,7 @@ function gachaPick(){
     const patch=MASCOT_PATCH[String(th.name||'').trim()]||{};
     const kws=String(th.keywords||'').split(/[,，]/).map(x=>x.trim()).filter(Boolean).concat(patch.kw||[]);
     if(!kws.length)continue;
-    const ss=SESSIONS.filter(s=>s.bookable&&s.remaining>0&&kws.some(k=>(s.title+' '+s.id).includes(k)));
+    const ss=SESSIONS.filter(s=>s.bookable&&s.remaining>0&&kws.some(k=>(s.title+' '+s.short+' '+s.id).includes(k)));
     if(!ss.length)continue;
     for(const g of (th.gifs||[]).concat(patch.gifs||[]).filter(g=>g.filename)){
       flat.push({th,g,ss,who:patch.who});
