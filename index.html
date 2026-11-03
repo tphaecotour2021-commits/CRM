@@ -350,6 +350,30 @@ const PRODUCTS={
  "9FSTFI":{img:"",price:1500},
  "KAMW6N":{img:"https://img.rezio.io/seo1/10a4d770-0df7-48a7-b1a1-85f39cae4470/dc8c610d-8e13-4dca-a791-aba9055c9fd0.jpeg",price:1899}
 };
+/* 官網活動縮圖（2026-11-03）：報名連結是官網 /tours/<slug> 時，用該活動頁的分享主圖（og:image）；
+   官網新增活動要在這裡加一行，沒對到的才退回 rezio 代碼對照或 emoji */
+const TOUR_IMG={
+ "bluefrog":"https://assets.tphaecotourism.com/immersive/bluefrog/bf_hero.jpg",
+ "camping":"https://assets.tphaecotourism.com/immersive/camping/cp_hero.jpg",
+ "daan-squirrel":"https://assets.tphaecotourism.com/immersive/daan-squirrel/hero.jpg",
+ "fungi":"https://assets.tphaecotourism.com/immersive/fungi/fg_hero2.jpg",
+ "neihu-snake":"https://assets.tphaecotourism.com/immersive/neihu-snake/hero.jpg",
+ "rabbit":"https://assets.tphaecotourism.com/immersive/rabbit/rb_look.jpg",
+ "shilin-snake":"https://assets.tphaecotourism.com/immersive/shilin-snake/hero.jpg",
+ "spider":"https://assets.tphaecotourism.com/immersive/spider/sp_hero.jpg",
+ "starter":"https://assets.tphaecotourism.com/immersive/starter/hero.jpg",
+ "walk":"https://assets.tphaecotourism.com/immersive/gal/expw_02.jpg",
+ "wenshan-bug":"https://assets.tphaecotourism.com/immersive/wenshan-bug/hero.jpg",
+ "winter-bird":"https://assets.tphaecotourism.com/immersive/winter-bird/wb_hero.jpg",
+ "winter-frog":"https://assets.tphaecotourism.com/immersive/winter-frog/wf_hero.jpg",
+ "winter-mammal":"https://assets.tphaecotourism.com/immersive/winter-mammal/wm_hero_civet.jpg",
+ "winter-waterbird":"https://assets.tphaecotourism.com/immersive/winter-waterbird/ww_hero.jpg",
+ "xindian-frog":"https://assets.tphaecotourism.com/immersive/xindian-frog/hero.jpg",
+ "xindian-squirrel":"https://assets.tphaecotourism.com/immersive/xindian-squirrel/hero.jpg",
+ "xinyi-snake":"https://assets.tphaecotourism.com/immersive/xinyi-snake/hero.jpg",
+ "ymsnake":"https://assets.tphaecotourism.com/immersive/ymsnake/hero.jpg"
+};
+function tourImg(link){const t=/tphaecotourism\.com\/tours\/([a-z0-9-]+)/.exec(link||'');return t?(TOUR_IMG[t[1]]||''):'';}
 /* 行事曆→rezio 流量追蹤（2026-07-18）：報名連結一律走 Lihi 短網址，
    Lihi 後台標籤「行事曆」可看各產品點擊數。
    2026-07-21 拿掉 UTM 參數（Dudu：會蓋掉廣告的 last-click 歸因），流量只看 Lihi 點擊數；
@@ -550,7 +574,7 @@ async function load(){
       seatsUnknown:bookable&&!COUNTS_OK,
       runs:COUNTS_OK?(kind!=='一般'||cnt>0):true, /* 「開成」＝包團/社群場、或已有人報名；未知時保守當作有開 */
       duration:Math.max(1,parseInt(f.duration,10)||1),
-      img:(PRODUCTS[code]||{}).img||'',
+      img:tourImg(link)||(PRODUCTS[code]||{}).img||'',
     });
   }
   list.sort((a,b)=>a.date===b.date?a.time.localeCompare(b.time):a.date.localeCompare(b.date));
